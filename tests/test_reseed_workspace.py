@@ -276,6 +276,24 @@ def test_foreign_torrent_is_never_adopted_removed_or_started(tmp_path):
     assert client.torrent(meta.infohash).save_path == tmp_path / "foreign"
 
 
+def test_complete_torrent_at_prepared_location_is_reused(tmp_path):
+    board, client, original, links, meta = workspace(tmp_path)
+    board.setup.settings.profile().reseed_layout = "client"
+    for action in ("find", "compare", "prepare"):
+        assert not run(board, original, links, action)["errors"]
+    record = board.setup.store.reseed_record(str(original))
+    client.add(meta.data, record["destination"], ["torrentlinker"])
+    client.rename_file(meta.infohash, "Release.mkv", record["files"][0]["local"])
+    client._set(meta.infohash, state="stalledUP", progress=1.0)
+
+    result = run(board, original, links)
+
+    assert result["seeded"] == 1, result
+    torrent = client.torrent(meta.infohash)
+    assert {"torrentlinker:board", "c411"} <= torrent.tags
+    assert not client.removed and not client.rechecked
+
+
 def test_linked_torrents_cannot_download_or_delete_through_management(tmp_path):
     from torrentlinker.torrent_management import manage
 

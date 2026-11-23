@@ -615,8 +615,31 @@ class ReseedWorkspace:
         validate_layout(record)
         checkpoint(stop)
         client = self.library.client()
+        existing = client.torrent(record["hash"])
+        if (
+            existing is not None
+            and self._tag(record) not in existing.tags
+            and existing.save_path == Path(record["destination"])
+            and existing.progress == 1
+        ):
+            # The same complete torrent may already seed at the prepared location
+            # through another app workflow. Local piece hashes were checked above;
+            # claim this exact torrent without removing or rechecking its data.
+            validate_client_files(record, existing.files)
+            source_tracker = checked.candidate.tracker
+            if not source_tracker:
+                found_tracker = tracker_of_url(checked.candidate.download_url)
+                source_tracker = found_tracker.id if found_tracker else ""
+            tags = [TAG, self._tag(record)]
+            if source_tracker in TRACKERS:
+                tags.append(source_tracker)
+            client.add_tags(record["hash"], tags)
+            record["status"] = "verified"
+            record["achievement_verified_at"] = time.time()
+            progress("client-hash", fraction=1)
+            return
         resume_check = record.get("status") == "checking"
-        if client.torrent(record["hash"]) is None:
+        if existing is None:
             resume_check = False
             record["status"] = "adding"
             save()  # interruption never loses the chosen destination
