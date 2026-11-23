@@ -1437,7 +1437,13 @@ class MediaLibrary(TrackerRows, AgeRatings):
             if destination.is_symlink():
                 raise ValueError("Artwork cache contains an unsafe path.")
             if not destination.exists():
-                picture.convert("RGB").save(destination, format="PNG")
+                # Written whole, then moved: two items with the same poster are cached at once.
+                partial = destination.with_name(f".{uuid4().hex}.tmp")
+                try:
+                    picture.convert("RGB").save(partial, format="PNG")
+                    os.replace(partial, destination)
+                finally:
+                    partial.unlink(missing_ok=True)
         return "asset:" + key
 
     def artwork(self, client_id, identifier):

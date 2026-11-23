@@ -20,9 +20,14 @@ def png(colour="#336699") -> bytes:
 def films(tmp_path, count=2):
     media = library(tmp_path, [(f"Film {n}", "2020") for n in range(count)])
     media.checked_path = lambda *a: None  # these rows are not real files
-    media.record = lambda client, identifier: media.db.execute(
-        "SELECT * FROM media_items WHERE client=? AND id=?", (client, identifier)
-    ).fetchone()
+
+    def record(client, identifier):
+        with media.lock:
+            return media.db.execute(
+                "SELECT * FROM media_items WHERE client=? AND id=?", (client, identifier)
+            ).fetchone()
+
+    media.record = record
     with media.db:
         for n in range(count):
             row = media.db.execute("SELECT body FROM media_items WHERE id=?", (str(n),)).fetchone()
