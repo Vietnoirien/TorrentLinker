@@ -1,13 +1,15 @@
 <!doctype html>
-<!-- PROTOTYPE, throwaway (ADR-0025, issue #175). Paramètres → Connexion with one tab per Tracker and one for
-     search-only Indexers: c411 | tr4ker | Indexeurs. Includes the offer to adopt a tr4ker Indexer already
-     imported from Prowlarr or Jackett. Built from approved components: the shared palette (panel/base.css) and
-     the Settings page's stylesheet (settings/view.css), embedded below. Fictional data; nothing is sent, and
-     no key or passkey is ever shown back. -->
+<!-- PROTOTYPE, throwaway (ADR-0025, issue #175). Paramètres → Connexions, rebuilt from the real Settings page:
+     the real side menu minus Clients, Indexeurs and Compagnon (now tabs of Connexions), and the tabs
+     c411 | tr4ker | Indexeurs | Clients | Compagnon | Services. Every box, field and label comes from
+     settings/view.js, indexers.js, companion.js and file-access.js; only the placement moves, plus the tr4ker
+     additions (tr4ker tab, adopt offer, one Compagnon row per Tracker). Built from approved components:
+     panel/base.css, settings/view.css, secrets.css and toast.css are embedded below. Fictional data; nothing is
+     sent, and no saved key is ever really shown back. -->
 <html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Connexion · aperçu #175</title>
+<title>Connexions · aperçu #175</title>
 <style>
-/* Embedded copy of src/torrentlinker/web/static/panel/base.css (approved), so the prototype opens anywhere. */
+/* Embedded copy of panel/base.css (approved). */
 /* Shared palette for Qt, the Web shell and bundled panels.
    Keep these two token blocks literal: gui/theme.py reads their declarations.
    Approved panel-specific light overrides remain in each panel's view.css. */
@@ -48,8 +50,13 @@
   --link: #087f76;
   --shadow: 0 16px 60px #172b3e12;
 }
+
+/* The wordmark keeps its two colours in the shell, sign-in and Media Center. */
+.app-wordmark {color:var(--text);white-space:nowrap;font-weight:750}
+.app-wordmark > span {color:var(--accent)}
+
 </style><style>
-/* Embedded copy of src/torrentlinker/web/static/settings/view.css (approved), so the prototype opens anywhere. */
+/* Embedded copy of settings/view.css (approved). */
 .settings-layout {
   align-items: start;
   display: grid;
@@ -60,6 +67,10 @@
   display: grid;
   align-content: start;
   gap: 6px;
+  position: sticky;
+  top: 20px;
+  max-height: calc(100vh - 40px);
+  overflow: auto;
 }
 #settings-navigation button {
   text-align: left;
@@ -156,9 +167,14 @@ body {
     14px/1.5 system-ui,
     sans-serif;
 }
+/* The shell header already names the page. */
 h1 {
-  font-size: 26px;
-  margin: 0 0 22px;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 h2 {
   font-size: 20px;
@@ -398,8 +414,215 @@ small,
 .score-community-actions{position:absolute;right:0;top:calc(100% + 6px);z-index:20;min-width:220px;display:grid;gap:4px;padding:6px;background:var(--panel);border:1px solid var(--line);border-radius:9px;box-shadow:0 8px 24px #0004}
 .score-community-actions button{text-align:left;white-space:normal}
 .score-section-heading~.settings-actions{margin:14px 0 20px;gap:8px}
-</style>
-<style>
+
+</style><style>
+/* Embedded copy of settings/secrets.css (approved). */
+.secret-input {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.secret-input input {
+  flex: 1;
+  min-width: 0;
+}
+.secret-eye {
+  flex: none;
+  padding: 4px 8px;
+}
+.secret-eye.on {
+  outline: 2px solid currentColor;
+  outline-offset: -2px;
+}
+.extra-key-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.extra-key-row .secret-input {
+  flex: 1;
+}
+.test-result {
+  margin: 6px 0 0;
+  min-height: 0;
+}
+.test-result:empty {
+  display: none;
+}
+.test-result.ok {
+  color: var(--success);
+}
+.test-result.bad {
+  color: var(--danger);
+  white-space: pre-wrap;
+}
+/* Status ("Unsaved changes") stays quiet in a bar in view; the Save bar holds it when present. */
+.settings-feedback {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  background: var(--bg);
+}
+.settings-feedback p {
+  margin: 0;
+  padding: 6px 0;
+}
+.settings-actions > .settings-feedback {
+  position: static;
+  flex: 1 1 100%;
+}
+/* Errors reach the user as a toast; the line stays for scripts and assistive tools. */
+#settings-error {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+</style><style>
+/* Embedded copy of settings/indexers.css (approved). */
+/* The Indexers section: only what the Settings page has no equivalent for. */
+.indexer-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.indexer-head p {
+  margin: 4px 0 0;
+}
+.indexer-card {
+  margin: 12px 0;
+}
+.indexer-card.locked {
+  border-style: dashed;
+}
+.indexer-pace {
+  margin: 8px 0 0;
+}
+.indexer-error {
+  color: var(--danger);
+  margin: 6px 0 0;
+}
+.indexer-tag {
+  display: inline-block;
+  font-size: 12px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 1px 7px;
+  margin: 0 6px 4px 0;
+  color: var(--muted);
+}
+.indexer-tag.on {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.indexer-tag.bad {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.indexer-tag.warn {
+  color: var(--warning);
+  border-color: var(--warning);
+}
+.indexer-import-list {
+  margin-top: 12px;
+}
+.indexer-import-list label {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+.indexer-import-list small {
+  margin-left: auto;
+}
+.settings-card ~ .settings-card,
+.indexer-card ~ .settings-card {
+  margin-top: 12px;
+}
+#cross-seed-threshold {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+</style><style>
+/* Embedded copy of panel/toast.css (approved). */
+.tl-toasts {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: min(420px, calc(100vw - 32px));
+  pointer-events: none;
+  /* a popover in the top layer: drop the browser's box */
+  inset: auto 16px 16px auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  overflow: visible;
+}
+.tl-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--success);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: 0 6px 20px #0004;
+  overflow-wrap: anywhere;
+  pointer-events: none; /* never covers a button beneath; only Close is clickable */
+  animation: tl-toast-in 0.18s ease-out;
+}
+.tl-toast.bad {
+  border-left-color: var(--danger);
+}
+.tl-toast.bad span {
+  color: var(--danger);
+}
+.tl-toast-close {
+  margin-left: auto;
+  padding: 0 6px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  pointer-events: auto;
+}
+@keyframes tl-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@media (max-width: 720px) {
+  .tl-toasts {
+    right: 16px;
+    left: 16px;
+    max-width: none;
+  }
+}
+.tl-mirrored:empty {
+  display: none;
+}
+
+</style><style>
 /* Only what the Settings page has no equivalent for yet. */
 .tabs{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 18px;border-bottom:1px solid var(--line)}
 .tabs button{border-radius:8px 8px 0 0;border-bottom:0;margin-bottom:-1px;background:transparent}
@@ -408,141 +631,399 @@ small,
 .tag.on{color:var(--accent);border-color:var(--accent)}.tag.bad{color:var(--danger);border-color:var(--danger)}.tag.warn{color:var(--warning);border-color:var(--warning)}
 .head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}.head p{margin:4px 0 0}
 .offer{border-color:var(--accent);background:var(--tint)}
-.matrix th,.matrix td{padding:8px 10px!important;vertical-align:middle!important}
-.secret-line{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.secret-line input{flex:1;min-width:200px}
 .is-off{opacity:.55}
+.link{background:none;border:0;padding:0;color:var(--link);text-decoration:underline;cursor:pointer}
+.link:hover{background:none}
+.sel{border-color:var(--accent)}
+.trk-row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:12px 0;border-bottom:1px solid var(--line)}
+.trk-row:last-of-type{border-bottom:0}.trk-row .who{flex:1 1 200px;min-width:0}.trk-row .who b{font-size:15px}.trk-row .who p{margin:2px 0 0}
+.bigbtn{font-size:16px;padding:12px 22px;font-weight:600}
+.bad-text{color:var(--danger)}
 .unavailable{color:var(--muted);font-style:italic}
-#switcher{position:fixed;right:14px;top:12px;display:flex;gap:8px;align-items:center;background:#0d1216;color:#fff;border:1px solid #ffffff40;border-radius:22px;padding:6px 8px;box-shadow:0 10px 40px #0008;z-index:50;font-size:13px;max-width:calc(100vw - 32px);flex-wrap:wrap;justify-content:center}
+.api-box{display:grid;gap:6px;margin-top:12px}
+#settings-body{min-width:0}
+/* Deviation from the real page: the status line sits at the top, because the toast and the Save bar share the bottom. */
+#settings-feedback{position:sticky;top:0;bottom:auto;z-index:4}
+#settings-status{background:var(--bg);border-bottom:1px solid var(--line);margin:0 0 10px}
+#settings-status.bad{color:var(--danger)}
+.tl-toasts{display:flex}
+#switcher{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 14px;padding:6px 10px;background:#0d1216;color:#fff;border:1px solid #ffffff40;border-radius:22px;font-size:13px;width:fit-content;max-width:100%}
 #switcher button{background:#ffffff14;border-color:#ffffff30;color:#fff;border-radius:999px;padding:4px 12px}
+#switcher b{font-weight:600}
+dialog{max-width:94vw}
 </style>
-<h1 style="padding-right:340px">Paramètres</h1>
+<div id="switcher"><b>Aperçu</b><button id="scenario" title="Change la situation de départ">Situation : <span id="scenario-label"></span></button><button id="session" title="Simule la connexion de l’utilisateur à tr4ker dans son navigateur">Session tr4ker du navigateur : <span id="session-label"></span></button><button id="theme">Thème</button><button id="reset">Réinitialiser</button></div>
+<h1 id="settings-title">Paramètres</h1>
 <div class="settings-layout">
  <nav id="settings-navigation" aria-label="Sections des paramètres"></nav>
- <main><p id="settings-status" role="status"></p><div id="settings-body"></div></main>
+ <main><div id="settings-body"></div>
+ <div id="settings-feedback" class="settings-feedback"><p id="settings-status" role="status"></p></div></main>
 </div>
 <dialog class="assistant-dialog" id="dialog"></dialog>
-<div id="switcher"><button id="scenario" title="Change la situation de départ">Situation : <span id="scenario-label"></span></button><button id="theme">Thème</button><button id="reset">Réinitialiser</button></div>
+<div class="tl-toasts" id="toasts" aria-live="polite"></div>
 <script>
-/* Fictional state. Scenario "import": tr4ker was imported from Prowlarr earlier and sits in the Indexers list.
-   Scenario "clean": nothing of tr4ker yet. Switch with the "Situation" button (or ?s=clean). */
+const MASK="••••••••";
+const sec=(saved)=>({saved:!!saved,typed:"",cleared:false});
+const has=s=>!!s.typed||(s.saved&&!s.cleared);
+const clone=o=>JSON.parse(JSON.stringify(o));
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]);
+const CLIENT_TYPES=[["qbittorrent","qBittorrent"],["deluge","Deluge"],["transmission","Transmission"],["utorrent","µTorrent"],["bittorrent","BitTorrent"],["rtorrent","rTorrent"]];
+const VERSIONS={qbittorrent:"5.1.0",deluge:"2.1.1",transmission:"4.0.6",utorrent:"3.6.0",bittorrent:"7.11.0",rtorrent:"0.9.8"};
+const typeName=t=>CLIENT_TYPES.find(x=>x[0]===t)[1];
+const ACCOUNT={c411:"viet_c411",tr4ker:"viet_t4k"};
+const newClient=(o)=>({id:"x",name:"",client:"qbittorrent",host:"",username:"",password:sec(false),api_key:sec(false),reseed_layout:"auto",reseed_link_root:"",partial:false,access:{configured:false,checked:false},...o});
+const baseClients=()=>[
+ newClient({id:"qb",name:"qBittorrent salon",host:"http://192.168.0.50:8080",username:"admin",password:sec(true),api_key:sec(false),access:{configured:true,checked:true,host:"seedbox.example",port:22,username:"seed",auth:"key",client_root:"/downloads",file_root:"/home/seed/downloads"}}),
+ newClient({id:"dl",name:"Deluge NAS",client:"deluge",host:"http://192.168.0.60:8112",password:sec(true),reseed_layout:"links",reseed_link_root:"/mnt/liens",access:{configured:false,checked:false}})];
+const common=()=>({
+ c411:{url:"https://c411.org/api/torznab",key:sec(true),announce:sec(true),hosts:"tk.c411.org\nannounce.c411.example\nbackup.c411.example",extra:[sec(true),sec(true)],search:true},
+ clients:baseClients(),defaultClient:"qb",
+ tmdb:sec(true),proxy:{address:"http://192.168.0.2:3128",username:"proxy",password:sec(true),torrent_client:false},
+ comp:{c411:{state:"paired"},tr4ker:{state:"none"},downloads:true,signed:{c411:true,tr4ker:false},extension:false},
+ rules:{auto:true,threshold:92,paused:false}});
 const scenarios={
- import:()=>({tab:"tr4ker",
-  c411:{key:true,announce:true,companion:"paired",enabled:true},
-  tr4ker:{enabled:false,key:false,passkey:false,companion:"none",adopted:false,history:0},
+ import:()=>({...common(),
+  tr4ker:{enabled:false,key:sec(false),passkey:sec(false),adopted:false,history:0},
   indexers:[
-   {id:"nebula",name:"Nebula",url:"http://prowlarr:9696/3/api",source:"Prowlarr",on:true,state:"ok",caps:["IMDb","TVDB"]},
+   {id:"nebula",name:"Nebula",url:"http://prowlarr:9696/3/api",source:"Prowlarr",on:true,state:"ok",caps:["IMDb","TVDB"],key:true},
    {id:"t4k",name:"tr4ker",url:"http://prowlarr:9696/9/api",host:"tr4ker.net",source:"Prowlarr",on:true,state:"ok",caps:["IMDb","TMDb"],history:42,key:true},
-   {id:"vega",name:"Vega",url:"https://vega.example/api/torznab",source:"Ajouté à la main",on:false,state:"error",caps:[],error:"Clé API refusée (401)."}],
-  arr:{kind:"prowlarr",url:"http://prowlarr:9696",synced:"il y a 2 h",available:[["Nebula",true],["tr4ker",true],["Lyra",false],["Altair",false]]}}),
- clean:()=>({tab:"tr4ker",
-  c411:{key:true,announce:true,companion:"paired",enabled:true},
-  tr4ker:{enabled:false,key:false,passkey:false,companion:"none",adopted:false,history:0},
-  indexers:[{id:"nebula",name:"Nebula",url:"http://prowlarr:9696/3/api",source:"Prowlarr",on:true,state:"ok",caps:["IMDb","TVDB"]}],
-  arr:{kind:"prowlarr",url:"http://prowlarr:9696",synced:"il y a 2 h",available:[["Nebula",true],["tr4ker",false],["Lyra",false]]}})};
-let scenario=new URLSearchParams(location.search).get("s")==="clean"?"clean":"import";
-let S=scenarios[scenario]();
-const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]);
-const status=t=>{document.getElementById("settings-status").textContent=t};
-const nav=()=>["Connexion","Clients","Général","ReleaseScore","Utilisateurs","Notifications"].map(s=>`<button ${s==="Connexion"?'aria-current="page"':""}>${s}</button>`).join("");
-const TABS=[["c411","c411"],["tr4ker","tr4ker"],["indexers","Indexeurs"]];
-const tabs=()=>`<div class="tabs" role="tablist">${TABS.map(([id,label])=>`<button role="tab" data-tab="${id}" aria-selected="${S.tab===id}">${label}${id==="tr4ker"&&S.tr4ker.enabled?' <span class="tag on">actif</span>':""}${id==="indexers"?` <small class="muted">${S.indexers.length}</small>`:""}</button>`).join("")}</div>`;
+   {id:"vega",name:"Vega",url:"https://vega.example/api/torznab",source:"Ajouté à la main",on:false,state:"error",caps:[],error:"Clé API refusée (401).",key:true}],
+  arr:{kind:"prowlarr",url:"http://prowlarr:9696",key:sec(true),synced:"il y a 2 h",available:[["Nebula",true],["tr4ker",true],["Vega",false],["Lyra",false],["Altair",false]]}}),
+ clean:()=>({...common(),
+  tr4ker:{enabled:false,key:sec(false),passkey:sec(false),adopted:false,history:0},
+  indexers:[{id:"nebula",name:"Nebula",url:"http://prowlarr:9696/3/api",source:"Prowlarr",on:true,state:"ok",caps:["IMDb","TVDB"],key:true}],
+  arr:{kind:"prowlarr",url:"http://prowlarr:9696",key:sec(true),synced:"il y a 2 h",available:[["Nebula",true],["tr4ker",false],["Lyra",false]]}})};
+const params=new URLSearchParams(location.search);
+let scenario=params.get("s")==="clean"?"clean":"import";
+let S=scenarios[scenario](),saved=clone(S);
+let ui={tab:params.get("tab")||"c411",sel:"qb",busy:0};
+const DRAFT=["c411","tr4ker","clients","tmdb","proxy"];
+if(params.get("theme"))document.documentElement.dataset.theme=params.get("theme");
+
+const $=id=>document.getElementById(id);
+const statusEl=$("settings-status");
+function status(t,bad){statusEl.textContent=t;statusEl.className=bad?"bad":""}
+function toast(t,bad){while($("toasts").children.length>=3)$("toasts").firstChild.remove();const n=document.createElement("div");n.className="tl-toast"+(bad?" bad":"");n.innerHTML="<span></span>";n.firstChild.textContent=t;$("toasts").append(n);setTimeout(()=>n.remove(),3000)}
+function note(t,bad){status(t,bad);toast(t,bad)}
+const dirty=()=>status("Modifications non enregistrées");
+/* path access: "c411.extra.0" */
+const get=(p)=>p.split(".").reduce((o,k)=>o[k],S);
+const put=(p,v)=>{const k=p.split(".");const last=k.pop();k.reduce((o,x)=>o[x],S)[last]=v};
+
+/* ---- side menu: the real owner sections minus Clients, Indexeurs and Compagnon; the Members ones show on a Web server with Members. */
+const MENU=["Connexions","Rejoindre la communauté","Accès agent","Assistant","Général","Dossiers de bibliothèque","Dossiers de téléchargement","Chemins du client","Recherche et correspondance","ReleaseScore","Zen","Utilisateurs","Mon compte","Notifications"];
+$("settings-navigation").innerHTML=MENU.map(s=>`<button type="button" ${s==="Connexions"?'aria-current="page"':""}>${s}</button>`).join("");
+
+const TABS=[["c411","c411"],["tr4ker","tr4ker"],["indexers","Indexeurs"],["clients","Clients"],["companion","Compagnon"],["services","Services"]];
+const tabs=()=>`<div class="tabs" role="tablist">${TABS.map(([id,label])=>`<button type="button" role="tab" data-tab="${id}" aria-selected="${ui.tab===id}">${label}${id==="tr4ker"&&S.tr4ker.enabled?' <span class="tag on">actif</span>':""}${id==="indexers"?` <small class="muted">${S.indexers.length+1}</small>`:id==="clients"?` <small class="muted">${S.clients.length}</small>`:""}</button>`).join("")}</div>`;
+const saveBar=()=>`<div class="settings-actions"><button type="button" class="primary" data-save>Enregistrer</button><button type="button" data-discard>Annuler les modifications</button></div>`;
+
+/* ---- reusable field renderers (labels are the real ones) */
+const field=(label,path,{type="text",ph="",extra=""}={})=>`<label class="settings-field">${label}<input aria-label="${esc(label)}" type="${type}" data-bind="${path}" value="${esc(get(path))}" placeholder="${esc(ph)}" ${extra}></label>`;
+const check=(label,path,extra="")=>`<label class="settings-check"><input type="checkbox" data-bind="${path}" aria-label="${esc(label)}" ${get(path)?"checked":""} ${extra}> ${label}</label>`;
+function secretBox(path,label){const s=get(path);
+ return `<label class="settings-field">${label}<span class="secret-input"><input type="password" autocomplete="new-password" aria-label="${esc(label)}" data-secret="${path}"><button type="button" class="secret-eye quiet" data-eye aria-pressed="false" aria-label="Afficher ${esc(label)}">Afficher</button></span>${s.saved&&!s.cleared?`<button type="button" data-clear-secret="${path}">Effacer la valeur enregistrée</button>`:""}</label>`}
+function hydrate(root=document){root.querySelectorAll("[data-secret]").forEach(i=>{const s=get(i.dataset.secret);
+ i.placeholder=s.cleared?"Sera effacé à l’enregistrement":s.saved?"":"Non enregistré";
+ if(s.typed){i.value=s.typed;delete i.dataset.masked}else if(s.saved&&!s.cleared){i.value=MASK;i.dataset.masked="1"}else{i.value="";delete i.dataset.masked}})}
+
+/* ---- tabs content */
+function extraRows(){const rows=S.c411.extra;
+ return `<div class="settings-field"><span>Clés API supplémentaires</span><div>${rows.map((s,i)=>`<div class="extra-key-row"><span class="secret-input"><input type="password" autocomplete="new-password" aria-label="Clé API supplémentaire ${i+1}" data-secret="c411.extra.${i}"><button type="button" class="secret-eye quiet" data-eye aria-pressed="false" aria-label="Afficher Clé API supplémentaire ${i+1}">Afficher</button></span><button type="button" data-extra-remove="${i}" aria-label="Retirer clé API supplémentaire ${i+1}">Retirer</button></div>`).join("")}</div><button type="button" data-extra-add ${rows.length>=4?"hidden":""}>Ajouter une clé API</button></div>`}
+const tag=(c)=>{const st=S.comp[c].state;return st==="paired"?`<span class="tag on">Appairé</span>`:st==="waiting"?`<span class="tag warn">En attente de la session ${c}</span>`:st==="login"?`<span class="tag bad">Session ${c} absente</span>`:`<span class="tag">Non appairé</span>`};
+const compLine=c=>{const st=S.comp[c].state;return `<p>Compagnon du navigateur : ${tag(c)} ${st==="paired"?`compte <b>${ACCOUNT[c]}</b> · `:""}<button type="button" class="link" data-goto="companion">Gérer dans l’onglet Compagnon</button></p>`};
+
+function c411(){return `<div class="settings-form"><h2>Connexions</h2>${tabs()}
+ <p class="muted" style="margin:0">Le tracker c411 : adresse et clés de l’indexeur, adresse d’annonce et hôtes de secours. Les autres indexeurs de recherche sont dans l’onglet Indexeurs.</p>
+ <section class="settings-card"><h3>Indexeur c411</h3><div class="settings-fields">
+  ${field("URL de l’indexeur","c411.url")}
+  ${secretBox("c411.key","Clé API de l’indexeur")}
+  ${secretBox("c411.announce","URL d’annonce")}
+  <label class="settings-field">c411 announce hosts · actuel puis secours<textarea data-bind="c411.hosts" rows="3"></textarea></label>
+  ${extraRows()}
+  <button type="button" data-test-c411>Tester l’indexeur</button></div>
+  <p class="muted" style="margin:12px 0 0">Les clés supplémentaires sont d’autres clés du même compte (jusqu’à 4, ADR-0008).</p></section>
+ <section class="settings-card"><h3>Compagnon c411</h3>${compLine("c411")}</section>
+ ${saveBar()}</div>`}
+const tr4kerLive=()=>S.tr4ker.enabled&&has(S.tr4ker.key);
 const tr4kerIdx=()=>S.indexers.find(i=>i.host==="tr4ker.net");
-const companionTag=c=>c==="paired"?`<span class="tag on">Appairé</span>`:c==="waiting"?`<span class="tag warn">En attente de la session tr4ker</span>`:`<span class="tag">Non appairé</span>`;
-
-/* c411: today's connection settings, unchanged. */
-function c411(){const c=S.c411;return `<div class="settings-form"><h2>c411</h2>
- <p class="muted">La connexion actuelle à c411, inchangée : la clé API, l'adresse d'annonce et le compagnon du navigateur.</p>
- <section class="settings-card"><h3>Clé API</h3><div class="secret-line"><input type="password" placeholder="${c.key?"Enregistrée ; laisser vide pour la garder":"Collez la clé API"}" data-c411-key><button data-test-c411>Tester</button></div>
- <p class="muted" style="margin:8px 0 0">Enregistrée dans le trousseau, jamais renvoyée à l'écran.</p></section>
- <section class="settings-card"><h3>Adresse d'annonce</h3><div class="secret-line"><input type="password" placeholder="${c.announce?"Enregistrée ; laisser vide pour la garder":"https://…/announce/votre-passkey"}"></div></section>
- <section class="settings-card"><h3>Compagnon du navigateur</h3><p>${companionTag(c.companion)}</p><div class="settings-actions"><button data-c411-companion>${c.companion==="paired"?"Dissocier":"Appairer"}</button></div></section>
- <div class="settings-actions"><button class="primary" data-save>Enregistrer</button><button data-discard>Annuler les modifications</button></div></div>`}
-
-/* tr4ker: enable, API key, passkey, companion, capabilities, and the adoption offer. */
-function caps(){const t=S.tr4ker,live=t.enabled&&t.key,ses=t.companion==="paired";
+function caps(){const t=S.tr4ker,live=tr4kerLive(),ses=S.comp.tr4ker.state==="paired";
  const row=(name,state,why)=>`<tr><th>${name}</th><td>${state==="live"?'<span class="tag on">Disponible</span>':state==="needs"?`<span class="tag warn">${why}</span>`:`<span class="tag bad">Indisponible</span> <span class="unavailable">${why}</span>`}</td></tr>`;
- return `<table class="file-access-capabilities matrix"><tbody>
+ return `<table class="file-access-capabilities"><tbody>
  ${row("Recherche, Cross-seed et téléchargements",live?"live":"needs","Clé API requise")}
- ${row("Flux RSS et adresse d'annonce",t.enabled&&t.passkey?"live":"needs","Passkey requis")}
- ${row("Profil, détail d'un torrent, publication",live&&ses?"live":"needs","Session tr4ker appairée requise")}
- ${row("Zen",  "none","tr4ker n'a pas de Zen : ses crédits sont une estimation apprise")}
- </tbody></table>`}
+ ${row("Flux RSS et adresse d’annonce",t.enabled&&has(t.passkey)?"live":"needs","Passkey requis")}
+ ${row("Profil, détail d’un torrent, publication",live&&ses?"live":"needs","Session tr4ker appairée requise")}
+ ${row("Zen","none","tr4ker n’a pas de Zen : ses crédits sont une estimation apprise")}</tbody></table>`}
 function adoptOffer(){const i=tr4kerIdx();if(!i||S.tr4ker.adopted)return "";
  return `<section class="settings-card offer"><h3>Un indexeur tr4ker existe déjà</h3>
- <p>« ${esc(i.name)} », importé de ${esc(i.source)}, pointe vers <b>${esc(i.host)}</b>. Vous pouvez le reprendre ici : sa clé API et l'historique de ses cross-seeds (${i.history} enregistrements) passent à tr4ker, et il quitte la liste des indexeurs, pour que tr4ker ne soit jamais cherché deux fois.</p>
- <div class="settings-actions"><button class="primary" data-adopt>Reprendre cet indexeur</button><button data-keep-separate>Le laisser dans les indexeurs</button></div>
+ <p>« ${esc(i.name)} », importé de ${esc(i.source)}, pointe vers <b>${esc(i.host)}</b>. Vous pouvez le reprendre ici : sa clé API et l’historique de ses cross-seeds (${i.history} enregistrements) passent à tr4ker, et il quitte la liste des indexeurs, pour que tr4ker ne soit jamais cherché deux fois.</p>
+ <div class="settings-actions"><button type="button" class="primary" data-adopt>Reprendre cet indexeur</button><button type="button" data-keep-separate>Le laisser dans les indexeurs</button></div>
  <p class="muted" style="margin:8px 0 0">Une nouvelle synchronisation Prowlarr ne le recréera pas.</p></section>`}
-function tr4ker(){const t=S.tr4ker;return `<div class="settings-form"><h2>tr4ker</h2>
- <p class="muted">tr4ker est un tracker à part entière, comme c411 : un compte, une API et ses propres règles. Ses résultats s'ajoutent à ceux de c411, chaque ligne portant son tracker.</p>
+function tr4ker(){const t=S.tr4ker,off=t.enabled?"":"is-off";return `<div class="settings-form"><h2>Connexions</h2>${tabs()}
+ <p class="muted" style="margin:0">tr4ker est un tracker à part entière, comme c411 : un compte, une API et ses propres règles. Ses résultats s’ajoutent à ceux de c411, chaque ligne portant son tracker.</p>
  ${adoptOffer()}
- <section class="settings-card"><label class="settings-check"><input type="checkbox" data-t-enable ${t.enabled?"checked":""}> Activer tr4ker</label>${t.adopted?'<p class="muted" style="margin:8px 0 0">Indexeur repris : clé API et historique des cross-seeds conservés.</p>':""}</section>
- <section class="settings-card ${t.enabled?"":"is-off"}"><h3>Clé API</h3><div class="secret-line"><input type="password" placeholder="${t.key?"Enregistrée ; laisser vide pour la garder":"Collez la clé API de tr4ker"}" data-t-key ${t.enabled?"":"disabled"}><button data-t-test ${t.enabled&&t.key?"":"disabled"}>Tester</button></div>
- <p class="muted" style="margin:8px 0 0">Recherche, cross-seed et téléchargements des .torrent. Dans le trousseau, jamais renvoyée à l'écran.</p></section>
- <section class="settings-card ${t.enabled?"":"is-off"}"><h3>Passkey</h3><div class="secret-line"><input type="password" placeholder="${t.passkey?"Enregistré ; laisser vide pour le garder":"Collez votre passkey"}" data-t-pass ${t.enabled?"":"disabled"}></div>
- <p class="muted" style="margin:8px 0 0">Flux RSS et adresse d'annonce de vos torrents. Distinct de la clé API.</p></section>
- <section class="settings-card ${t.enabled?"":"is-off"}"><h3>Compagnon du navigateur</h3><p>${companionTag(t.companion)}</p>
- <p class="muted">Le profil, le détail des torrents et la publication passent par votre session tr4ker dans le navigateur ; aucun cookie ne quitte le navigateur.</p>
- <div class="settings-actions"><button data-t-companion ${t.enabled?"":"disabled"}>${t.companion==="paired"?"Dissocier":t.companion==="waiting"?"Annuler l'appairage":"Appairer avec un onglet tr4ker"}</button></div></section>
+ <section class="settings-card"><h3>tr4ker</h3>${check("Activer tr4ker","tr4ker.enabled")}${t.adopted===true?'<p class="muted" style="margin:8px 0 0">Indexeur repris : clé API et historique des cross-seeds conservés.</p>':""}</section>
+ <section class="settings-card ${off}" id="t-card"><h3>Accès à l’API</h3><div class="settings-fields">
+  ${secretBox("tr4ker.key","Clé API de tr4ker")}${secretBox("tr4ker.passkey","Passkey de tr4ker")}
+  <label class="settings-field">URL d’annonce<input aria-label="URL d’annonce tr4ker" value="https://tk.tr4ker.net/announce/…" readonly></label>
+  <button type="button" data-t-test ${t.enabled&&has(t.key)?"":"disabled"}>Tester tr4ker</button></div>
+  <p class="muted" style="margin:12px 0 0">La clé API sert à la recherche, au cross-seed et au téléchargement des .torrent. Le passkey sert aux flux RSS et à l’adresse d’annonce (hôte tk.tr4ker.net). Les deux sont conservés dans le trousseau, jamais renvoyés à l’écran.</p></section>
+ <section class="settings-card ${off}"><h3>Compagnon tr4ker</h3>${compLine("tr4ker")}
+  <p class="muted" style="margin:0">Le profil, le détail des torrents et la publication passent par votre session tr4ker dans le navigateur ; aucun cookie ne quitte le navigateur.</p></section>
  <section class="settings-card"><h3>Ce qui fonctionne</h3><div id="caps">${caps()}</div></section>
- <div class="settings-actions"><button class="primary" data-save>Enregistrer</button><button data-discard>Annuler les modifications</button></div></div>`}
+ ${saveBar()}</div>`}
 
-/* Indexers: the search-only list and the Prowlarr or Jackett import, as today. */
-const stateTag=x=>x.state==="ok"?`<span class="tag on">Connecté</span>`:x.state==="limited"?`<span class="tag warn">Limité</span>`:`<span class="tag bad">Erreur</span>`;
-function idxCard(x){return `<section class="client-card"><div class="head"><div><h3>${esc(x.name)}</h3><p class="muted">${esc(x.source)} · ${esc(x.url)}</p></div><div>${stateTag(x)}${x.caps.map(c=>`<span class="tag">${c}</span>`).join("")}</div></div>
- ${x.error?`<p class="settings-error" style="margin:6px 0 0">${esc(x.error)}</p>`:""}
- <div class="settings-actions" style="margin-top:10px"><label class="settings-check"><input type="checkbox" data-on="${x.id}" ${x.on?"checked":""}> Chercher sur cet indexeur</label><button data-test="${x.id}">Tester</button><button data-remove="${x.id}">Retirer</button></div></section>`}
-function arrCard(){const a=S.arr;return `<section class="settings-card"><h3>Importer depuis Prowlarr ou Jackett</h3>
- <div class="settings-fields"><label class="settings-field">Service<select data-arr-kind><option value="prowlarr" ${a.kind==="prowlarr"?"selected":""}>Prowlarr</option><option value="jackett" ${a.kind==="jackett"?"selected":""}>Jackett</option></select></label>
- <label class="settings-field">Adresse<input value="${esc(a.url)}"></label><label class="settings-field">Clé API<input type="password" placeholder="Enregistrée ; laisser vide pour la garder"></label></div>
- <div style="margin-top:12px">${a.available.map(([n,imp])=>{const adopted=n==="tr4ker"&&S.tr4ker.adopted;return `<label class="settings-check" style="padding:6px 0;border-bottom:1px solid var(--line)"><input type="checkbox" ${imp||adopted?"checked disabled":""} data-import="${esc(n)}"> ${esc(n)}<small style="margin-left:auto">${adopted?"repris par le tracker tr4ker":imp?"déjà importé":"disponible"}</small></label>`}).join("")}</div>
- <div class="settings-actions" style="margin-top:12px"><button data-import-go>Importer la sélection</button><button data-sync>Resynchroniser</button><small class="muted">Dernière synchronisation ${a.synced}</small></div></section>`}
-function indexers(){return `<div class="settings-form"><h2>Indexeurs</h2>
- <p class="muted">Les indexeurs de recherche seule : Prowlarr, Jackett ou ajoutés à la main. c411 et tr4ker sont des trackers, avec leur propre onglet.</p>
- <div class="settings-actions"><button class="primary" data-add>Ajouter un indexeur Torznab</button></div>
- ${S.indexers.map(idxCard).join("")||'<p class="muted">Aucun indexeur de recherche seule.</p>'}${arrCard()}
- <div class="settings-actions"><button class="primary" data-save>Enregistrer</button><button data-discard>Annuler les modifications</button></div></div>`}
+/* Indexeurs: today's Indexers section, as indexers.js draws it. */
+const idLabel=x=>x;
+function idxCard(x){const bad=x.state==="error"&&x.error||(!x.key?"La clé API est absente.":"");
+ const pace=!x.on?"Désactivé":x.state==="limited"?`Limité par l’indexeur · reprise dans ${x.wait||40} s`:"Les limites de l’indexeur sont respectées";
+ const state=bad?["bad","Erreur"]:x.state==="limited"?["warn","Limité"]:["on","Connecté"];
+ return `<section class="client-card indexer-card" data-card="${x.id}"><div class="indexer-head"><div><h3>${esc(x.name)}</h3><p class="muted">${esc(x.source)} · ${esc(x.url)}</p></div><div><span class="indexer-tag ${state[0]}">${state[1]}</span>${x.caps.map(c=>`<span class="indexer-tag">${c}</span>`).join("")}</div></div>
+ <p class="muted indexer-pace">${pace}</p>${bad?`<p class="indexer-error">${esc(bad)}</p>`:""}
+ <div class="settings-actions"><label class="settings-check"><input type="checkbox" data-on="${x.id}" aria-label="Chercher sur cet indexeur" ${x.on?"checked":""}> Chercher sur cet indexeur</label><button type="button" data-test="${x.id}">Tester</button><button type="button" data-edit="${x.id}">Modifier</button><button type="button" data-remove="${x.id}">Retirer</button></div>
+ <p class="test-result" role="status" data-out="${x.id}"></p></section>`}
+function c411Card(){return `<section class="client-card indexer-card locked" data-card="c411"><div class="indexer-head"><div><h3>c411</h3><p class="muted">Intégré · ${esc(S.c411.url)}</p></div><div><span class="indexer-tag on">Connecté</span><span class="indexer-tag">IMDb</span><span class="indexer-tag">TMDb</span></div></div>
+ <p class="muted indexer-pace">${S.c411.search?"Budget de recherches par heure, Catalogue d’abord":"Désactivé"}</p>
+ <div class="settings-actions"><label class="settings-check"><input type="checkbox" data-c411-search aria-label="Chercher sur cet indexeur" ${S.c411.search?"checked":""}> Chercher sur cet indexeur</label><button type="button" data-c411-idx-test>Tester</button></div><p class="test-result" role="status" data-out="c411"></p></section>`}
+function hubCard(){const a=S.arr;return `<section class="settings-card" id="indexer-hub"><h3>Importer depuis Prowlarr ou Jackett</h3>
+ <div class="settings-fields"><label class="settings-field">Service<select aria-label="Service" data-arr="kind"><option value="prowlarr" ${a.kind==="prowlarr"?"selected":""}>Prowlarr</option><option value="jackett" ${a.kind==="jackett"?"selected":""}>Jackett</option></select></label>
+ <label class="settings-field">Adresse<input aria-label="Adresse" data-arr="url" value="${esc(a.url)}"></label>${secretBox("arr.key","Clé API")}</div>
+ <div class="indexer-import-list">${a.available.map(([n,imp])=>{const ad=n==="tr4ker"&&S.tr4ker.adopted===true;return `<label class="settings-check"><input type="checkbox" ${imp||ad?"checked disabled":""} data-import="${esc(n)}"> ${esc(n)}<small>${ad?"repris par le tracker tr4ker":imp?"déjà importé":"disponible"}</small></label>`}).join("")}</div>
+ <div class="settings-actions indexer-hub-actions" style="margin-top:12px"><button type="button" data-hub-save>Enregistrer et recharger</button><button type="button" data-import-go>Importer la sélection</button><button type="button" data-sync>Resynchroniser</button><small class="muted">Dernière synchronisation ${a.synced}</small></div></section>`}
+function rulesCard(){const r=S.rules;return `<section class="settings-card" id="cross-seed-rules"><h3>Cross-seed</h3>
+ <label class="settings-check"><input type="checkbox" data-rules-auto aria-label="Ajouter automatiquement les correspondances sûres" ${r.auto?"checked":""}> Ajouter automatiquement les correspondances sûres</label>
+ <label class="settings-field"><span>Ajout automatique d’une correspondance partielle à partir de <b id="cross-seed-threshold-value">${r.threshold} %</b> des fichiers présents</span><input type="range" id="cross-seed-threshold" min="80" max="100" value="${r.threshold}" ${r.auto?"":"disabled"} data-rules-threshold></label>
+ <p class="muted">Toujours ajouté arrêté, vérifié à 100 % puis démarré ; les fichiers manquants sont ignorés, jamais téléchargés. En dessous du seuil, et pour les archives, la correspondance attend votre décision dans Bibliothèque → Cross-seed. Le cross-seed fonctionne dans les deux sens, entre c411, tr4ker et les indexeurs.</p>
+ <p class="muted">Sources : tous les torrents du client une fois terminés, et tous les éléments de la bibliothèque. Disposition : celle choisie pour chaque client dans la remise en seed.</p>
+ <div class="settings-actions"><button type="button" data-rules-pause>${r.paused?"Reprendre le cross-seed":"Suspendre le cross-seed"}</button></div></section>`}
+function indexers(){return `<section class="settings-form"><h2>Connexions</h2>${tabs()}
+ <p class="muted" style="margin:0">Les indexeurs où TorrentLinker cherche des correspondances pour la remise en seed et le cross-seed. Les recherches respectent les limites de chaque indexeur ; c411 garde son budget horaire.</p>
+ <p class="muted" style="margin:0">c411 et tr4ker sont des trackers, avec leur propre onglet pour la clé, le passkey et le compagnon ; ici seule leur recherche s’affiche.</p>
+ <div class="settings-actions"><button type="button" class="primary" data-add>Ajouter un indexeur Torznab</button></div>
+ <div>${c411Card()}${S.indexers.map(idxCard).join("")}</div>${hubCard()}${rulesCard()}</section>`}
 
-function render(){document.getElementById("settings-navigation").innerHTML=nav();
- document.getElementById("settings-body").innerHTML=`<h2 style="margin-bottom:12px">Connexion</h2>${tabs()}`+({c411,tr4ker,indexers})[S.tab]();
- document.getElementById("scenario-label").textContent=scenario==="import"?"tr4ker déjà importé":"rien d'importé"}
-function addDialog(){const d=document.getElementById("dialog");d.innerHTML=`<form method="dialog"><h2>Ajouter un indexeur Torznab</h2><div class="settings-fields">
- <label class="settings-field">Nom<input placeholder="Lyra" data-new-name></label><label class="settings-field">Adresse Torznab<input placeholder="https://tracker.example/api/torznab" data-new-url></label>
- <label class="settings-field">Clé API<input type="password"></label></div><p class="muted" id="caps-line" style="margin:10px 0 0">« Tester » lit aussi ses capacités.</p>
- <p class="muted" style="margin:6px 0 0">Une adresse tr4ker.net sera proposée à l'onglet tr4ker plutôt que cherchée deux fois.</p>
- <div class="settings-actions" style="margin-top:12px"><button type="button" data-dialog-test>Tester</button><button class="primary" value="ok" data-dialog-save>Ajouter</button><button value="cancel">Annuler</button></div></form>`;d.showModal()}
-document.addEventListener("change",e=>{const d=e.target.dataset;if(d.import)return;
- if(d.on){S.indexers.find(x=>x.id===d.on).on=e.target.checked;status("Modifications non enregistrées")}
- else if("tEnable" in d){S.tr4ker.enabled=e.target.checked;status(S.tr4ker.enabled?"tr4ker activé : saisissez sa clé API":"tr4ker désactivé");render()}
- else if("arrKind" in d){S.arr.kind=e.target.value;status("Modifications non enregistrées")}});
-document.addEventListener("input",e=>{const d=e.target.dataset;
- if("tKey" in d||"tPass" in d){if("tKey" in d)S.tr4ker.key=!!e.target.value||S.tr4ker.key;else S.tr4ker.passkey=!!e.target.value||S.tr4ker.passkey;
-  document.getElementById("caps").innerHTML=caps();document.querySelector("[data-t-test]").disabled=!(S.tr4ker.enabled&&S.tr4ker.key);status("Modifications non enregistrées")}});
-document.addEventListener("click",e=>{const t=e.target.closest("button");if(!t)return;const d=t.dataset;
- if(t.closest("#switcher")){if(t.id==="theme"){const r=document.documentElement;r.dataset.theme=r.dataset.theme==="light"?"dark":"light"}
-  else if(t.id==="scenario"){scenario=scenario==="import"?"clean":"import";S=scenarios[scenario]();status("");render()}
-  else if(t.id==="reset"){S=scenarios[scenario]();status("Aperçu réinitialisé");render()}return}
- if(t.closest("#settings-navigation")){status("Cet aperçu ne montre que la section Connexion");return}
- if(d.tab){S.tab=d.tab;status("");render()}
- else if("save" in d){const t4=S.tr4ker;status(S.tab==="tr4ker"&&t4.enabled&&!t4.key?"Enregistré. tr4ker est actif mais sans clé API : la recherche reste indisponible.":"Enregistré")}
- else if("discard" in d){S=scenarios[scenario]();S.tab=t.closest("main").querySelector("[aria-selected=true]").dataset.tab;status("Modifications annulées");render()}
- else if("testC411" in d){status("c411 répond · clé API acceptée")}
- else if("c411Companion" in d){S.c411.companion=S.c411.companion==="paired"?"none":"paired";status(S.c411.companion==="paired"?"Compagnon c411 appairé":"Compagnon c411 dissocié");render()}
- else if("tTest" in d){status("tr4ker répond · recherche par IMDb et TMDb · 5 modes de recherche")}
- else if("tCompanion" in d){const t4=S.tr4ker;if(t4.companion==="paired")t4.companion="none";else if(t4.companion==="waiting")t4.companion="none";else{t4.companion="waiting";setTimeout(()=>{if(S.tr4ker.companion==="waiting"){S.tr4ker.companion="paired";status("Compagnon appairé avec votre session tr4ker");render()}},1200)}
-  status(t4.companion==="waiting"?"Ouvrez un onglet tr4ker connecté dans le navigateur…":"Appairage annulé ou compagnon dissocié");render()}
- else if("adopt" in d){const i=tr4kerIdx();S.tr4ker.adopted=true;S.tr4ker.enabled=true;S.tr4ker.key=true;S.tr4ker.history=i.history;S.indexers=S.indexers.filter(x=>x!==i);status(`Indexeur repris : clé API et ${i.history} cross-seeds conservés ; il a quitté la liste des indexeurs`);render()}
- else if("keepSeparate" in d){S.tr4ker.adopted="declined";status("Indexeur laissé dans la liste. Attention : tr4ker serait cherché deux fois si vous l'activez ici.");render()}
- else if(d.test){const x=S.indexers.find(i=>i.id===d.test);status(x.state==="error"?`${x.name} : ${x.error}`:`${x.name} répond · recherche par ${x.caps.join(", ")||"nom"}`)}
- else if(d.remove){const x=S.indexers.find(i=>i.id===d.remove);S.indexers=S.indexers.filter(i=>i!==x);status(`${x.name} retiré ; ses cross-seeds restent dans le client`);render()}
- else if("add" in d)addDialog();
- else if("dialogTest" in d)document.getElementById("caps-line").textContent="Répond · recherche par IMDb et TMDb.";
- else if("dialogSave" in d){const n=document.querySelector("[data-new-name]").value||"Lyra",u=document.querySelector("[data-new-url]").value||"https://tracker.example/api/torznab";
-  if(/tr4ker\.net/.test(u)&&!S.tr4ker.adopted)status("Cette adresse est celle de tr4ker : activez tr4ker à son onglet au lieu de l'ajouter ici.");
-  else if(!S.indexers.some(i=>i.name===n)){S.indexers.push({id:n.toLowerCase(),name:n,url:u,source:"Ajouté à la main",on:true,state:"ok",caps:["IMDb"]});status(n+" ajouté")}
-  setTimeout(render,0)}
- else if("importGo" in d){const picked=[...document.querySelectorAll("[data-import]:checked:not(:disabled)")].map(i=>i.dataset.import);
-  picked.forEach(n=>{S.arr.available.find(a=>a[0]===n)[1]=true;if(n==="tr4ker"){S.indexers.push({id:"t4k",name:"tr4ker",url:S.arr.url+"/9/api",host:"tr4ker.net",source:"Prowlarr",on:true,state:"ok",caps:["IMDb","TMDb"],history:0});S.tr4ker.adopted=false}else S.indexers.push({id:n.toLowerCase(),name:n,url:S.arr.url+"/x/api",source:"Prowlarr",on:true,state:"ok",caps:["IMDb"]})});
-  status(picked.length?picked.join(", ")+" importé"+(picked.length>1?"s":""):"Rien de sélectionné");render()}
- else if("sync" in d){S.arr.synced="à l'instant";const gone=S.tr4ker.adopted===true?" · tr4ker, déjà repris, n'a pas été recréé":"";status("Resynchronisé : rien de nouveau"+gone);render()}});
+/* Clients: today's Clients list, then the selected client's own settings (the old "Client torrent" box) and its file access. */
+const selClient=()=>S.clients.find(c=>c.id===ui.sel)||S.clients[0];
+const clientIdx=()=>S.clients.indexOf(selClient());
+const links=c=>["utorrent","bittorrent","rtorrent"].includes(c.client);
+function layoutNote(c){return (links(c)||c.reseed_layout==="links")?"Les liens préservent les fichiers originaux et les chemins du torrent. Conservez le dossier de liens hors bibliothèque tant que ses torrents partagent. Ce choix s’applique aussi aux éléments locaux.":"Les chemins sont renommés dans le client torrent. Les fichiers originaux restent en place ; aucun dossier de liens n’est nécessaire. Les liens existants sont conservés."}
+function clientBox(){const c=selClient(),p=`clients.${clientIdx()}`,rl=links(c);
+ const layoutOpts=rl?[["auto","Liens requis pour ce client"],["links","Liens"]]:[["auto","Par défaut : renommer dans le client"],["client","Renommer dans le client"],["links","Liens : conserver les chemins du torrent"]];
+ const lv=rl?(c.reseed_layout==="links"?"links":"auto"):c.reseed_layout,showLink=rl||c.reseed_layout==="links";
+ return `<section class="settings-card" id="client-box"><h3>Client torrent</h3><p class="muted" style="margin-top:-6px">Client sélectionné : <b>${esc(c.name)}</b></p><div class="settings-fields">
+  <label class="settings-field">Nom du client<input aria-label="Nom du client" required data-bind="${p}.name" value="${esc(c.name)}"></label>
+  <label class="settings-field">Type de client<select aria-label="Type de client" data-bind="${p}.client" data-rerender>${CLIENT_TYPES.map(([v,n])=>`<option value="${v}" ${c.client===v?"selected":""}>${n}</option>`).join("")}</select></label>
+  <label class="settings-field">Adresse<input aria-label="Adresse" required data-bind="${p}.host" value="${esc(c.host)}"></label>
+  ${c.client!=="deluge"?`<label class="settings-field">Identifiant<input aria-label="Identifiant" data-bind="${p}.username" value="${esc(c.username)}"></label>`:""}
+  ${secretBox(p+".password","Mot de passe")}
+  ${c.client==="qbittorrent"?secretBox(p+".api_key","Clé API du client"):""}
+  <label class="settings-field">Organisation de la remise en seed<select aria-label="Organisation de la remise en seed" data-bind="${p}.reseed_layout" data-rerender ${rl?"disabled":""}>${layoutOpts.map(([v,n])=>`<option value="${v}" ${lv===v?"selected":""}>${n}</option>`).join("")}</select></label>
+  <label class="settings-field" ${showLink?"":"hidden"}>Dossier des liens de remise en seed<input aria-label="Dossier des liens de remise en seed" data-bind="${p}.reseed_link_root" value="${esc(c.reseed_link_root)}"></label>
+  <p class="file-access-note" style="grid-column:1/-1;margin:0">${layoutNote(c)}</p>
+  ${c.client==="transmission"?check("Désactiver les noms .part de Transmission lors du test",p+".partial"):""}
+  <button type="button" data-client-test>Tester la connexion</button></div></section>`}
+function accessCard(){const c=selClient(),a=c.access;
+ const st=!a.configured?"Non configuré":a.checked?"Vérifié · SFTP":"À revérifier · SFTP";
+ const av=a.checked?"Disponible ; les opérations revérifient leurs droits et chemins.":"Configurez et testez d’abord l’accès aux fichiers.";
+ const row=(n,r)=>`<tr><th>${n}</th><td>${r}</td></tr>`;
+ return `<section class="settings-card file-access-card" id="file-access-card"><h3>Accès aux fichiers distants</h3><p class="muted">Accès SFTP facultatif pour ce client. Les transferts réutilisent cette connexion.</p>
+ <p class="file-access-status">${st}</p>${a.configured?`<p class="file-access-address">${esc(a.username)}@${esc(a.host)}:${a.port} · ${esc(a.client_root)} → ${esc(a.file_root)}</p>`:""}
+ <div class="settings-actions"><button type="button" data-fa-config>Configurer l’accès aux fichiers…</button>${a.configured?`<button type="button" data-fa-check>Tester l’accès</button><button type="button" data-fa-remove>Supprimer l’accès…</button>`:""}</div>
+ ${a.error?`<p class="file-access-note settings-error">${esc(a.error)}</p>`:""}
+ <h4>Fonctions disponibles</h4><table class="file-access-capabilities">${row("Transferts",av)}${row("Parcours des dossiers distants",av)}${row("Analyse de bibliothèque et remise en seed","Nécessite des fichiers accessibles localement. SFTP seul n’est pas pris en charge.")}${row("Préparation des envois","Nécessite les fichiers et outils de préparation locaux.")}${row("Inspection et lecture des médias","Nécessite des médias accessibles sur cet ordinateur ou le serveur TorrentLinker.")}</table>
+ <p class="file-access-note">Les dossiers par catégorie et destinations propres à chaque transfert restent applicables. Une modification de l’accès invalide les aperçus concernés : vérifiez-les avant d’envoyer des fichiers.</p></section>`}
+function clients(){if(!S.clients.some(c=>c.id===ui.sel))ui.sel=S.defaultClient||S.clients[0]?.id;
+ return `<div class="settings-form"><h2>Connexions</h2>${tabs()}
+ <p class="muted" style="margin:0">Les clients torrent où les remises en seed, cross-seeds et plans sont ajoutés, quel que soit le tracker. Les chemins restent dans « Chemins du client ».</p>
+ ${S.clients.map(c=>`<section class="client-card ${c.id===ui.sel?"sel":""}" data-client-card="${c.id}"><h3>${esc(c.name)}</h3><p>${typeName(c.client)}</p>${c.id===S.defaultClient?'<span class="muted">Par défaut</span>':""}<div class="settings-actions"><button type="button" data-client-edit="${c.id}">Modifier les paramètres</button><button type="button" data-client-default="${c.id}">Définir par défaut</button><button type="button" data-client-remove="${c.id}">Supprimer le client</button></div></section>`).join("")||'<p class="muted">Aucun client.</p>'}
+ <label class="settings-field">Nom du nouveau client<input aria-label="Nom du nouveau client" data-client-name></label>
+ <div><button type="button" class="primary" data-client-add>Ajouter un client</button></div>
+ ${S.clients.length?clientBox()+accessCard()+saveBar():""}</div>`}
+
+/* Compagnon: today's companion section, one row per configured Tracker. */
+const TRK=()=>["c411",...(S.tr4ker.enabled?["tr4ker"]:[])];
+function rowState(c){const st=S.comp[c].state;
+ return st==="paired"?"Connecté. L’onglet du navigateur est prêt.":st==="waiting"?`En attente de la session ${c}… un onglet connecté est ouvert dans le navigateur.`:st==="login"?`<span class="bad-text">Connectez-vous à ${c} dans le navigateur</span>`:"Non connecté."}
+function trkRow(c){const st=S.comp[c].state;
+ return `<div class="trk-row" data-row="${c}"><div class="who"><b>${c}</b> ${tag(c)}<p class="muted">${st==="paired"?`Compte <b>${ACCOUNT[c]}</b> · `:""}${rowState(c)}</p></div><div class="settings-actions">
+ ${st==="paired"?`<button type="button" data-row-other="${c}">Connecter un autre navigateur</button><button type="button" data-row-unpair="${c}">Dissocier</button>`:st==="waiting"?`<button type="button" data-row-cancel="${c}">Annuler l’appairage</button>`:st==="login"?`<button type="button" class="primary" data-row-pair="${c}">Réessayer</button>`:`<button type="button" data-row-pair="${c}">Appairer</button>`}</div></div>`}
+function companion(){const any=TRK().some(c=>S.comp[c].state==="paired"||S.comp[c].state==="login");
+ return `<section class="settings-form"><h2>Connexions</h2>${tabs()}
+ <section class="settings-card"><h3>Extension navigateur</h3>
+ <p class="muted">Connectez une fois pour synchroniser les statistiques du compte, les transferts, la durée et les seeds actifs toutes les deux minutes. Votre session reste dans le navigateur.</p>
+ <div class="settings-actions"><button type="button" data-extension>Enregistrer l’extension…</button><button type="button" data-comp-refresh>Actualiser</button><button type="button" data-disconnect ${any?"":"disabled"}>Déconnecter et effacer</button></div>
+ ${S.comp.extension?'<p class="test-result ok">Extension enregistrée dans Téléchargements (simulation).</p>':""}</section>
+ <section class="settings-card"><h3>Trackers</h3>
+ <div class="settings-actions" style="margin-bottom:6px"><button type="button" class="primary bigbtn" data-pair-all>Connecter tous les trackers</button></div>
+ <p class="muted" style="margin:0 0 6px">Ouvre un onglet par tracker dans le navigateur et appaire chaque session connectée. Chaque tracker peut aussi s’appairer ou se dissocier seul.</p>
+ ${TRK().map(trkRow).join("")}
+ ${S.tr4ker.enabled?"":'<p class="muted" style="margin:10px 0 0">tr4ker apparaît ici dès qu’il est activé dans son onglet.</p>'}
+ </section>
+ <section class="settings-card"><h3>Téléchargements c411</h3>
+ <label class="settings-field settings-check"><input type="checkbox" data-downloads ${S.comp.downloads?"checked":""} ${S.comp.c411.state==="paired"?"":"disabled"}><span>Télécharger les .torrent avec ma session c411</span></label>
+ <p class="muted">Uniquement lorsque l’option est activée et l’extension connectée. Si c411 refuse la session, les téléchargements s’arrêtent sans basculer sur la clé API.</p></section></section>`}
+
+function services(){const px=S.proxy;return `<div class="settings-form"><h2>Connexions</h2>${tabs()}
+ <section class="settings-card"><h3>TMDb</h3><div class="settings-fields">${secretBox("tmdb","Clé API TMDb")}<button type="button" data-tmdb-test>Tester la clé TMDb</button></div>
+ <small class="muted">Donne aussi aux films et séries leur classification française quand leur NFO n’en a pas.</small></section>
+ <section class="settings-card"><h3>Proxy</h3><div class="settings-fields">
+ ${field("Adresse du proxy","proxy.address")}${field("Identifiant du proxy","proxy.username")}${secretBox("proxy.password","Mot de passe du proxy")}
+ ${check("Également pour le client torrent","proxy.torrent_client")}
+ <button type="button" data-proxy-test>Tester le proxy</button></div></section>
+ ${saveBar()}</div>`}
+
+/* ---- render */
+function render(){const y=window.scrollY;
+ const out={c411,tr4ker,indexers,clients,companion,services}[ui.tab]();
+ $("settings-body").innerHTML=out;hydrate($("settings-body"));
+ $("scenario-label").textContent=scenario==="import"?"tr4ker déjà importé":"rien d’importé";
+ $("session-label").textContent=S.comp.signed.tr4ker?"connectée":"non connectée";
+ window.scrollTo(0,y)}
+function refreshCaps(){const c=$("caps");if(c)c.innerHTML=caps();const b=document.querySelector("[data-t-test]");if(b)b.disabled=!tr4kerLive()}
+
+/* ---- dialog */
+const dlg=$("dialog");
+function openDialog(html,cls="assistant-dialog"){dlg.className=cls;dlg.innerHTML=html;if(!dlg.open)dlg.showModal()}
+function idxDialog(id){const x=id?S.indexers.find(i=>i.id===id):null;
+ openDialog(`<h2>${x?"Modifier "+esc(x.name):"Ajouter un indexeur Torznab"}</h2><div class="settings-fields">
+ <label class="settings-field">Nom<input aria-label="Nom" id="d-name" placeholder="Lyra" value="${esc(x?.name||"")}"></label>
+ <label class="settings-field">Adresse Torznab<input aria-label="Adresse Torznab" id="d-url" placeholder="https://tracker.example/api/torznab" value="${esc(x?.url||"")}"></label>
+ <label class="settings-field">Clé API<span class="secret-input"><input type="password" aria-label="Clé API" id="d-key" autocomplete="new-password" placeholder="${x?"Enregistrée ; laisser vide pour la garder":""}"><button type="button" class="secret-eye quiet" data-eye aria-pressed="false">Afficher</button></span></label></div>
+ <p class="muted test-result" id="d-caps" style="display:block;margin:10px 0 0">« Tester » lit aussi ses capacités (recherche par IMDb, TMDb, TVDB).</p>
+ <p class="muted" style="margin:6px 0 0">Une adresse tr4ker.net sera proposée à l’onglet tr4ker plutôt que cherchée deux fois.</p>
+ <div class="settings-actions" style="margin-top:12px"><button type="button" data-dlg-test>Tester</button><button type="button" class="primary" data-dlg-save="${id||""}">${x?"Enregistrer":"Ajouter"}</button><button type="button" data-dlg-close>Annuler</button></div>`)}
+function faDialog(){const c=selClient(),a=c.access;
+ openDialog(`<small>CONNEXION AUX FICHIERS</small><h2>${esc(c.name)}</h2><p class="muted">Ces identifiants sont propres aux fichiers. La connexion au client torrent reste séparée.</p>
+ <div class="settings-fields"><label class="settings-field">Serveur<input aria-label="Serveur" id="fa-host" value="${esc(a.host||"")}"></label><label class="settings-field">Port<input aria-label="Port" id="fa-port" type="number" min="1" max="65535" value="${a.port||22}"></label>
+ <label class="settings-field">Utilisateur<input aria-label="Utilisateur" id="fa-user" value="${esc(a.username||"")}"></label>
+ <label class="settings-field">Authentification<select aria-label="Authentification" id="fa-auth"><option value="key" ${a.auth!=="password"?"selected":""}>Clé SSH</option><option value="password" ${a.auth==="password"?"selected":""}>Mot de passe</option></select></label>
+ <label class="settings-field">Racine vue par le client torrent<input aria-label="Racine vue par le client torrent" id="fa-croot" value="${esc(a.client_root||"")}"></label><label class="settings-field">Racine vue en SFTP<input aria-label="Racine vue en SFTP" id="fa-froot" value="${esc(a.file_root||"")}"></label></div>
+ <p class="muted">Exemple : le client voit /downloads, le compte SFTP voit /home/seed/downloads.</p>
+ <p class="test-result" id="fa-result" role="status" style="display:block">Accès non vérifié</p>
+ <div class="settings-actions"><button type="button" data-fa-save-test>Enregistrer et tester l’accès</button><button type="button" class="primary" data-dlg-close>Revenir aux paramètres</button></div>`,"assistant-dialog file-access-dialog")}
+function faRemove(){openDialog(`<h2>Supprimer l’accès aux fichiers ?</h2><p>Le secret SFTP et l’identité du serveur seront supprimés. Les transferts devront être revérifiés. Les identifiants de l’API torrent et les fichiers sont conservés.</p>
+ <div class="settings-actions"><button type="button" data-dlg-close>Annuler</button><button type="button" data-fa-remove-ok>Supprimer l’accès</button></div>`,"assistant-dialog file-access-confirm")}
+
+/* ---- companion simulation: pairing opens a signed-in tab per Tracker; a Tracker whose tab is not signed in asks to sign in. */
+function pairOne(c,delay,done){S.comp[c].state="waiting";
+ setTimeout(()=>{if(S.comp[c].state!=="waiting")return;
+  if(S.comp.signed[c])S.comp[c].state="paired";else{S.comp[c].state="login";if(c==="tr4ker")S.comp.signed.tr4ker=true}
+  if(ui.tab==="companion"||ui.tab==="c411"||ui.tab==="tr4ker")render();done&&done()},delay)}
+function pairMany(list){const todo=list.filter(c=>S.comp[c].state!=="paired");
+ if(!todo.length){note("Tous les trackers sont déjà appairés");return}
+ note(`Ouverture d’un onglet connecté pour ${todo.join(" et ")}…`);let left=todo.length;
+ todo.forEach((c,i)=>pairOne(c,700+i*900,()=>{if(--left)return;const bad=todo.filter(x=>S.comp[x].state==="login");
+  note(bad.length?`Connectez-vous à ${bad.join(" et ")} dans le navigateur, puis réessayez`:"Tous les trackers sont appairés",!!bad.length)}));
+ render()}
+
+/* ---- events */
+document.addEventListener("input",e=>{const t=e.target,d=t.dataset;
+ if(d.secret){const s=get(d.secret);s.typed=t.value;if(t.value)s.cleared=false;dirty();if(d.secret.startsWith("tr4ker"))refreshCaps();return}
+ if("bind" in d&&!("rerender" in d)){put(d.bind,t.type==="checkbox"?t.checked:t.value);dirty();return}
+ if("arr" in d){S.arr[d.arr]=t.value;return}
+ if("rulesThreshold" in d){$("cross-seed-threshold-value").textContent=t.value+" %"}});
+document.addEventListener("change",e=>{const t=e.target,d=t.dataset;
+ if("bind" in d){put(d.bind,t.type==="checkbox"?t.checked:t.value);dirty();
+  if("rerender" in d||d.bind==="tr4ker.enabled"){if(d.bind==="tr4ker.enabled")note(S.tr4ker.enabled?"tr4ker activé : saisissez sa clé API":"tr4ker désactivé");render()}return}
+ if(d.on){S.indexers.find(x=>x.id===d.on).on=t.checked;render();status(`${S.indexers.find(x=>x.id===d.on).name} : recherche ${t.checked?"activée":"désactivée"}`);return}
+ if("c411Search" in d){S.c411.search=t.checked;render();return}
+ if("arr" in d){S.arr[d.arr]=t.value;return}
+ if("rulesAuto" in d){S.rules.auto=t.checked;render();status("Cross-seed : "+(t.checked?"ajout automatique activé":"ajout automatique désactivé"));return}
+ if("rulesThreshold" in d){S.rules.threshold=+t.value;status(`Seuil de correspondance partielle : ${t.value} %`);return}
+ if("downloads" in d){S.comp.downloads=t.checked;status(t.checked?"Téléchargements .torrent avec la session c411 activés":"Téléchargements .torrent avec la session c411 désactivés");return}});
+document.addEventListener("beforeinput",e=>{const t=e.target;if(t.dataset?.masked){delete t.dataset.masked;t.value=""}});
+document.addEventListener("focusin",e=>{const t=e.target;if(t.dataset?.masked)t.select()});
+document.addEventListener("focusout",e=>{const t=e.target;if(!t.dataset?.secret)return;const s=get(t.dataset.secret),eye=t.parentElement.querySelector("[data-eye]");
+ if(!t.value&&s.saved&&!s.cleared&&eye.getAttribute("aria-pressed")!=="true"){t.value=MASK;t.dataset.masked="1"}});
+const wait=(ms)=>new Promise(r=>setTimeout(r,ms));
+document.addEventListener("click",async e=>{const b=e.target.closest("button");if(!b)return;const d=b.dataset;
+ if(b.closest("#switcher")){
+  if(b.id==="theme"){const r=document.documentElement,dark=getComputedStyle(r).colorScheme==="dark"&&r.dataset.theme!=="light";r.dataset.theme=dark?"light":"dark"}
+  else if(b.id==="scenario"){scenario=scenario==="import"?"clean":"import";S=scenarios[scenario]();saved=clone(S);status("");render()}
+  else if(b.id==="session"){S.comp.signed.tr4ker=!S.comp.signed.tr4ker;render();status("Simulation : "+(S.comp.signed.tr4ker?"l’utilisateur est connecté à tr4ker dans son navigateur":"l’utilisateur n’est pas connecté à tr4ker dans son navigateur"))}
+  else if(b.id==="reset"){S=scenarios[scenario]();saved=clone(S);ui.sel="qb";dlg.open&&dlg.close();status("Aperçu réinitialisé");render()}return}
+ if(b.closest("#settings-navigation")){status("Cet aperçu ne couvre que Connexions : Clients, Indexeurs et Compagnon en sont maintenant des onglets.");return}
+ if(d.eye!==undefined){const i=b.parentElement.querySelector("input"),on=b.getAttribute("aria-pressed")==="true";
+  if(on){i.type="password";if(i.dataset.fetched&&i.value===i.dataset.fetched&&i.dataset.secret){i.value=MASK;i.dataset.masked="1"}delete i.dataset.fetched;b.setAttribute("aria-pressed","false");b.textContent="Afficher";b.classList.remove("on")}
+  else{if(i.dataset.masked){i.value="valeur-fictive-enregistrée";i.dataset.fetched=i.value;delete i.dataset.masked}i.type="text";b.setAttribute("aria-pressed","true");b.textContent="Masquer";b.classList.add("on")}return}
+ if(d.clearSecret){const s=get(d.clearSecret);s.cleared=true;s.typed="";dirty();const i=document.querySelector(`[data-secret="${d.clearSecret}"]`);delete i.dataset.masked;i.value="";i.placeholder="Sera effacé à l’enregistrement";b.remove();refreshCaps();return}
+ if(d.tab){ui.tab=d.tab;status("");render();return}
+ if(d.goto){ui.tab=d.goto;status("");render();window.scrollTo(0,0);return}
+ if("save" in d){const miss=S.tr4ker.enabled&&!has(S.tr4ker.key);
+  for(const k of DRAFT){}
+  const fix=s=>{if(s&&typeof s==="object"){if("typed" in s&&"saved" in s){if(s.typed){s.saved=true;s.typed=""}if(s.cleared){s.saved=false;s.cleared=false}}else Object.values(s).forEach(fix)}};
+  fix(S.c411);fix(S.tr4ker);fix(S.clients);fix(S.tmdb);fix(S.proxy);DRAFT.forEach(k=>saved[k]=clone(S[k]));
+  note(ui.tab==="tr4ker"&&miss?"Enregistré. tr4ker est actif mais sans clé API : la recherche reste indisponible.":"Enregistré");render();return}
+ if("discard" in d){DRAFT.forEach(k=>S[k]=clone(saved[k]));note("Modifications annulées");render();return}
+ /* c411 */
+ if("testC411" in d){const c=S.c411;if(!c.url.trim())return note("Adresse de l’indexeur : saisissez une adresse complète comme https://c411.org/api/torznab, sans identifiant, mot de passe, paramètres ni fragment.",true);
+  if(!has(c.key))return note("c411 refuse : clé API absente.",true);const n=1+c.extra.filter(has).length;
+  return note(`c411 répond · 14 catégories · ${n} ${n===1?"clé":"clés"}`)}
+ if("extraAdd" in d){S.c411.extra.push(sec(false));dirty();render();return}
+ if(d.extraRemove!==undefined){S.c411.extra.splice(+d.extraRemove,1);dirty();render();return}
+ /* tr4ker */
+ if("tTest" in d)return note("tr4ker répond · recherche par IMDb et TMDb · 5 modes de recherche");
+ if("adopt" in d){const i=tr4kerIdx(),h=i.history;for(const o of [S,saved]){o.tr4ker.adopted=true;o.tr4ker.enabled=true;o.tr4ker.key=sec(true);o.tr4ker.history=h;o.indexers=o.indexers.filter(x=>x.host!=="tr4ker.net")}note(`Indexeur repris : clé API et ${h} cross-seeds conservés ; il a quitté la liste des indexeurs`);render();return}
+ if("keepSeparate" in d){S.tr4ker.adopted="declined";note("Indexeur laissé dans la liste. Attention : tr4ker serait cherché deux fois si vous l’activez ici.");render();return}
+ /* Indexeurs */
+ if(d.test){const x=S.indexers.find(i=>i.id===d.test),o=document.querySelector(`[data-out="${x.id}"]`);o.className="test-result";o.textContent="Test en cours…";await wait(300);
+  const bad=x.state==="error"&&x.error||(!x.key?"La clé API est absente.":"");
+  o.className="test-result "+(bad?"bad":"ok");o.textContent=bad?bad:`${x.name} · répond · ${x.caps.join(", ")||"recherche par nom"}`;status(o.textContent,!!bad);return}
+ if("c411IdxTest" in d){const o=document.querySelector('[data-out="c411"]');o.className="test-result ok";o.textContent="c411 · intégré, testé dans l’onglet c411";status(o.textContent);return}
+ if(d.edit)return idxDialog(d.edit);
+ if(d.remove){const x=S.indexers.find(i=>i.id===d.remove);if(confirm(`Retirer ${x.name} ? Ses cross-seeds restent dans le client.`)){S.indexers=S.indexers.filter(i=>i!==x);note("Indexeur retiré ; ses cross-seeds restent dans le client.");render()}return}
+ if("add" in d)return idxDialog("");
+ if("hubSave" in d){const k=S.arr.key;if(k.typed){k.saved=true;k.typed=""}k.cleared&&(k.saved=false,k.cleared=false);note(`${S.arr.kind==="prowlarr"?"Prowlarr":"Jackett"} enregistré · liste rechargée`);render();return}
+ if("importGo" in d){const picked=[...document.querySelectorAll("[data-import]:checked:not(:disabled)")].map(i=>i.dataset.import);
+  if(!picked.length)return note("Cochez des indexeurs à importer.");
+  picked.forEach(n=>{S.arr.available.find(a=>a[0]===n)[1]=true;if(n==="tr4ker"){S.indexers.push({id:"t4k",name:"tr4ker",url:S.arr.url+"/9/api",host:"tr4ker.net",source:"Prowlarr",on:true,state:"ok",caps:["IMDb","TMDb"],history:0,key:true});S.tr4ker.adopted=false;saved.tr4ker.adopted=false}else S.indexers.push({id:n.toLowerCase(),name:n,url:S.arr.url+"/x/api",source:"Prowlarr",on:true,state:"ok",caps:["IMDb"],key:true})});
+  note(`${picked.length} indexeur(s) importé(s)`);render();return}
+ if("sync" in d){S.arr.synced="à l’instant";note(`Resynchronisé · 0 renommé(s) · 0 disparu(s) · 0 nouveau(x)${S.tr4ker.adopted===true?" · tr4ker, déjà repris, n’a pas été recréé":""}`);render();return}
+ if("rulesPause" in d){S.rules.paused=!S.rules.paused;note(S.rules.paused?"Cross-seed suspendu.":"Cross-seed repris.");render();return}
+ /* dialogs */
+ if("dlgClose" in d){dlg.close();return}
+ if("dlgTest" in d){const u=$("d-url").value.trim(),o=$("d-caps");if(!u){o.className="test-result bad";o.textContent="Adresse de l’indexeur : saisissez une adresse complète comme https://c411.org/api/torznab, sans identifiant, mot de passe, paramètres ni fragment.";return}
+  o.className="test-result ok";o.textContent="Répond · recherche par IMDb, TMDb.";return}
+ if(d.dlgSave!==undefined){const n=$("d-name").value.trim()||"Lyra",u=$("d-url").value.trim();
+  if(!u){const o=$("d-caps");o.className="test-result bad";o.textContent="Adresse de l’indexeur : saisissez une adresse complète comme https://c411.org/api/torznab, sans identifiant, mot de passe, paramètres ni fragment.";return}
+  if(d.dlgSave){const x=S.indexers.find(i=>i.id===d.dlgSave);x.name=n;x.url=u;note(n+" enregistré")}
+  else if(/tr4ker\.net/.test(u)){dlg.close();note("Cette adresse est celle de tr4ker : activez tr4ker à son onglet au lieu de l’ajouter ici.");return}
+  else{S.indexers.push({id:n.toLowerCase(),name:n,url:u,source:"Ajouté à la main",on:true,state:"ok",caps:["IMDb"],key:true});note(n+" ajouté")}
+  dlg.close();render();return}
+ /* Clients */
+ if(d.clientEdit){ui.sel=d.clientEdit;render();document.getElementById("client-box").scrollIntoView();status("Paramètres de "+S.clients.find(c=>c.id===d.clientEdit).name+" affichés ci-dessous");return}
+ if(d.clientDefault){for(const o of [S,saved])o.defaultClient=d.clientDefault;render();note(S.clients.find(c=>c.id===d.clientDefault).name+" est le client par défaut");return}
+ if(d.clientRemove){const c=S.clients.find(x=>x.id===d.clientRemove);if(confirm(`Supprimer ${c.name} ? Les torrents et fichiers seront conservés.`)){for(const o of [S,saved]){o.clients=o.clients.filter(x=>x.id!==c.id);if(o.defaultClient===c.id)o.defaultClient=o.clients[0]?.id}render();note(c.name+" supprimé")}return}
+ if("clientAdd" in d){const n=document.querySelector("[data-client-name]").value.trim();if(!n)return note("Saisissez le nom du nouveau client.",true);
+  const c=newClient({id:"c"+Date.now(),name:n});S.clients.push(c);saved.clients.push(clone(c));if(!S.defaultClient)S.defaultClient=saved.defaultClient=c.id;ui.sel=c.id;render();note(n+" ajouté : renseignez ses paramètres ci-dessous");return}
+ if("clientTest" in d){const c=selClient(),h=c.host.trim();
+  const scgi=h.startsWith("scgi://");
+  if(!h||/@|\?|#/.test(h)||(c.client!=="rtorrent"&&!/^https?:\/\/[^/]+$/.test(h)&&!scgi&&!/^https?:\/\/[^/]+\/?$/.test(h)))return note(c.client==="rtorrent"?"Adresse du client : saisissez l’adresse SCGI de rTorrent sous la forme scgi://hôte:port, par exemple scgi://192.168.0.50:5000.":"Adresse du client : saisissez par exemple http://192.168.0.50:8080, sans identifiant, mot de passe, paramètres ni fragment.",true);
+  if(c.client!=="rtorrent"&&scgi)return note("Adresse du client : scgi:// est réservé à rTorrent ; utilisez http://hôte:port.",true);
+  if(c.client==="rtorrent"&&!scgi)return note("Adresse du client : saisissez l’adresse SCGI de rTorrent sous la forme scgi://hôte:port, par exemple scgi://192.168.0.50:5000.",true);
+  const port=+(h.match(/:(\d+)/g)||[":0"]).pop().slice(1);if(port>65535||(h.match(/:(\d+)/g)||[]).length&&port<1)return note("Adresse du client : le port doit être compris entre 1 et 65535.",true);
+  return note(`Connecté · ${VERSIONS[c.client]}`)}
+ if("faConfig" in d)return faDialog();
+ if("faSaveTest" in d){const c=selClient(),a=c.access;const h=$("fa-host").value.trim(),r=$("fa-result");
+  if(!h){r.className="test-result bad";r.textContent="Renseignez le serveur SFTP.";r.style.display="block";return}
+  Object.assign(a,{configured:true,checked:true,host:h,port:+$("fa-port").value||22,username:$("fa-user").value.trim()||"seed",auth:$("fa-auth").value,client_root:$("fa-croot").value||"/downloads",file_root:$("fa-froot").value||"/home/seed/downloads"});saved.clients.find(x=>x.id===c.id).access=clone(a);
+  r.className="test-result ok";r.style.display="block";r.textContent="Accès vérifié · SFTP";render();return}
+ if("faCheck" in d){const a=selClient().access;a.checked=true;a.error="";note("Accès vérifié · SFTP");render();return}
+ if("faRemove" in d)return faRemove();
+ if("faRemoveOk" in d){const c=selClient();c.access={configured:false,checked:false};saved.clients.find(x=>x.id===c.id).access={configured:false,checked:false};dlg.close();note("Accès aux fichiers supprimé");render();return}
+ /* Compagnon */
+ if("extension" in d){S.comp.extension=true;note("Extension enregistrée (simulation)");render();return}
+ if("compRefresh" in d){render();status("Actualisé");return}
+ if("disconnect" in d){for(const c of TRK())S.comp[c].state="none";note("Compagnon déconnecté, données effacées");render();return}
+ if("pairAll" in d)return pairMany(TRK());
+ if(d.rowPair){note(`Ouverture d’un onglet ${d.rowPair}…`);pairOne(d.rowPair,800,()=>{const st=S.comp[d.rowPair].state;note(st==="paired"?`${d.rowPair} appairé`:`Connectez-vous à ${d.rowPair} dans le navigateur`,st!=="paired")});render();return}
+ if(d.rowCancel){S.comp[d.rowCancel].state="none";note("Appairage annulé");render();return}
+ if(d.rowUnpair){S.comp[d.rowUnpair].state="none";note(`${d.rowUnpair} dissocié`);render();return}
+ if(d.rowOther){note("Terminez la connexion dans votre navigateur.");return}
+ /* Services */
+ if("tmdbTest" in d)return has(S.tmdb)?note("TMDb répond · clé acceptée"):note("TMDb : clé API absente.",true);
+ if("proxyTest" in d){if(!S.proxy.address.trim())return note("Renseignez l’adresse du proxy.",true);return note("Adresse vue par c411 : 203.0.113.42")}
+});
 render();
 </script>
+</html>
