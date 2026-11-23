@@ -415,8 +415,11 @@ async function loadFeeds() {
   const columns = [
     {
       label: feedText("Title", "Titre"),
-      render: (r) =>
-        button(
+      // One line of name (cut, full name on hover), the Tracker tags under it: every row is
+      // the same two lines high.
+      render: (r) => {
+        const cell = element("div", undefined, "feed-title-cell");
+        const name = button(
           `${r.unread ? "● " : ""}${r.title}`,
           () =>
             details({
@@ -426,18 +429,15 @@ async function loadFeeds() {
               queueSource: "feed",
             }),
           "link-button",
-        ),
-    },
-    {
-      label: "Tracker",
-      render: (r) => {
-        const cell = n180(element("span", undefined, "tracker-cell"));
-        cell.append(element("span", feedTracker(r), `tracker-badge ${feedTracker(r)}`));
+        );
+        name.title = r.title;
+        const tags = n180(element("span", undefined, "tracker-cell"));
+        tags.append(element("span", feedTracker(r), `tracker-badge ${feedTracker(r)}`));
         if (r.metadata?.freeleech)
-          cell.append(element("span", "freeleech", "tracker-badge freeleech"));
+          tags.append(element("span", "freeleech", "tracker-badge freeleech"));
+        cell.append(name, tags);
         return cell;
       },
-      mark180: true,
     },
     {
       label: feedText("Size", "Taille"),
