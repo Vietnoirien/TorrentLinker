@@ -50,8 +50,9 @@ let agentRequest = 0;
 async function loadAgents(background = false) {
   const request = ++agentRequest;
   const data = await agentApi("agents");
-  if (request !== agentRequest || (background && agentReviewInUse())) return;
+  // Another Settings section may have replaced the panel while the request was out.
   if (!$("view-agents")) return;
+  if (request !== agentRequest || (background && agentReviewInUse())) return;
   const rendered = JSON.stringify([data, snapshot.clients, language]);
   if (agentRenderSnapshot === rendered) return;
   agentRenderSnapshot = rendered;
