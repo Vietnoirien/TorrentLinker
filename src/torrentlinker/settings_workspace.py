@@ -11,10 +11,19 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from torrentlinker.client_profiles import pending_work
-from torrentlinker.config import CLIENT_FIELDS, HUB_SECRET, MatchingSettings, ProxySettings
+from torrentlinker.config import (
+    C411_ID,
+    CLIENT_FIELDS,
+    HUB_SECRET,
+    IndexerSettings,
+    MatchingSettings,
+    ProxySettings,
+    Settings,
+)
 from torrentlinker.domain import ContentKind, PathMapping
 from torrentlinker.release_score import PROFILES
 from torrentlinker.release_score.preferences import Preferences as ScorePreferences
+from torrentlinker.trackers import TRACKERS, Tracker, tracker, tracker_of_url
 from torrentlinker.web.setup import (
     CLIENT_ADDRESS,
     INDEXER_ADDRESS,
@@ -50,6 +59,21 @@ class Matching(BaseModel):
     plan_exclusions: list[str] = Field(max_length=1000)
 
 
+class TrackerConnection(BaseModel):
+    """What a Tracker other than c411 keeps in Connections: its switch and two credentials.
+    An absent key or passkey stays as saved; an empty one clears it."""
+
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = False
+    api_key: str | None = Field(default=None, max_length=4096)
+    passkey: str | None = Field(default=None, max_length=4096)
+
+
+def announce_url(found: Tracker, passkey: str) -> str:
+    """The private Announce URL of a Tracker, which holds the passkey (never logged or shown)."""
+    return f"https://{found.announce_hosts[-1]}/announce/{passkey.strip()}" if passkey else ""
+
+
 class Connections(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -59,6 +83,14 @@ class Connections(BaseModel):
     tmdb_api_key: str | None = Field(default=None, max_length=4096)
     announce_url: str | None = Field(default=None, max_length=4096)
     announce_hosts: list[str] | None = Field(default=None, max_length=16)
+    trackers: dict[str, TrackerConnection] | None = None
+
+    @field_validator("trackers")
+    @classmethod
+    def own_trackers(cls, value):
+        if value is not None and any(k not in TRACKERS or k == C411_ID for k in value):
+            raise ValueError("Unknown Tracker.")
+        return value
 
     @field_validator("announce_hosts")
     @classmethod
@@ -119,6 +151,8 @@ class SettingsWorkspace:
         prefix, _, identifier = reference.partition(":")
         if prefix == "extra-key" and identifier in {"1", "2", "3", "4"}:
             return f"indexer-extra-key-{identifier}"
+        if prefix == "passkey" and identifier in TRACKERS and identifier != C411_ID:
+            return TRACKERS[identifier].passkey_secret
         if prefix == "indexer" and re.fullmatch(r"[A-Za-z0-9_-]{1,64}", identifier):
             return settings.indexer_secret(identifier)
         if prefix == "assistant" and re.fullmatch(r"[A-Za-z0-9_-]{1,64}", identifier):
@@ -152,9 +186,58 @@ class SettingsWorkspace:
                     raise ValueError(
                         "Proxy test failed. Check its address and credentials."
                     ) from None
+            if group == "tmdb":
+                return self._test_tmdb(body)
+            if group in TRACKERS and group != C411_ID:
+                return self._test_tracker(tracker(group), body)
             raise ValueError("Unknown connection test.")
         except ValidationError as error:
             raise ValueError(explain_validation(error)) from None
+
+    def _typed_or_saved(self, body: dict[str, Any], name: str) -> str:
+        typed = body.get("api_key")
+        if typed is not None and not isinstance(typed, str):
+            raise ValueError("Invalid value: api_key")
+        return typed or self.setup.secrets.get(name)
+
+    def _test_tmdb(self, body: dict[str, Any]) -> dict[str, Any]:
+        import httpx
+
+        from torrentlinker.tmdb import Tmdb
+
+        key = self._typed_or_saved(body, "tmdb-api-key")
+        if not key:
+            raise ValueError("Enter your TMDb API key.")
+        try:
+            Tmdb(key).check()
+        except httpx.HTTPStatusError as error:
+            if error.response.status_code in (401, 403):
+                raise ValueError("TMDb refused the API key.") from None
+            raise ValueError("TMDb test failed. Check your connection and try again.") from None
+        except Exception:
+            raise ValueError("TMDb test failed. Check your connection and try again.") from None
+        return {"ok": True}
+
+    def _test_tracker(self, found: Tracker, body: dict[str, Any]) -> dict[str, Any]:
+        """A Torznab caps call, through the same Indexer path searches use."""
+        from torrentlinker.web.setup import mode_names
+
+        key = self._typed_or_saved(body, found.api_key_secret)
+        if not key:
+            raise ValueError(f"Enter your {found.name} API key.")
+        settings = self.setup.settings
+        url = next(
+            (i.url for i in settings.indexers if i.id == found.indexer_id), found.indexer_url
+        )
+        try:
+            caps = self.setup._probe(url, key, found.name, found.id)
+        except ValueError:
+            raise ValueError(
+                f"{found.name} test failed. Check its API key and your connection."
+            ) from None
+        modes = mode_names(caps)
+        ids = sorted({p for params in modes.values() for p in params if p.endswith("id")})
+        return {"ok": True, "modes": len(modes), "searchable_ids": ids}
 
     def storage(self, action: str, body: dict[str, Any]) -> dict[str, Any]:
         """Use the existing storage proofs and owner guards for either renderer."""
@@ -328,6 +411,70 @@ class SettingsWorkspace:
                 self.setup._client = None
             return self.snapshot()
 
+    @staticmethod
+    def _adoptable_entry(settings: Settings, found: Tracker) -> IndexerSettings | None:
+        """An Indexer that is this Tracker's own site, whether added by hand (its address) or
+        imported from Prowlarr or Jackett (listed under the Tracker's name)."""
+        for entry in settings.indexers:
+            if entry.id == found.indexer_id:
+                continue
+            if tracker_of_url(entry.url) is found:
+                return entry
+            if entry.source and entry.name.casefold() == found.name.casefold():
+                return entry
+        return None
+
+    def _adoptable(self, found: Tracker) -> dict[str, Any] | None:
+        """What the Tracker's tab offers to take over, unless the Tracker has its own key."""
+        settings = self.setup.settings
+        entry = self._adoptable_entry(settings, found)
+        if entry is None or self.setup.secrets.get(found.api_key_secret):
+            return None
+        return {
+            "name": entry.name,
+            "source": entry.source,
+            "url": entry.url,
+            "history": self.setup.store.crossseed_count(entry.id),
+        }
+
+    def adopt(self, tracker_id: str) -> dict[str, Any]:
+        """The Tracker takes over its existing Indexer in place: its key and Cross-seed
+        history follow it, it leaves the Indexers list, and an Indexer import still lists it
+        as imported, so a re-sync never creates it again."""
+        found = tracker(tracker_id)
+        if found.id == C411_ID:
+            raise ValueError("c411 is built in.")
+        with self.setup.lock:
+            setup = self.setup
+            root = setup._root or setup
+            original = root.settings
+            draft = copy.deepcopy(original)
+            draft.capture_client()
+            entry = self._adoptable_entry(draft, found)
+            if entry is None:
+                raise ValueError(f"No Indexer of {found.name} to adopt.")
+            if setup.secrets.get(found.api_key_secret):
+                raise ValueError(f"{found.name} already has its own API key.")
+            old = entry.id
+            key = setup.secrets.get(Settings.indexer_secret(old))
+            draft.indexers[:] = [i for i in draft.indexers if i.id != found.indexer_id]
+            entry.id = found.indexer_id
+            entry.enabled = True
+            root.settings = draft
+            try:
+                root.save()
+            except Exception:
+                root.settings = original
+                raise
+            setup.secrets.update({found.api_key_secret: key, Settings.indexer_secret(old): ""})
+            root.store.rename_crossseed_indexer(old, found.indexer_id)
+            if setup is not root:
+                setup.settings = draft.for_client(setup.settings.active_client_id)
+            for held in {id(x): x for x in (setup, root)}.values():
+                held._torznab.pop(old, None)
+                held._torznab.pop(found.indexer_id, None)
+            return self.snapshot()
+
     def snapshot(self) -> dict[str, Any]:
         with self.setup.lock:
             setup = self.setup
@@ -349,6 +496,19 @@ class SettingsWorkspace:
                         "indexer_categories",
                     )
                 },
+                "tracker_registry": {
+                    t.id: {
+                        "name": t.name,
+                        "capabilities": sorted(t.capabilities),
+                        "companion": t.companion,
+                        "announce_host": t.announce_hosts[-1],
+                    }
+                    for t in TRACKERS.values()
+                },
+                "adoptable": {
+                    t.id: self._adoptable(t) for t in TRACKERS.values() if t.id != C411_ID
+                },
+                "indexer_count": sum(1 for i in settings.indexers if i.id not in TRACKERS) + 1,
                 "score_defaults": PROFILES,
                 "score_recommendation": ScorePreferences.model_validate(
                     settings.release_score
@@ -372,6 +532,15 @@ class SettingsWorkspace:
                     },
                     "indexer": {"url": settings.indexer.url},
                     "announce_hosts": self.announce_hosts(),
+                    "trackers": {
+                        t.id: {
+                            "enabled": any(
+                                i.id == t.indexer_id and i.enabled for i in settings.indexers
+                            )
+                        }
+                        for t in TRACKERS.values()
+                        if t.id != C411_ID
+                    },
                     "proxy": asdict(settings.proxy),
                     "reseed_link_root": profile.reseed_link_root,
                     "reseed_layout": profile.reseed_layout,
@@ -387,6 +556,14 @@ class SettingsWorkspace:
                         "extra_key_slots": [
                             i for i in range(1, 5) if setup.secrets.get(f"indexer-extra-key-{i}")
                         ],
+                        "trackers": {
+                            t.id: {
+                                "api_key": bool(setup.secrets.get(t.api_key_secret)),
+                                "passkey": bool(setup.secrets.get(t.passkey_secret)),
+                            }
+                            for t in TRACKERS.values()
+                            if t.id != C411_ID
+                        },
                         "tmdb_api_key": bool(setup.secrets.get("tmdb-api-key")),
                         "announce_url": bool(setup.secrets.get("announce-url")),
                         "proxy_password": bool(setup.secrets.get("proxy-password")),
@@ -499,6 +676,20 @@ class SettingsWorkspace:
                 draft.download_folders.default = ""
                 draft.download_folders.by_category.clear()
             draft.indexer.url = value.indexer.url
+            for identifier, item in (value.trackers or {}).items():
+                found = tracker(identifier)
+                entry = next((i for i in draft.indexers if i.id == found.indexer_id), None)
+                if entry is None and item.enabled:
+                    draft.indexers.append(
+                        IndexerSettings(
+                            url=found.indexer_url,
+                            id=found.indexer_id,
+                            name=found.name,
+                            enabled=True,
+                        )
+                    )
+                elif entry is not None:
+                    entry.enabled = item.enabled
             if value.announce_hosts is not None:
                 draft.announce_hosts = value.announce_hosts
             draft.proxy = ProxySettings(
@@ -511,6 +702,13 @@ class SettingsWorkspace:
                 "announce-url": value.announce_url,
                 "proxy-password": value.proxy.password,
             }
+            for identifier, item in (value.trackers or {}).items():
+                found = tracker(identifier)
+                values[found.api_key_secret] = item.api_key
+                if item.passkey is not None:
+                    # The Announce URL is the passkey in the Tracker's own form: kept in step.
+                    values[found.passkey_secret] = item.passkey
+                    values[found.announce_secret] = announce_url(found, item.passkey)
             if CLIENT_FIELDS[draft.client] == "qbit":
                 values[draft.secret_name("qbit-api-key")] = value.client.api_key
             if value.indexer.extra_keys is not None:

@@ -14,8 +14,6 @@ from tests.test_web_plan_execution import prepared
 
 SECTIONS = (
     "connections",
-    "clients",
-    "companion",
     "community_site",
     "agents",
     "assistant",
@@ -25,7 +23,6 @@ SECTIONS = (
     "paths",
     "matching",
     "release_score",
-    "indexers",
     "zen",
 )
 
@@ -66,7 +63,7 @@ def test_settings_native_keyboard_and_zoom(qtbot, tmp_path, language, theme, zoo
     view.resize(1100, 800)
     view.show()
     view.web.setZoomFactor(zoom)
-    wait_js(qtbot, view, "document.querySelectorAll('#settings-navigation button').length===14")
+    wait_js(qtbot, view, "document.querySelectorAll('#settings-navigation button').length===11")
     for index, section in enumerate(SECTIONS):
         js(
             qtbot,

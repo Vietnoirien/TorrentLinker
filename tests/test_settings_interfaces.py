@@ -2,6 +2,7 @@
 
 import json
 
+from tests.settings_support import open_tab
 from tests.test_community_interfaces import js, wait_js
 from tests.test_web_plan_execution import prepared
 from torrentlinker.gui.settings_view import SettingsView
@@ -11,7 +12,7 @@ from torrentlinker.settings_workspace import SettingsWorkspace
 def test_desktop_connections_keep_drafts_and_save_without_exposing_saved_secrets(qtbot, tmp_path):
     _, setup, _, _ = prepared(tmp_path)
     setup.secrets.update({"tmdb-api-key": "private-existing-key"})
-    view = SettingsView(SettingsWorkspace(setup))
+    view = SettingsView(SettingsWorkspace(setup), section="clients")  # an older link: its tab
     qtbot.addWidget(view)
     view.resize(1200, 800)
     view.show()
@@ -22,7 +23,7 @@ def test_desktop_connections_keep_drafts_and_save_without_exposing_saved_secrets
         """
         const input = document.querySelector('[aria-label="Client name"]');
         input.value='Desktop draft';input.dispatchEvent(new Event('input'));
-        [...document.querySelectorAll('nav button')].find(b=>b.textContent==='Clients').click();
+        [...document.querySelectorAll('nav button')].find(b=>b.textContent==='General').click();
     """,
     )
     js(
@@ -35,6 +36,7 @@ def test_desktop_connections_keep_drafts_and_save_without_exposing_saved_secrets
         js(qtbot, view, "document.querySelector('[aria-label=\"Client name\"]').value")
         == "Desktop draft"
     )
+    open_tab(qtbot, view, "Services")
     tmdb = "document.querySelector('[aria-label=\"TMDb API key\"]')"
     assert js(qtbot, view, f"{tmdb}.value") == "••••••••"
     # The eye asks the desktop bridge for the one saved value, and hides it again.
@@ -71,10 +73,12 @@ def test_native_settings_service_sections_use_shared_controls(qtbot, tmp_path):
     qtbot.addWidget(view)
     view.resize(1200, 800)
     view.show()
-    wait_js(qtbot, view, "Boolean(document.querySelector('[aria-label=\"Client name\"]'))")
+    wait_js(qtbot, view, "Boolean(document.querySelector('.conn-tabs'))")
+    open_tab(qtbot, view, "Companion")
+    wait_js(qtbot, view, "Boolean(document.querySelector('#companion-root .settings-card button'))")
+    assert js(qtbot, view, "document.querySelector('#settings-error').textContent") == ""
     for section, selector in (
         ("Assistant", "#assistant-connections-body button"),
-        ("Companion", ".settings-card button"),
         ("Agent access", "#agent-clients input"),
     ):
         js(
@@ -122,7 +126,7 @@ def test_settings_page_fits_work_area_and_renders_both_themes(qtbot, tmp_path, r
     owner.resize(1200, 850)
     owner.show()
     view = dialog.view
-    wait_js(qtbot, view, "Boolean(document.querySelector('[aria-label=\"Client name\"]'))")
+    wait_js(qtbot, view, "Boolean(document.querySelector('[aria-label=\"Indexer URL\"]'))")
     wait_js(
         qtbot,
         view,
@@ -188,7 +192,9 @@ def test_native_settings_file_access_uses_transfer_service(qtbot, tmp_path):
     service = app.state.agent_service.torrents_workspace
     body = access_body()
     service.request("transfer-access-save", {"client_id": "default", **body})
-    view = SettingsView(SettingsWorkspace(setup), agent_service=lambda: app.state.agent_service)
+    view = SettingsView(
+        SettingsWorkspace(setup), section="clients", agent_service=lambda: app.state.agent_service
+    )
     qtbot.addWidget(view)
     view.resize(1200, 900)
     view.show()

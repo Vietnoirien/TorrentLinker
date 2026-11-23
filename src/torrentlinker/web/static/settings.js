@@ -210,6 +210,11 @@ window.addEventListener("message", async (event) => {
         state.clientId = value.client_id;
       await refreshSetup();
       settingsEnvironment();
+    } else if (message.path === "adopt-indexer") {
+      value = await api(`settings/adopt/${encodeURIComponent(body.tracker)}`, {
+        client_id: _client,
+      });
+      await refreshSetup();
     } else if (message.path === "select-client") {
       if (
         !state.setup.clients.some(

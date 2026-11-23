@@ -693,7 +693,7 @@ def test_media_profile_editor_keeps_the_player_and_media_workspace(
     from PySide6.QtCore import QCoreApplication, QEvent
     from shiboken6 import isValid
 
-    from tests.settings_support import edit_field, save_group
+    from tests.settings_support import edit_field, open_tab, save_group
     from tests.test_community_interfaces import js, wait_js
     from torrentlinker.web.app import create_app
 
@@ -733,6 +733,7 @@ def test_media_profile_editor_keeps_the_player_and_media_workspace(
             "[...document.querySelectorAll('#settings-navigation button"
             "')].find(b=>b.textContent==='Connections').click()",
         )
+        open_tab(qtbot, dialog.view, "Clients")
         edit_field(qtbot, dialog.view, "Client name", "Media client")
         save_group(qtbot, dialog)
 

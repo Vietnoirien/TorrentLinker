@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 
 import pytest
 
-from tests.shell_support import shell_navigate
+from tests.shell_support import settings_tab, shell_navigate
 from tests.test_community import H
 from tests.test_profile import PROFILE
 from tests.test_web_profile import prepared, snapshot
@@ -274,8 +274,9 @@ def test_webui_to_real_extension_and_durable_receipt(tmp_path, monkeypatch):
             page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
             shell_navigate(page, "setup")
             settings = page.frame_locator("#settings-frame")
-            settings.get_by_role("button", name="Companion", exact=True).click()
-            settings.get_by_role("button", name="Connect companion", exact=True).click()
+            settings.get_by_role("button", name="Connections", exact=True).click()
+            settings_tab(settings, "Companion").click()
+            settings.get_by_role("button", name="Pair", exact=True).click()
             for _ in range(100):
                 if w.state()["paired"]:
                     break

@@ -355,3 +355,101 @@ small,
 .score-community-actions{position:absolute;right:0;top:calc(100% + 6px);z-index:20;min-width:220px;display:grid;gap:4px;padding:6px;background:var(--panel);border:1px solid var(--line);border-radius:9px;box-shadow:0 8px 24px #0004}
 .score-community-actions button{text-align:left;white-space:normal}
 .score-section-heading~.settings-actions{margin:14px 0 20px;gap:8px}
+/* Connections: one tab per Tracker, then Indexers, Clients, Companion and Services. */
+.conn-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 0 0 2px;
+  border-bottom: 1px solid var(--line);
+}
+.conn-tabs button {
+  border-radius: 8px 8px 0 0;
+  border-bottom: 0;
+  margin-bottom: -1px;
+  background: transparent;
+}
+.conn-tabs button[aria-selected="true"] {
+  background: var(--panel);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+.conn-tag {
+  display: inline-block;
+  font-size: 12px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 1px 7px;
+  margin: 0 6px 4px 0;
+  color: var(--muted);
+}
+.conn-tag.on {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.conn-tag.bad {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.conn-tag.warn {
+  color: var(--warning);
+  border-color: var(--warning);
+}
+.conn-offer {
+  border-color: var(--accent);
+  background: var(--tint);
+}
+.is-off {
+  opacity: 0.55;
+}
+.conn-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--link);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.conn-link:hover {
+  background: none;
+}
+.client-card.selected {
+  border-color: var(--accent);
+}
+.selected-client {
+  margin: -6px 0 16px;
+}
+.card-note {
+  margin: 12px 0 0;
+}
+.conn-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.conn-row:last-child {
+  border-bottom: 0;
+}
+.conn-row .who {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.conn-row .who b {
+  font-size: 15px;
+}
+.conn-row .who p {
+  margin: 2px 0 0;
+}
+.bigbtn {
+  font-size: 16px;
+  padding: 12px 22px;
+  font-weight: 600;
+}
+.unavailable {
+  color: var(--muted);
+  font-style: italic;
+}

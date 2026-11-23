@@ -330,7 +330,7 @@ def test_main_window_settings_stay_available_after_mcp_port_failure(qtbot, tmp_p
             wait_js(
                 qtbot,
                 dialog.view,
-                "Boolean(document.querySelector('[aria-label=\"Client name\"]'))",
+                "Boolean(document.querySelector('[aria-label=\"Indexer URL\"]'))",
             )
             opened.append("connections")
 
@@ -525,7 +525,7 @@ def test_agent_connections_are_embedded_without_discarding_settings(qtbot, tmp_p
         tmp_path, password="test-password-long", service_override=setup, monitor_verifications=False
     )
     service = app.state.agent_service
-    view = service_view(qtbot, setup, agents=service)
+    view = service_view(qtbot, setup, agents=service, tab="Clients")
     try:
         edit_field(qtbot, view, "Client name", "Unsaved client name")
         js(

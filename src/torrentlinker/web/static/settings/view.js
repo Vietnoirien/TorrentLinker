@@ -34,8 +34,6 @@ const sections = () =>
     : ownerSections();
 const ownerSections = () => ({
   connections: say("Connections", "Connexions"),
-  clients: "Clients",
-  companion: "Companion",
   community_site: say("Join the community", "Rejoindre la communauté"),
   agents: say("Agent access", "Accès agent"),
   assistant: "Assistant",
@@ -45,7 +43,6 @@ const ownerSections = () => ({
   paths: say("Client Paths", "Chemins du client"),
   matching: say("Search & Matching", "Recherche et correspondance"),
   release_score: "ReleaseScore",
-  indexers: say("Indexers", "Indexeurs"),
   zen: "Zen",
   // Members share only a Web or Docker server; the desktop stays the Owner's.
   ...(environment.mode === "web" && environment.members_enabled
@@ -183,7 +180,7 @@ function field(form, label, data, key, type = "text", options = null) {
   form.append(wrapper);
   return input;
 }
-function secret(form, label, data, key, saved) {
+function secret(form, label, data, key, saved, own = null) {
   const input = field(form, label, data, key, "password");
   input.autocomplete = "new-password";
   input.placeholder = saved ? "" : say("Not saved", "Non enregistré");
@@ -198,7 +195,8 @@ function secret(form, label, data, key, saved) {
   const connection = draft("connections");
   let cleared = false;
   const reference =
-    key === "tmdb_api_key"
+    own?.reference ??
+    (key === "tmdb_api_key"
       ? "tmdb-api-key"
       : key === "announce_url"
         ? "announce-url"
@@ -208,12 +206,12 @@ function secret(form, label, data, key, saved) {
             : "client-api-key"
           : data === connection.proxy
             ? "proxy-password"
-            : "client-password";
+            : "client-password");
   const kind =
     { qbittorrent: "qbit", bittorrent: "utorrent" }[connection.client.client] ||
     connection.client.client;
-  let name =
-    key === "tmdb_api_key"
+  let name = own?.name ??
+    (key === "tmdb_api_key"
       ? "tmdb-api-key"
       : key === "announce_url"
         ? "announce-url"
@@ -223,8 +221,8 @@ function secret(form, label, data, key, saved) {
             : "qbit-api-key"
           : data === connection.proxy
             ? "proxy-password"
-            : `${kind}-password`;
-  if (data === connection.client && environment.client_id !== "default")
+            : `${kind}-password`);
+  if (!own && data === connection.client && environment.client_id !== "default")
     name = `client-${environment.client_id}-${name}`;
   if (snapshot.connections.managed_secrets.includes(name)) {
     input.disabled = true;
@@ -333,10 +331,385 @@ function box(form, title) {
   form.append(box);
   return fields;
 }
+// Connections is one draft saved by one button; its tabs only decide which cards are shown.
+const connectionTabs = () => [
+  ["c411", "c411"],
+  ["tr4ker", "tr4ker"],
+  ["indexers", say("Indexers", "Indexeurs")],
+  ["clients", "Clients"],
+  ["companion", say("Companion", "Compagnon")],
+  ["services", "Services"],
+];
+let connectionTab = "c411";
+// An older link or saved location to Clients, Indexers or Companion lands on that tab.
+const connectionTabOf = (value) =>
+  ["clients", "indexers", "companion"].includes(value) ? value : null;
+const hasSecret = (data, key, saved) => Boolean(data[key]) || (saved && data[key] !== "");
+function connectionTabBar(form) {
+  const data = draft("connections");
+  const bar = element("div", undefined, "conn-tabs");
+  bar.setAttribute("role", "tablist");
+  for (const [id, label] of connectionTabs()) {
+    const node = element("button", label);
+    node.type = "button";
+    node.setAttribute("role", "tab");
+    node.setAttribute("aria-selected", String(id === connectionTab));
+    if (id === "tr4ker" && data.trackers?.tr4ker?.enabled)
+      node.append(" ", element("span", say("on", "actif"), "conn-tag on"));
+    const count = id === "indexers" ? snapshot.indexer_count : id === "clients" ? snapshot.clients.length : null;
+    if (count !== null) node.append(" ", element("small", String(count), "muted"));
+    node.onclick = () => {
+      if (id === connectionTab) return;
+      hideRevealedSecrets();
+      document.querySelectorAll("dialog").forEach((dialog) => dialog.close());
+      connectionTab = id;
+      $("settings-status").textContent = "";
+      render();
+    };
+    bar.append(node);
+  }
+  form.append(bar);
+}
+function saveBar(form, group) {
+  const actions = element("div", undefined, "settings-actions");
+  actions.append(
+    button(say("Save", "Enregistrer"), () => saveGroup(group, form), "primary"),
+    button(say("Discard changes", "Annuler les modifications"), () => {
+      drafts.delete(draftKey(group));
+      render();
+    }),
+  );
+  form.append(actions);
+}
 function connections(form) {
+  connectionTabBar(form);
+  if (connectionTab === "indexers") {
+    const root = element("div");
+    form.append(root);
+    queueMicrotask(() => guard(() => settingsIndexers(root)));
+    return;
+  }
+  if (connectionTab === "companion") {
+    const root = element("div");
+    form.append(root);
+    queueMicrotask(() => guard(() => loadSettingsCompanion(root)));
+    return;
+  }
+  if (connectionTab === "c411") c411Tab(form);
+  else if (connectionTab === "tr4ker") tr4kerTab(form);
+  else if (connectionTab === "clients") clientsTab(form);
+  else servicesTab(form);
+  saveBar(form, "connections");
+}
+function note(text) {
+  return element("p", text, "muted");
+}
+function c411Tab(form) {
+  const data = draft("connections"),
+    saved = snapshot.connections.secrets;
+  form.append(
+    note(
+      say(
+        "The c411 Tracker: the Indexer's address and keys, the Announce URL and its backup hosts. The other search Indexers are in the Indexers tab.",
+        "Le tracker c411 : adresse et clés de l’indexeur, adresse d’annonce et hôtes de secours. Les autres indexeurs de recherche sont dans l’onglet Indexeurs.",
+      ),
+    ),
+  );
+  const indexer = box(form, say("c411 Indexer", "Indexeur c411"));
+  field(indexer, say("Indexer URL", "URL de l’indexeur"), data.indexer, "url");
+  secret(
+    indexer,
+    say("Indexer API key", "Clé API de l’indexeur"),
+    data.indexer,
+    "api_key",
+    saved.indexer_api_key,
+  );
+  secret(
+    indexer,
+    say("Announce URL", "URL d’annonce"),
+    data,
+    "announce_url",
+    saved.announce_url,
+  );
+  const hostsLabel = element(
+    "label",
+    say(
+      "c411 announce hosts · current first, then backups",
+      "Hôtes d’annonce c411 · actuel puis secours",
+    ),
+    "settings-field",
+  );
+  const hosts = element("textarea");
+  hosts.value = (data.announce_hosts || []).join("\n");
+  hosts.oninput = () => {
+    data.announce_hosts = hosts.value.split(/\s+/).filter(Boolean);
+  };
+  hostsLabel.append(hosts);
+  indexer.append(hostsLabel);
+  extraKeys(indexer, data, saved.extra_key_slots || []);
+  indexer.append(button(say("Test Indexer", "Tester l’indexeur"), async () => {
+    const result = await request("test-connection", {
+      group: "indexer",
+      value: structuredClone(data.indexer),
+    });
+    return [
+      `c411 ${say("answers", "répond")}`,
+      `${result.categories} ${say("categories", "catégories")}`,
+      `${result.keys} ${say(result.keys === 1 ? "key" : "keys", result.keys === 1 ? "clé" : "clés")}`,
+    ].join(" · ");
+  }));
+  indexer.parentElement.append(
+    element(
+      "p",
+      say(
+        "Additional keys are other keys of the same account (up to 4, ADR-0008).",
+        "Les clés supplémentaires sont d’autres clés du même compte (jusqu’à 4, ADR-0008).",
+      ),
+      "muted card-note",
+    ),
+  );
+  const card = element("section", undefined, "settings-card");
+  card.append(element("h3", say("c411 companion", "Compagnon c411")));
+  form.append(card);
+  queueMicrotask(() => guard(() => companionLine(card, "c411")));
+}
+const declinedAdoption = new Set();
+let adoptedNotice = false;
+// The saved switch of the draft, kept in step when an action (adopting) changes it at once.
+function changeDraft(change) {
+  const key = draftKey("connections"),
+    clean = !drafts.has(key) || JSON.stringify(drafts.get(key)) === draftBaselines.get(key);
+  change(draft("connections"));
+  if (clean) draftBaselines.set(key, JSON.stringify(drafts.get(key)));
+}
+function adoptCard(offer) {
+  const card = element("section", undefined, "settings-card conn-offer");
+  const history = offer.history;
+  const records = say(
+    `${history} ${history === 1 ? "record" : "records"}`,
+    `${history} ${history > 1 ? "enregistrements" : "enregistrement"}`,
+  );
+  const crossSeeds = say(
+    `${history} Cross-${history === 1 ? "seed" : "seeds"}`,
+    `${history} cross-seed${history > 1 ? "s" : ""}`,
+  );
+  card.append(
+    element("h3", say("A tr4ker Indexer already exists", "Un indexeur tr4ker existe déjà")),
+    element(
+      "p",
+      say(
+        `“${offer.name}”${offer.source ? `, imported from ${offer.source},` : ""} points to tr4ker. You can take it over here: its API key and the history of its Cross-seeds (${records}) move to tr4ker, and it leaves the Indexers list, so tr4ker is never searched twice.`,
+        `« ${offer.name} »${offer.source ? `, importé de ${offer.source},` : ""} pointe vers tr4ker. Vous pouvez le reprendre ici : sa clé API et l’historique de ses cross-seeds (${records}) passent à tr4ker, et il quitte la liste des indexeurs, pour que tr4ker ne soit jamais cherché deux fois.`,
+      ),
+    ),
+  );
+  const actions = element("div", undefined, "settings-actions");
+  actions.append(
+    button(
+      say("Take over this Indexer", "Reprendre cet indexeur"),
+      async () => {
+        const client = environment.client_id;
+        const result = await request("adopt-indexer", { tracker: "tr4ker" });
+        if (client !== environment.client_id) return;
+        snapshot = result;
+        adoptedNotice = true;
+        changeDraft((data) => (data.trackers.tr4ker.enabled = true));
+        render();
+        return say(
+          `Indexer taken over: API key and ${crossSeeds} kept; it left the Indexers list`,
+          `Indexeur repris : clé API et ${crossSeeds} conservé${history > 1 ? "s" : ""} ; il a quitté la liste des indexeurs`,
+        );
+      },
+      "primary",
+    ),
+    button(say("Leave it in the Indexers", "Le laisser dans les indexeurs"), async () => {
+      declinedAdoption.add("tr4ker");
+      render();
+      return say(
+        "Indexer left in the list. Note: tr4ker would be searched twice if you turn it on here.",
+        "Indexeur laissé dans la liste. Attention : tr4ker serait cherché deux fois si vous l’activez ici.",
+      );
+    }),
+  );
+  card.append(
+    actions,
+    element(
+      "p",
+      say("A new Prowlarr sync will not create it again.", "Une nouvelle synchronisation Prowlarr ne le recréera pas."),
+      "muted",
+    ),
+  );
+  return card;
+}
+function tr4kerTab(form) {
+  const data = draft("connections").trackers.tr4ker,
+    saved = snapshot.connections.secrets.trackers.tr4ker,
+    registry = snapshot.tracker_registry.tr4ker,
+    offer = snapshot.adoptable.tr4ker;
+  form.append(
+    note(
+      say(
+        "tr4ker is a Tracker in its own right, like c411: an account, an API and its own rules. Its results join c411's, each row carrying its Tracker.",
+        "tr4ker est un tracker à part entière, comme c411 : un compte, une API et ses propres règles. Ses résultats s’ajoutent à ceux de c411, chaque ligne portant son tracker.",
+      ),
+    ),
+  );
+  if (offer && !declinedAdoption.has("tr4ker")) form.append(adoptCard(offer));
+  const power = element("section", undefined, "settings-card");
+  power.append(element("h3", "tr4ker"));
+  const toggle = field(power, say("Turn on tr4ker", "Activer tr4ker"), data, "enabled", "checkbox");
+  toggle.addEventListener("change", () => {
+    $("settings-status").textContent = data.enabled
+      ? say("tr4ker turned on: enter its API key", "tr4ker activé : saisissez sa clé API")
+      : say("tr4ker turned off", "tr4ker désactivé");
+    render();
+  });
+  if (adoptedNotice)
+    power.append(
+      note(
+        say(
+          "Indexer taken over: API key and Cross-seed history kept.",
+          "Indexeur repris : clé API et historique des cross-seeds conservés.",
+        ),
+      ),
+    );
+  form.append(power);
+  const api = element("section", undefined, `settings-card${data.enabled ? "" : " is-off"}`);
+  api.append(element("h3", say("API access", "Accès à l’API")));
+  const fields = element("div", undefined, "settings-fields");
+  api.append(fields);
+  const keyInput = secret(fields, say("tr4ker API key", "Clé API de tr4ker"), data, "api_key", saved.api_key, {
+    reference: "indexer:tr4ker",
+    name: "indexer-key-tr4ker",
+  });
+  const passkeyInput = secret(fields, say("tr4ker passkey", "Passkey de tr4ker"), data, "passkey", saved.passkey, {
+    reference: "passkey:tr4ker",
+    name: "indexer-passkey-tr4ker",
+  });
+  const announce = element("label", say("Announce URL", "URL d’annonce"), "settings-field");
+  const shown = element("input");
+  shown.readOnly = true;
+  shown.value = `https://${registry.announce_host}/announce/…`;
+  shown.setAttribute("aria-label", say("tr4ker Announce URL", "URL d’annonce tr4ker"));
+  announce.append(shown);
+  fields.append(announce);
+  const live = () => data.enabled && hasSecret(data, "api_key", saved.api_key);
+  const test = button(say("Test tr4ker", "Tester tr4ker"), async () => {
+    const result = await request("test-connection", {
+      group: "tr4ker",
+      value: { api_key: secretValue(keyInput) || undefined },
+    });
+    const ids = result.searchable_ids.map(idLabel);
+    return [
+      say("tr4ker answers", "tr4ker répond"),
+      `${say("search by", "recherche par")} ${ids.join(` ${say("and", "et")} `) || say("name", "nom")}`,
+      `${result.modes} ${say("search modes", "modes de recherche")}`,
+    ].join(" · ");
+  });
+  fields.append(test);
+  api.append(
+    note(
+      say(
+        `The API key serves search, Cross-seed and .torrent downloads. The passkey serves the RSS feeds and the Announce URL (host ${registry.announce_host}). Both are kept in the keyring and never sent back to the screen.`,
+        `La clé API sert à la recherche, au cross-seed et au téléchargement des .torrent. Le passkey sert aux flux RSS et à l’adresse d’annonce (hôte ${registry.announce_host}). Les deux sont conservés dans le trousseau, jamais renvoyés à l’écran.`,
+      ),
+    ),
+  );
+  form.append(api);
+  const companion = element("section", undefined, `settings-card${data.enabled ? "" : " is-off"}`);
+  companion.append(element("h3", say("tr4ker companion", "Compagnon tr4ker")));
+  form.append(companion);
+  queueMicrotask(() => guard(() => companionLine(companion, "tr4ker")));
+  companion.append(
+    note(
+      say(
+        "The profile, the torrent details and publishing go through your tr4ker session in the browser; no cookie leaves the browser.",
+        "Le profil, le détail des torrents et la publication passent par votre session tr4ker dans le navigateur ; aucun cookie ne quitte le navigateur.",
+      ),
+    ),
+  );
+  const works = element("section", undefined, "settings-card");
+  works.append(element("h3", say("What works", "Ce qui fonctionne")));
+  const table = element("table", undefined, "file-access-capabilities");
+  const body = element("tbody");
+  table.append(body);
+  works.append(table);
+  form.append(works);
+  const drawCapabilities = () => {
+    const has = (name) => registry.capabilities.includes(name);
+    const row = (name, state, why) => {
+      const cell = element("td");
+      if (state === "live") cell.append(element("span", say("Available", "Disponible"), "conn-tag on"));
+      else if (state === "needs") cell.append(element("span", why, "conn-tag warn"));
+      else
+        cell.append(
+          element("span", say("Unavailable", "Indisponible"), "conn-tag bad"),
+          " ",
+          element("span", why, "unavailable"),
+        );
+      const line = element("tr");
+      line.append(element("th", name), cell);
+      body.append(line);
+    };
+    body.replaceChildren();
+    if (has("search") || has("crossseed"))
+      row(
+        say("Search, Cross-seed and downloads", "Recherche, Cross-seed et téléchargements"),
+        live() ? "live" : "needs",
+        say("API key needed", "Clé API requise"),
+      );
+    if (has("rss"))
+      row(
+        say("RSS feeds and Announce URL", "Flux RSS et adresse d’annonce"),
+        data.enabled && hasSecret(data, "passkey", saved.passkey) ? "live" : "needs",
+        say("Passkey needed", "Passkey requis"),
+      );
+    if (has("profile") || has("upload") || has("community"))
+      row(
+        say("Profile, torrent details, publishing", "Profil, détail d’un torrent, publication"),
+        registry.companion ? "needs" : "none",
+        registry.companion
+          ? say("Paired tr4ker session needed", "Session tr4ker appairée requise")
+          : say("soon: tr4ker companion (#179)", "bientôt : compagnon tr4ker (#179)"),
+      );
+    if (!has("zen"))
+      row(
+        "Zen",
+        "none",
+        say(
+          "tr4ker has no Zen: its credits are a learned estimate",
+          "tr4ker n’a pas de Zen : ses crédits sont une estimation apprise",
+        ),
+      );
+    test.disabled = !live();
+  };
+  drawCapabilities();
+  for (const input of [keyInput, passkeyInput]) input.addEventListener("input", drawCapabilities);
+  // Clearing a saved value is a click, not typing.
+  for (const clear of fields.querySelectorAll("button"))
+    if (clear !== test) clear.addEventListener("click", () => queueMicrotask(drawCapabilities));
+}
+function clientsTab(form) {
+  form.append(
+    note(
+      say(
+        "The Torrent Clients where Reseeds, Cross-seeds and Plans are added, whichever Tracker. Paths stay in “Client Paths”.",
+        "Les clients torrent où les remises en seed, cross-seeds et plans sont ajoutés, quel que soit le tracker. Les chemins restent dans « Chemins du client ».",
+      ),
+    ),
+  );
+  clients(form);
   const data = draft("connections"),
     saved = snapshot.connections.secrets;
   const client = box(form, say("Torrent Client", "Client torrent"));
+  client.parentElement.id = "client-box";
+  client.before(
+    element(
+      "p",
+      `${say("Selected client", "Client sélectionné")} : ${data.client.name || snapshot.clients.find((c) => c.id === snapshot.client_id)?.name || ""}`,
+      "muted selected-client",
+    ),
+  );
   field(
     client,
     say("Client name", "Nom du client"),
@@ -467,58 +840,26 @@ function connections(form) {
     return `${say("Connected", "Connecté")} · ${result.version}`;
   }));
   fileAccessCard(form);
-  const indexer = box(form, say("Indexer", "Indexeur"));
-  field(indexer, say("Indexer URL", "URL de l’indexeur"), data.indexer, "url");
-  secret(
-    indexer,
-    say("Indexer API key", "Clé API de l’indexeur"),
-    data.indexer,
-    "api_key",
-    saved.indexer_api_key,
-  );
-  secret(
-    indexer,
-    say("Announce URL", "URL d’annonce"),
-    data,
-    "announce_url",
-    saved.announce_url,
-  );
-  const hostsLabel = element(
-    "label",
-    say(
-      "c411 announce hosts · current first, then backups",
-      "Hôtes d’annonce c411 · actuel puis secours",
-    ),
-    "settings-field",
-  );
-  const hosts = element("textarea");
-  hosts.value = (data.announce_hosts || []).join("\n");
-  hosts.oninput = () => {
-    data.announce_hosts = hosts.value.split(/\s+/).filter(Boolean);
-  };
-  hostsLabel.append(hosts);
-  indexer.append(hostsLabel);
-  extraKeys(indexer, data, saved.extra_key_slots || []);
-  indexer.append(button(say("Test Indexer", "Tester l’indexeur"), async () => {
-    const result = await request("test-connection", {
-      group: "indexer",
-      value: structuredClone(data.indexer),
-    });
-    return [
-      `c411 ${say("answers", "répond")}`,
-      `${result.categories} ${say("categories", "catégories")}`,
-      `${result.keys} ${say(result.keys === 1 ? "key" : "keys", result.keys === 1 ? "clé" : "clés")}`,
-    ].join(" · ");
-  }));
+}
+function servicesTab(form) {
+  const data = draft("connections"),
+    saved = snapshot.connections.secrets;
   const tmdb = box(form, "TMDb");
-  secret(
+  const tmdbKey = secret(
     tmdb,
     say("TMDb API key", "Clé API TMDb"),
     data,
     "tmdb_api_key",
     saved.tmdb_api_key,
   );
-  tmdb.append(
+  tmdb.append(button(say("Test the TMDb key", "Tester la clé TMDb"), async () => {
+    await request("test-connection", {
+      group: "tmdb",
+      value: { api_key: secretValue(tmdbKey) || undefined },
+    });
+    return say("TMDb answers · key accepted", "TMDb répond · clé acceptée");
+  }));
+  tmdb.parentElement.append(
     element(
       "small",
       say(
@@ -853,7 +1194,11 @@ function preferences(form, group) {
 }
 function clients(form) {
   for (const client of snapshot.clients) {
-    const card = element("section", undefined, "client-card");
+    const card = element(
+      "section",
+      undefined,
+      `client-card${client.id === snapshot.client_id ? " selected" : ""}`,
+    );
     card.append(element("h3", client.name), element("p", client.client));
     if (client.id === snapshot.default_client_id)
       card.append(element("span", say("Default", "Par défaut"), "muted"));
@@ -1250,7 +1595,8 @@ function render() {
   );
   if (!snapshot) return;
   const form = element(
-    ["agents", "assistant", "companion", "indexers", "users", "account", "notifications", "community_site"].includes(section)
+    ["agents", "assistant", "users", "account", "notifications", "community_site"].includes(section) ||
+      (section === "connections" && ["indexers", "companion"].includes(connectionTab))
       ? "section"
       : "form",
     undefined,
@@ -1261,34 +1607,16 @@ function render() {
   form.append(element("h2", names[section]));
   if (["connections", "general", "matching", "zen"].includes(section)) {
     if (section === "connections") connections(form);
-    else preferences(form, section);
-    const actions = element("div", undefined, "settings-actions");
-    actions.append(
-      button(
-        say("Save", "Enregistrer"),
-        () => saveGroup(section, form),
-        "primary",
-      ),
-      button(say("Discard changes", "Annuler les modifications"), () => {
-        drafts.delete(draftKey(section));
-        render();
-      }),
-    );
-    form.append(actions);
+    else {
+      preferences(form, section);
+      saveBar(form, section);
+    }
   } else if (section === "release_score") {
     settingsReleaseScore(form);
-  } else if (section === "indexers") {
-    const root = element("div");
-    form.append(root);
-    queueMicrotask(() => guard(() => settingsIndexers(root)));
   } else if (section === "agents") {
     const root = element("div");
     form.append(root);
     queueMicrotask(() => settingsAgents(root));
-  } else if (section === "companion") {
-    const root = element("section", undefined, "settings-card");
-    form.append(root);
-    queueMicrotask(() => guard(() => loadSettingsCompanion(root)));
   } else if (section === "users") {
     const root = element("div");
     form.append(root);
@@ -1311,8 +1639,6 @@ function render() {
     queueMicrotask(() => guard(loadSettingsAssistant));
   } else if (["library", "downloads", "paths"].includes(section)) {
     storageSection(form, section);
-  } else if (section === "clients") {
-    clients(form);
   }
   $("settings-body").replaceChildren(form);
 }
@@ -1326,16 +1652,17 @@ async function applyEnvironment(value) {
   }
   const translated = language !== (value.language || "en");
   const previousSection = section;
+  const previousTab = connectionTab;
   const missing = !snapshot;
-  if (
-    value.section &&
-    value.section !== environment.section &&
-    Object.hasOwn(sections(), value.section)
-  )
-    section = value.section;
+  // Clients, Indexers and Companion are tabs of Connections now: an older location lands there.
+  const wanted = connectionTabOf(value.section) ? "connections" : value.section;
+  if (value.section && value.section !== environment.section) {
+    if (connectionTabOf(value.section) && !value.member) connectionTab = connectionTabOf(value.section);
+    if (Object.hasOwn(sections(), wanted)) section = wanted;
+  }
   environment = value;
   if (!Object.hasOwn(sections(), section))
-    section = Object.hasOwn(sections(), value.section) ? value.section : Object.keys(sections())[0];
+    section = Object.hasOwn(sections(), wanted) ? wanted : Object.keys(sections())[0];
   language = value.language || "en";
   document.documentElement.lang = language;
   document.documentElement.dataset.theme = value.theme || "dark";
@@ -1375,7 +1702,8 @@ async function applyEnvironment(value) {
     translated ||
     missing ||
     activated ||
-    section !== previousSection
+    section !== previousSection ||
+    connectionTab !== previousTab
   )
     render();
   if (translated) fileAccessEditor?.redraw();

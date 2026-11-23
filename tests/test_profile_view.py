@@ -68,8 +68,7 @@ def test_profile_is_first_desktop_tab_and_shows_api_and_companion(
     js(
         qtbot,
         panel,
-        "[...document.querySelectorAll('button')].find(b=>b.textContent"
-        "==='Connect companion').click()",
+        "[...document.querySelectorAll('button')].find(b=>b.textContent==='Pair').click()",
     )
     qtbot.waitUntil(lambda: any(action["action"] == "pair" for action in actions))
     code = workspace.pairing()["code"]
@@ -155,13 +154,12 @@ def test_desktop_connect_opens_handoff_and_receiver_returns_after_restart(
     wait_js(
         qtbot,
         dialog.view,
-        "[...document.querySelectorAll('button')].some(b=>b.textContent==='Connect companion')",
+        "[...document.querySelectorAll('button')].some(b=>b.textContent==='Pair')",
     )
     js(
         qtbot,
         dialog.view,
-        "[...document.querySelectorAll('button')].find(b=>b.textContent"
-        "==='Connect companion').click()",
+        "[...document.querySelectorAll('button')].find(b=>b.textContent==='Pair').click()",
     )
     qtbot.waitUntil(lambda: bool(opened))
     qtbot.waitUntil(lambda: dialog.view.pending == 0)

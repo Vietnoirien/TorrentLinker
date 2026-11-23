@@ -419,6 +419,22 @@ class Store:
             for source, indexer, key, st, payload, updated in rows
         ]
 
+    def crossseed_count(self, indexer_id: str) -> int:
+        """Every Cross-seed record of an Indexer, whichever client holds it."""
+        with self._lock:
+            return int(
+                self._db.execute(
+                    "SELECT COUNT(*) FROM crossseed WHERE indexer_id=?", (indexer_id,)
+                ).fetchone()[0]
+            )
+
+    def rename_crossseed_indexer(self, old: str, new: str) -> None:
+        """An Indexer's records follow it to a new id (a Tracker adopting it), on every client."""
+        with self._lock, self._db:
+            self._db.execute(
+                "UPDATE OR REPLACE crossseed SET indexer_id=? WHERE indexer_id=?", (new, old)
+            )
+
     def crossseed_known(self) -> set[tuple[str, str]]:
         """Every (source, Indexer) already queued or searched."""
         with self._lock:

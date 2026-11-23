@@ -797,6 +797,17 @@ def create_app(
                     ]
             return result
 
+    @app.post("/api/settings/adopt/{tracker}")
+    def settings_adopt(tracker: str, body: dict) -> dict:
+        from torrentlinker.settings_workspace import SettingsWorkspace
+
+        with jobs.lock:
+            idle()
+            target = for_client(body.get("client_id", "")).setup
+            result = SettingsWorkspace(target).adopt(tracker)
+            reset_clients()
+            return result
+
     @app.post("/api/settings/clients/{action}")
     def settings_clients(action: str, body: dict) -> dict:
         from torrentlinker.settings_workspace import SettingsWorkspace

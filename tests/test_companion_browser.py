@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.shell_support import shell_navigate
+from tests.shell_support import settings_tab, shell_navigate
 from tests.test_profile import PROFILE
 from tests.test_web_profile import prepared, snapshot
 
@@ -95,9 +95,10 @@ def test_connect_click_pairs_and_syncs_without_extension_confirmation(tmp_path, 
             page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
             shell_navigate(page, "setup")
             settings = page.frame_locator("#settings-frame")
-            settings.get_by_role("button", name="Companion", exact=True).click()
+            settings.get_by_role("button", name="Connections", exact=True).click()
+            settings_tab(settings, "Companion").click()
             with context.expect_page() as handoff_opened:
-                settings.get_by_role("button", name="Connect companion", exact=True).click()
+                settings.get_by_role("button", name="Pair", exact=True).click()
             handoff = handoff_opened.value
             expect(handoff.locator("h1")).to_have_css("color", "rgb(101, 212, 202)")
             # This is the only user action after installing the companion.
@@ -187,7 +188,8 @@ def test_connect_click_pairs_and_syncs_without_extension_confirmation(tmp_path, 
             page.goto(f"http://127.0.0.1:{port}/")
             shell_navigate(page, "setup")
             settings = page.frame_locator("#settings-frame")
-            settings.get_by_role("button", name="Companion", exact=True).click()
+            settings.get_by_role("button", name="Connections", exact=True).click()
+            settings_tab(settings, "Companion").click()
             settings.get_by_role("button", name="Disconnect & clear", exact=True).click()
             for _ in range(50):
                 if not workspace.state()["paired"]:

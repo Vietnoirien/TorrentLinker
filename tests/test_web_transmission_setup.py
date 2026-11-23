@@ -10,7 +10,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.shell_support import shell_navigate
+from tests.shell_support import settings_tab, shell_navigate
 from torrentlinker.transmission import TransmissionApi
 from torrentlinker.web.app import create_app
 
@@ -110,6 +110,7 @@ def test_setup_form_offers_to_turn_off_partial_names(tmp_path):
             page.locator("#login-form button").click()
             shell_navigate(page, "setup")
             panel = page.frame_locator("#settings-frame")
+            settings_tab(panel, "Clients").click()
             panel.get_by_label("Client type", exact=True).select_option("transmission")
             panel.get_by_label("Address", exact=True).fill("http://192.0.2.10:9091")
             test = panel.get_by_role("button", name="Test connection", exact=True)

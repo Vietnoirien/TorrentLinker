@@ -34,7 +34,7 @@ class SettingsBridge(ViewBridge):
             if not isValid(self):
                 return
             self.response.emit(identifier, json.dumps({"data": value}))
-            if action in {"save", "clients", "indexers"} or (
+            if action in {"save", "clients", "indexers", "adopt-indexer"} or (
                 action == "storage"
                 and body.get("action")
                 in {"save", "download", "mapping", "remove", "remove-mapping", "categories"}
@@ -222,6 +222,10 @@ class SettingsBridge(ViewBridge):
                         finally:
                             if hasattr(setup, "_folder_candidate"):
                                 setup._folder_candidate = None
+            elif action == "adopt-indexer":
+
+                def work():
+                    return workspace.adopt(body["tracker"])
             elif action == "clients":
 
                 def work():

@@ -202,7 +202,7 @@ def test_client_manager_cancel_keeps_existing_credentials(qtbot, tmp_path):
     from torrentlinker.credentials import get_secret, set_secret
 
     set_secret("qbit-password", "original")
-    dialog = settings_page(qtbot, tmp_path)
+    dialog = settings_page(qtbot, tmp_path, tab="Clients")
     edit_field(qtbot, dialog.view, "Password", "replacement")
     assert get_secret("qbit-password") == "original"
     dialog.close()  # leave without saving

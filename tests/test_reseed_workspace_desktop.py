@@ -56,7 +56,7 @@ def test_link_folder_is_edited_in_client_settings_without_leaking_between_client
     original = settings.active_client_id
     other = settings.add_client("NAS")
     settings.select_client(other.id)
-    dialog = settings_page(qtbot, tmp_path, settings)
+    dialog = settings_page(qtbot, tmp_path, settings, tab="Clients")
     edit_field(qtbot, dialog.view, "Reseed link folder", "/media/nas-links")
     save_group(qtbot, dialog)
     saved = Settings.load(dialog.setup.path)
@@ -64,7 +64,7 @@ def test_link_folder_is_edited_in_client_settings_without_leaking_between_client
     dialog.close()
     saved.select_client(original)
     assert saved.profile().reseed_link_root == ""
-    cancelled = settings_page(qtbot, tmp_path, saved)
+    cancelled = settings_page(qtbot, tmp_path, saved, tab="Clients")
     edit_field(qtbot, cancelled.view, "Reseed link folder", "/do-not-save")
     cancelled.close()  # leave without saving
     assert saved.profile().reseed_link_root == ""

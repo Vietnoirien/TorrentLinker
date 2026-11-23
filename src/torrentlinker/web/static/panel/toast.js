@@ -59,12 +59,27 @@ const TLToast = (() => {
       "Le service a refusé l’authentification. Vérifiez l’identifiant, le mot de passe ou les droits de la clé API.",
     "Authentication failed. Check the username, password or client API key.":
       "Échec de l’authentification. Vérifiez l’identifiant, le mot de passe ou la clé API du client.",
+    "Enter your TMDb API key.": "Saisissez votre clé API TMDb.",
+    "TMDb refused the API key.": "TMDb a refusé la clé API.",
+    "TMDb test failed. Check your connection and try again.":
+      "Le test TMDb a échoué. Vérifiez votre connexion et réessayez.",
     "Operation failed. Check the connection, folder permissions and available space before retrying.":
       "L’opération a échoué. Vérifiez la connexion, les droits sur les dossiers et l’espace disponible avant de réessayer.",
   };
   // Sentences that carry a name or a number.
   const patterns = [
     [/^Add the API key of (.+) first\.$/, (name) => `Ajoutez d’abord la clé API de ${name}.`],
+    [/^Enter your (.+) API key\.$/, (name) => `Saisissez votre clé API ${name}.`],
+    [
+      /^(.+) test failed\. Check its API key and your connection\.$/,
+      (name) => `Le test de ${name} a échoué. Vérifiez sa clé API et votre connexion.`,
+    ],
+    [/^(.+) already has its own API key\.$/, (name) => `${name} a déjà sa propre clé API.`],
+    [/^No Indexer of (.+) to adopt\.$/, (name) => `Aucun indexeur de ${name} à reprendre.`],
+    [
+      /^This address is (.+)'s own: turn \1 on in its Connections tab instead of adding it here\.$/,
+      (name) => `Cette adresse est celle de ${name} : activez ${name} à son onglet au lieu de l’ajouter ici.`,
+    ],
   ];
   function translate(message) {
     message = String(message ?? "");

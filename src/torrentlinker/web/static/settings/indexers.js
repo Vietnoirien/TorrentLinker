@@ -168,7 +168,7 @@ function indexerCard(root, entry) {
     actions.append(
       button(say("Test", "Tester"), async () => {
         outcome.className = "test-result ok";
-        outcome.textContent = `c411 · ${say("built in, tested in Connections", "intégré, testé dans Connexions")}`;
+        outcome.textContent = `c411 · ${say("built in, tested in the c411 tab", "intégré, testé dans l’onglet c411")}`;
       }),
     );
   card.append(actions, outcome);
@@ -193,6 +193,14 @@ function indexerDialog(root, entry = null) {
     "muted",
   );
   caps.id = "indexer-caps";
+  const trackerNote = element(
+    "p",
+    say(
+      "A tr4ker.net address is offered in the tr4ker tab rather than searched twice.",
+      "Une adresse tr4ker.net sera proposée à l’onglet tr4ker plutôt que cherchée deux fois.",
+    ),
+    "muted",
+  );
   const fields = element("div", undefined, "settings-fields");
   fields.append(
     labelled(say("Name", "Nom"), name),
@@ -236,7 +244,7 @@ function indexerDialog(root, entry = null) {
     button(say("Cancel", "Annuler"), () => dialog.close()),
   );
   form.onsubmit = (event) => event.preventDefault();
-  form.append(fields, caps, footer);
+  form.append(fields, caps, trackerNote, footer);
 }
 function hubCard(root) {
   const { hub, available } = indexersView;
@@ -290,7 +298,14 @@ function hubCard(root) {
       label.append(
         box,
         ` ${row.name}`,
-        element("small", row.imported ? say("already imported", "déjà importé") : say("available", "disponible")),
+        element(
+          "small",
+          row.adopted
+            ? say("taken over by the tr4ker Tracker", "repris par le tracker tr4ker")
+            : row.imported
+              ? say("already imported", "déjà importé")
+              : say("available", "disponible"),
+        ),
       );
       list.append(label);
     }
@@ -382,8 +397,8 @@ function rulesCard(root) {
     element(
       "p",
       say(
-        "Always added stopped, verified at 100 % then started; missing files are skipped, never downloaded. Under the threshold, and for archives, the Match waits for your decision in Library → Cross-seed.",
-        "Toujours ajouté arrêté, vérifié à 100 % puis démarré ; les fichiers manquants sont ignorés, jamais téléchargés. En dessous du seuil, et pour les archives, la correspondance attend votre décision dans Bibliothèque → Cross-seed.",
+        "Always added stopped, verified at 100 % then started; missing files are skipped, never downloaded. Under the threshold, and for archives, the Match waits for your decision in Library → Cross-seed. Cross-seed works both ways, between c411, tr4ker and the Indexers.",
+        "Toujours ajouté arrêté, vérifié à 100 % puis démarré ; les fichiers manquants sont ignorés, jamais téléchargés. En dessous du seuil, et pour les archives, la correspondance attend votre décision dans Bibliothèque → Cross-seed. Le cross-seed fonctionne dans les deux sens, entre c411, tr4ker et les indexeurs.",
       ),
       "muted",
     ),
@@ -433,8 +448,19 @@ function drawIndexers(root) {
       ),
       "muted",
     ),
+    element(
+      "p",
+      say(
+        "c411 and tr4ker are Trackers, with their own tab for the key, the passkey and the companion; only their search shows here.",
+        "c411 et tr4ker sont des trackers, avec leur propre onglet pour la clé, le passkey et le compagnon ; ici seule leur recherche s’affiche.",
+      ),
+      "muted",
+    ),
     add,
-    ...indexersView.list.indexers.map((entry) => indexerCard(root, entry)),
+    // A Tracker's own Indexer (tr4ker's) is set up in its tab; only c411's search shows here.
+    ...indexersView.list.indexers
+      .filter((entry) => !entry.tracker || entry.c411)
+      .map((entry) => indexerCard(root, entry)),
     hubCard(root),
     rulesCard(root),
   );

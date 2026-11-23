@@ -41,6 +41,10 @@ class Tmdb:
         response.raise_for_status()
         return response.json()
 
+    def check(self) -> None:
+        """Raise unless TMDb accepts the key (its configuration answer needs one)."""
+        self._get("/configuration", {})
+
     def lookup(self, title: str, year: int | None, kind: ContentKind) -> str | None:
         if kind is ContentKind.MOVIE:
             path, year_param = "/search/movie", "year"

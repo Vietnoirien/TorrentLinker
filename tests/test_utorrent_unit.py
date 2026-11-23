@@ -400,7 +400,7 @@ def test_settings_roundtrip_and_app_factory(qtbot, tmp_path):
     from torrentlinker.gui.settings_common import UTORRENT_PASSWORD
     from torrentlinker.store import Store
 
-    dialog = settings_page(qtbot, tmp_path)
+    dialog = settings_page(qtbot, tmp_path, tab="Clients")
     edit_field(qtbot, dialog.view, "Client type", "utorrent")
     edit_field(qtbot, dialog.view, "Address", "http://client:18089/gui/")
     edit_field(qtbot, dialog.view, "Username", "tester")

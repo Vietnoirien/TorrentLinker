@@ -9,7 +9,7 @@ from contextlib import contextmanager
 
 import pytest
 
-from tests.shell_support import shell_navigate
+from tests.shell_support import settings_tab, shell_navigate
 from tests.test_multi_client_docker import docker
 from torrentlinker.remote_access import RemoteAccess
 from torrentlinker.web.security import ServerSecrets
@@ -517,6 +517,7 @@ def test_settings_file_access_editor_and_transfer_reuse_in_browser(seedbox, tmp_
                 )
                 shell_navigate(page, "setup")
                 panel = page.frame_locator("#settings-frame")
+                settings_tab(panel, "Clients").click()
                 name = panel.get_by_label("Client name", exact=True)
                 name.fill("Unsaved API draft")
                 card = panel.locator("#file-access-card")
@@ -648,7 +649,7 @@ def test_settings_file_access_editor_and_transfer_reuse_in_browser(seedbox, tmp_
                 expect(card).to_contain_text("Vérifié · SFTP")
                 pending_check[0][0].fulfill(response=pending_check[0][1])
                 page.unroute("**/api/settings/file-access/check")
-                panel.get_by_role("button", name="Clients", exact=True).click()
+                panel.get_by_role("button", name="Général", exact=True).click()
                 panel.get_by_role("button", name="Connexions", exact=True).click()
                 expect(card).to_contain_text("Vérifié · SFTP")
                 expect(card).not_to_contain_text("Le client cible a changé")

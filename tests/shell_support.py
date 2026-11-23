@@ -42,3 +42,10 @@ def media_option(page, selector):
     if not control.is_visible():
         panel.locator("#media-library-options > summary").click()
     return control
+
+
+def settings_tab(panel, name):
+    """One of the Connections tabs (c411, tr4ker, Indexers, Clients, Companion, Services)."""
+    import re
+
+    return panel.get_by_role("tab", name=re.compile(rf"^{re.escape(name)}(?: \d+)?$"))

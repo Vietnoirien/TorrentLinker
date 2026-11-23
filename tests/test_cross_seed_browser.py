@@ -8,7 +8,7 @@ import time
 
 import pytest
 
-from tests.shell_support import shell_navigate
+from tests.shell_support import settings_tab, shell_navigate
 from tests.test_reseed_workspace_browser import reseed_app
 from torrentlinker import indexer_hub
 from torrentlinker.config import IndexerSettings
@@ -234,8 +234,9 @@ def test_the_indexers_section_adds_tests_imports_and_sets_the_rules(tmp_path, mo
         nav = panel.locator("#settings-navigation button")
         expect(nav.nth(0)).to_be_visible()
         names = nav.all_inner_texts()
-        assert names.index("Indexeurs") == names.index("ReleaseScore") + 1
-        panel.get_by_role("button", name="Indexeurs", exact=True).click()
+        # Indexeurs, Clients and Compagnon are tabs of Connexions now.
+        assert names[0] == "Connexions" and "Indexeurs" not in names
+        settings_tab(panel, "Indexeurs").click()
 
         c411 = panel.locator(".indexer-card.locked")
         expect(c411).to_contain_text("Intégré")

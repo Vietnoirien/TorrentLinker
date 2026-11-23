@@ -16,7 +16,7 @@ def test_main_window_opens(qtbot, tmp_path: Path) -> None:  # type: ignore[no-un
 
 
 def test_settings_open_on_the_connections_tab_with_hidden_keys(qtbot, tmp_path):
-    from tests.settings_support import settings_page
+    from tests.settings_support import open_tab, settings_page
     from tests.test_community_interfaces import js
 
     dialog = settings_page(qtbot, tmp_path)
@@ -24,12 +24,16 @@ def test_settings_open_on_the_connections_tab_with_hidden_keys(qtbot, tmp_path):
         js(qtbot, dialog.view, "document.querySelector('.settings-form h2').textContent")
         == "Connections"
     )
-    assert js(
-        qtbot,
-        dialog.view,
-        "[...document.querySelectorAll('input[type=password]')].every(input=>input.value==='')",
-    )
-    assert js(qtbot, dialog.view, "document.querySelectorAll('input[type=password]').length") >= 4
+    # The keys sit on the c411, tr4ker, Clients and Services tabs; none shows a value.
+    for tab, count in (("c411", 2), ("tr4ker", 2), ("Clients", 2), ("Services", 2)):
+        open_tab(qtbot, dialog.view, tab)
+        assert js(
+            qtbot,
+            dialog.view,
+            "[...document.querySelectorAll('input[type=password]')].every(input=>input.value==='')",
+        )
+        found = js(qtbot, dialog.view, "document.querySelectorAll('input[type=password]').length")
+        assert found >= count
 
 
 def test_choosing_deluge_saves_it_and_the_app_connects_through_deluge(qtbot, tmp_path):
@@ -39,7 +43,7 @@ def test_choosing_deluge_saves_it_and_the_app_connects_through_deluge(qtbot, tmp
     from torrentlinker.domain import TorrentClient
     from torrentlinker.qbit import QbitApi
 
-    dialog = settings_page(qtbot, tmp_path)
+    dialog = settings_page(qtbot, tmp_path, tab="Clients")
     edit_field(qtbot, dialog.view, "Client type", "deluge")
     edit_field(qtbot, dialog.view, "Address", "http://nas:8112")
     edit_field(qtbot, dialog.view, "Password", "secret")
@@ -62,7 +66,7 @@ def test_choosing_transmission_saves_it_and_the_app_connects_through_it(qtbot, t
     from torrentlinker.qbit import QbitApi
     from torrentlinker.transmission import TransmissionApi
 
-    dialog = settings_page(qtbot, tmp_path)
+    dialog = settings_page(qtbot, tmp_path, tab="Clients")
     edit_field(qtbot, dialog.view, "Client type", "transmission")
     edit_field(qtbot, dialog.view, "Address", "http://nas:9091")
     edit_field(qtbot, dialog.view, "Username", "me")

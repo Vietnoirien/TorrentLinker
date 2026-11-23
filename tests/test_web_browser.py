@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from tests.shell_support import (
+    settings_tab,
     shell_close_drawer,
     shell_navigate,
     shell_open_navigation,
@@ -115,8 +116,15 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             update.locator("#dismiss").click()
             expect(page.locator("#shell-update-host")).to_be_hidden()
             settings = page.frame_locator("#settings-frame")
-            for label in ("Password", "Client API key", "Proxy password", "Announce URL"):
-                expect(settings.get_by_label(label, exact=True)).to_have_value("")
+            for tab, labels in (
+                ("Clients", ("Password", "Client API key")),
+                ("Services", ("Proxy password",)),
+                ("c411", ("Announce URL",)),
+            ):
+                settings_tab(settings, tab).click()
+                for label in labels:
+                    expect(settings.get_by_label(label, exact=True)).to_have_value("")
+            settings_tab(settings, "Clients").click()
             settings.get_by_label("Address", exact=True).fill(
                 "https://seedbox.example/qbittorrent/"
             )
@@ -311,6 +319,7 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
                 page.screenshot(path=str(Path(screenshot) / "torrents-small.png"))
             shell_navigate(page, "setup")
             settings.get_by_role("button", name="Connections", exact=True).click()
+            settings_tab(settings, "Clients").click()
             password = settings.get_by_label("Password", exact=True)
             expect(password).to_have_value("••••••••")
             pending_proxy = []
@@ -325,6 +334,7 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
                     break
                 page.wait_for_timeout(20)
             assert pending_proxy
+            settings_tab(settings, "Services").click()
             proxy = settings.get_by_label("Proxy password", exact=True)
             proxy.fill("test-proxy-secret")
             pending_proxy[0][0].fulfill(response=pending_proxy[0][1])
@@ -333,6 +343,7 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             page.unroute("**/api/settings/connections", delay_proxy_save)
             settings.get_by_role("button", name="Save", exact=True).click()
             expect(proxy).to_have_value("••••••••")
+            settings_tab(settings, "c411").click()
             announce = settings.get_by_label("Announce URL", exact=True)
             announce.fill("https://tracker.example/announce/test-secret")
             settings.get_by_role("button", name="Save", exact=True).click()
@@ -340,15 +351,16 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             shell_open_navigation(page)
             page.frame_locator("#shell-navigation-frame").locator("#language").select_option("fr")
             shell_close_drawer(page)
+            settings_tab(settings, "Clients").click()
             expect(settings.get_by_label("Mot de passe", exact=True)).to_have_value("••••••••")
             shell_open_navigation(page)
             page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
             shell_close_drawer(page)
-            settings.get_by_role("button", name="Clients", exact=True).click()
             settings.get_by_label("New client name", exact=True).fill("Unsubmitted client")
             shell_navigate(page, "torrents")
             shell_navigate(page, "setup")
             settings.get_by_role("button", name="Connections", exact=True).click()
+            settings_tab(settings, "Clients").click()
             settings.get_by_label("Client name", exact=True).fill("Seedbox renamed")
             settings.get_by_role("button", name="Save", exact=True).click()
             expect(
@@ -357,7 +369,7 @@ def test_guided_setup_and_management_on_small_screen(tmp_path: Path):
             expect(
                 page.frame_locator("#shell-header-frame").locator("#target-client option:checked")
             ).to_have_text("Seedbox renamed")
-            settings.get_by_role("button", name="Clients", exact=True).click()
+            settings_tab(settings, "Clients").click()
             settings.get_by_label("New client name", exact=True).fill("Remote Deluge")
             settings.get_by_role("button", name="Add client", exact=True).click()
             settings.locator(".client-card").filter(has_text="Remote Deluge").get_by_role(

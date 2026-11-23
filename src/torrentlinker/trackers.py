@@ -27,6 +27,8 @@ class Tracker:
     # feed, which also lists torrents without seeders.
     discovery_url: str = ""
     retry_fallback: float = 30.0  # seconds to wait after a 429 that names none
+    # Whether the companion extension can pair a signed-in browser session of this Tracker.
+    companion: bool = False
 
     @property
     def indexer_id(self) -> str:
@@ -61,6 +63,7 @@ TRACKERS: dict[str, Tracker] = {
         frozenset(
             {"search", "catalogue", "profile", "upload", "zen", "rss", "community", "crossseed"}
         ),
+        companion=True,
     ),
     TR4KER: Tracker(
         TR4KER,

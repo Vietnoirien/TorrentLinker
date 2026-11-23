@@ -177,7 +177,7 @@ def test_settings_keep_the_proxy_and_its_password_in_the_keyring(qtbot, tmp_path
     from torrentlinker.credentials import get_secret
     from torrentlinker.gui.settings_common import PROXY_PASSWORD
 
-    dialog = settings_page(qtbot, tmp_path)
+    dialog = settings_page(qtbot, tmp_path, tab="Services")
     edit_field(qtbot, dialog.view, "Proxy address", "socks5h://proxy.lan:1080")
     edit_field(qtbot, dialog.view, "Proxy username", "me")
     edit_field(qtbot, dialog.view, "Proxy password", "pw")
@@ -201,7 +201,7 @@ def test_an_unusable_proxy_address_is_not_saved(qtbot, tmp_path):
     from tests.settings_support import edit_field, settings_page
     from tests.test_community_interfaces import js, wait_js
 
-    dialog = settings_page(qtbot, tmp_path)
+    dialog = settings_page(qtbot, tmp_path, tab="Services")
     edit_field(qtbot, dialog.view, "Proxy address", "ftp://proxy:21")
     js(
         qtbot,

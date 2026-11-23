@@ -28,7 +28,7 @@ from torrentlinker.profile_workspace import ProfileWorkspace
 from torrentlinker.qbit import ClientApi
 from torrentlinker.store import Store
 from torrentlinker.torznab import TorznabIndexer
-from torrentlinker.trackers import DEFAULT_TRACKER, TRACKERS
+from torrentlinker.trackers import DEFAULT_TRACKER, TRACKERS, tracker_of_url
 from torrentlinker.web.security import ServerSecrets
 
 Connector = Callable[..., ClientApi]
@@ -620,6 +620,8 @@ class Setup:
                     "modes": entry.modes,
                     "searchable_ids": entry.searchable_ids,
                     "c411": entry.id == C411_ID,
+                    # A Tracker's own Indexer is set up in its Connections tab, not listed here.
+                    "tracker": entry.id if entry.id in TRACKERS else "",
                     "source": entry.source,
                     "missing": entry.missing,
                     "next_request_in": 0.0,
@@ -632,9 +634,9 @@ class Setup:
                 rows.append(row)
             return rows
 
-    def _probe(self, url: str, key: str, name: str) -> Caps:
+    def _probe(self, url: str, key: str, name: str, tracker: str = "") -> Caps:
         try:
-            return TorznabIndexer(url, key, name).caps()
+            return TorznabIndexer(url, key, name, tracker=tracker).caps()
         except Exception:
             raise ValueError(
                 "Indexer test failed. Check its Torznab address and API key."
@@ -660,6 +662,11 @@ class Setup:
         with self.lock:
             if name.casefold() in {i.name.casefold() for i in self.settings.indexers}:
                 raise ValueError("An Indexer already has this name.")
+            if (owner := tracker_of_url(body.url)) is not None:
+                raise ValueError(
+                    f"This address is {owner.name}'s own: turn {owner.name} on in its "
+                    "Connections tab instead of adding it here."
+                )
             caps = self._probe(body.url, body.api_key, name)
             entry = IndexerSettings(
                 url=body.url,
@@ -743,12 +750,17 @@ class Setup:
     def _hub_rows(self, listing: list[indexer_hub.HubIndexer]) -> list[dict[str, Any]]:
         service = self.settings.indexer_hub.service
         known = {i.source_id for i in self.settings.indexers if i.source == service}
+        adopted = {
+            i.source_id for i in self.settings.indexers if i.source == service and i.id in TRACKERS
+        }
         return [
             {
                 "id": h.source_id,
                 "name": h.name,
                 "enabled": h.enabled,
                 "imported": h.source_id in known,
+                # Taken over by a Tracker: kept in place, so a re-sync never creates it again.
+                "adopted": h.source_id in adopted,
             }
             for h in listing
         ]

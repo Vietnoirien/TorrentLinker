@@ -7,7 +7,7 @@ import time
 
 import pytest
 
-from tests.shell_support import shell_navigate
+from tests.shell_support import settings_tab, shell_navigate
 from tests.test_web_profile import ORIGIN, prepared, snapshot
 
 pytestmark = pytest.mark.skipif(os.getenv("TL_WEB_BROWSER") != "1", reason="opt-in browser test")
@@ -177,7 +177,8 @@ def test_profile_first_pair_snapshot_disconnect_browser(tmp_path, monkeypatch):
                 page.screenshot(path=str(target / "web-profile.png"), full_page=True)
             shell_navigate(page, "setup")
             settings = page.frame_locator("#settings-frame")
-            settings.get_by_role("button", name="Companion", exact=True).click()
+            settings.get_by_role("button", name="Connections", exact=True).click()
+            settings_tab(settings, "Companion").click()
             settings.get_by_role("button", name="Disconnect & clear", exact=True).click()
             shell_navigate(page, "zen")
             expect(

@@ -8,7 +8,7 @@ from dataclasses import replace
 
 import pytest
 
-from tests.shell_support import shell_navigate
+from tests.shell_support import settings_tab, shell_navigate
 from tests.test_web_plan_execution import prepared
 from torrentlinker.web.app import create_app
 
@@ -53,6 +53,7 @@ def test_connection_drafts_survive_section_changes_and_failed_save(
                 page.locator("#login-form button").click()
                 shell_navigate(page, "setup")
                 panel = page.frame_locator("#settings-frame")
+                settings_tab(panel, "Clients").click(timeout=5000)
                 name = panel.get_by_label("Client name", exact=True)
                 expect(name).to_be_visible(timeout=5000)
                 # Navigate within Settings while the host refresh is still in flight.
@@ -73,17 +74,18 @@ def test_connection_drafts_survive_section_changes_and_failed_save(
                         break
                     page.wait_for_timeout(20)
                 assert pending_setup
-                panel.get_by_role("button", name="Clients", exact=True).click()
-                page.wait_for_function("() => state.settingsSection === 'clients'")
+                panel.get_by_role("button", name="General", exact=True).click()
+                page.wait_for_function("() => state.settingsSection === 'general'")
                 pending_setup[0][0].fulfill(response=pending_setup[0][1])
                 page.wait_for_function("() => window.fixtureSetupDone")
-                assert page.evaluate("state.settingsSection") == "clients"
+                assert page.evaluate("state.settingsSection") == "general"
                 page.unroute("**/api/setup?*")
                 panel.get_by_role("button", name="Connections", exact=True).click()
                 name.fill("Studio draft")
-                panel.get_by_role("button", name="Clients", exact=True).click()
+                panel.get_by_role("button", name="General", exact=True).click()
                 panel.get_by_role("button", name="Connections", exact=True).click()
                 expect(name).to_have_value("Studio draft")
+                settings_tab(panel, "Services").click()
                 secret = panel.get_by_label("TMDb API key", exact=True)
                 expect(secret).to_have_value("••••••••")
                 secret.fill("replacement-key")
@@ -97,20 +99,23 @@ def test_connection_drafts_survive_section_changes_and_failed_save(
                 )
                 panel.get_by_role("button", name="Save", exact=True).click()
                 expect(panel.locator("#settings-error")).to_contain_text("Wait for active jobs")
-                expect(name).to_have_value("Studio draft")
                 expect(secret).to_have_value("replacement-key")
+                settings_tab(panel, "Clients").click()
+                expect(name).to_have_value("Studio draft")
+                settings_tab(panel, "Services").click()
                 page.unroute("**/api/settings/connections")
                 panel.get_by_role("button", name="Save", exact=True).click()
                 expect(panel.locator("#settings-status")).to_contain_text("Settings saved")
                 expect(secret).to_have_value("••••••••")
+                settings_tab(panel, "Clients").click()
                 assert setup.configured
                 if not configured:
                     assert setup.marker.read_text() == "connected"
                 page.reload()
                 shell_navigate(page, "setup")
+                settings_tab(panel, "Clients").click()
                 expect(name).to_have_value("Studio draft")
                 assert "private-existing-key" not in panel.locator("body").inner_text()
-                panel.get_by_role("button", name="Clients", exact=True).click()
                 panel.get_by_label("New client name", exact=True).fill("Seedbox")
                 panel.get_by_role("button", name="Add client", exact=True).click()
                 card = panel.locator(".client-card").filter(has_text="Seedbox")
@@ -155,7 +160,7 @@ def test_connection_drafts_survive_section_changes_and_failed_save(
                     expect(panel.get_by_label("Client name", exact=True)).to_have_value(
                         "Studio draft"
                     )
-                    panel.get_by_role("button", name="Clients", exact=True).click()
+                    settings_tab(panel, "Clients").click()
                 page.once("dialog", lambda dialog: dialog.accept())
                 card.get_by_role("button", name="Remove client", exact=True).click()
                 expect(panel.locator(".client-card")).to_have_count(1)
@@ -203,8 +208,9 @@ def test_connection_drafts_survive_section_changes_and_failed_save(
                     panel.get_by_role("button", name="Add connection", exact=True)
                 ).to_be_visible()
                 panel.locator("#settings-navigation").get_by_role(
-                    "button", name="Companion", exact=True
+                    "button", name="Connections", exact=True
                 ).click()
+                settings_tab(panel, "Companion").click()
                 expect(
                     panel.get_by_role("button", name="Save extension…", exact=True)
                 ).to_be_visible()
@@ -296,6 +302,7 @@ def test_saved_secrets_show_a_mask_and_the_eye_reveals_them_and_extra_keys_edit_
                 page.locator("#login-form button").click()
                 shell_navigate(page, "setup")
                 panel = page.frame_locator("#settings-frame")
+                settings_tab(panel, "Services").click()
                 tmdb = panel.get_by_label("TMDb API key", exact=True)
                 expect(tmdb).to_have_value("••••••••")
                 expect(tmdb).to_have_attribute("type", "password")
@@ -313,6 +320,7 @@ def test_saved_secrets_show_a_mask_and_the_eye_reveals_them_and_extra_keys_edit_
                 tmdb.blur()
                 expect(tmdb).to_have_value("••••••••")
                 # Each saved additional key is its own field.
+                settings_tab(panel, "c411").click()
                 first = panel.get_by_label("Additional API key 1", exact=True)
                 second = panel.get_by_label("Additional API key 2", exact=True)
                 expect(first).to_have_value("••••••••")
@@ -353,6 +361,7 @@ def test_saved_secrets_show_a_mask_and_the_eye_reveals_them_and_extra_keys_edit_
                 failed.get_by_role("button", name="Close").click()
                 expect(failed).to_have_count(0)
                 # Save: busy label, then a toast in view whatever the scroll; a failure keeps edits.
+                settings_tab(panel, "Clients").click()
                 name = panel.get_by_label("Client name", exact=True)
                 name.fill("Scrolled")
                 save = panel.get_by_role("button", name="Save", exact=True)
@@ -374,6 +383,76 @@ def test_saved_secrets_show_a_mask_and_the_eye_reveals_them_and_extra_keys_edit_
                 save.click()
                 saved = panel.locator(".tl-toast.ok").filter(has_text="Settings saved")
                 expect(saved.first).to_be_in_viewport()
+                assert not errors
+                browser.close()
+        finally:
+            server.should_exit = True
+            worker.join(timeout=5)
+
+
+def test_connection_tabs_tr4ker_takes_over_an_indexer_and_the_companion_stays_honest(tmp_path):
+    import uvicorn
+    from playwright.sync_api import expect, sync_playwright
+
+    from torrentlinker.config import IndexerSettings, Settings
+
+    config, setup, _, _ = prepared(tmp_path)
+    setup.settings.indexers.append(IndexerSettings(url="https://tr4ker.net/api", id="ab12cd34"))
+    setup.secrets.update({Settings.indexer_secret("ab12cd34"): "OLD-KEY"})
+    setup.save()
+    app = create_app(
+        config, password="test-password-long", service_override=setup, monitor_verifications=False
+    )
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
+        worker = threading.Thread(target=server.run, kwargs={"sockets": [listener]}, daemon=True)
+        worker.start()
+        try:
+            for _ in range(100):
+                if server.started:
+                    break
+                time.sleep(0.02)
+            with sync_playwright() as pw:
+                browser = pw.chromium.launch()
+                page = browser.new_page(viewport={"width": 1280, "height": 900}, locale="en-US")
+                errors = []
+                page.on("pageerror", lambda error: errors.append(str(error)))
+                page.goto(f"http://127.0.0.1:{listener.getsockname()[1]}/")
+                page.locator("#login-password").fill("test-password-long")
+                page.locator("#login-form button").click()
+                shell_navigate(page, "setup")
+                panel = page.frame_locator("#settings-frame")
+                expect(panel.get_by_role("tab")).to_have_count(6)
+                nav = panel.locator("#settings-navigation button")
+                expect(nav.first).to_have_text("Connections")
+                assert "Clients" not in nav.all_inner_texts()
+                settings_tab(panel, "tr4ker").click()
+                offer = panel.locator(".conn-offer")
+                expect(offer).to_contain_text("points to tr4ker")
+                offer.get_by_role("button", name="Take over this Indexer").click()
+                expect(offer).to_have_count(0)
+                assert [i.id for i in setup.settings.indexers] == ["c411", "tr4ker"]
+                assert setup.secrets.get("indexer-key-tr4ker") == "OLD-KEY"
+                works = panel.locator(".file-access-capabilities")
+                expect(works).to_contain_text("soon: tr4ker companion (#179)")
+                expect(works).to_contain_text("tr4ker has no Zen")
+                panel.get_by_label("tr4ker passkey", exact=True).fill("PASS-T4K")
+                panel.get_by_role("button", name="Save", exact=True).click()
+                expect(panel.locator("#settings-status")).to_contain_text("Settings saved")
+                assert setup.secrets.get("announce-url-tr4ker") == (
+                    "https://tk.tr4ker.net/announce/PASS-T4K"
+                )
+                assert "PASS-T4K" not in panel.locator("body").inner_text()
+                settings_tab(panel, "Indexers").click()
+                expect(panel.locator(".indexer-card")).to_have_count(1)
+                expect(panel.locator(".indexer-card")).to_contain_text("c411")
+                settings_tab(panel, "Companion").click()
+                row = panel.locator(".conn-row[data-tracker=tr4ker]")
+                expect(row).to_contain_text("soon: tr4ker companion (#179)")
+                expect(row.get_by_role("button")).to_have_count(0)
+                expect(panel.locator(".conn-row[data-tracker=c411]")).to_contain_text("Not paired")
                 assert not errors
                 browser.close()
         finally:

@@ -11,7 +11,7 @@ def test_connection_warning_always_explains_failure(qtbot, tmp_path, monkeypatch
     from tests.settings_support import settings_page
     from tests.test_community_interfaces import js, wait_js
 
-    dialog = settings_page(qtbot, tmp_path)
+    dialog = settings_page(qtbot, tmp_path, tab="Clients")
 
     def fail():
         raise error
