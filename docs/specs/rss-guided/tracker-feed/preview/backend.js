@@ -107,6 +107,7 @@
     TORZ.forEach((r, i) => add("f-dune", r.infohash, { unread: i === 1, age: 500 + i }));
     S.queue = { [C411[1].infohash]: "queued" };
     S.inClients = { [C411[0].infohash]: ["qbit"], [C411[2].infohash]: ["qbit", "seedbox"], [C411[7].infohash]: ["seedbox"] };
+    S.clientStates = { [C411[0].infohash]: { qbit: "seeding" }, [C411[2].infohash]: { qbit: "seeding", seedbox: "downloading" }, [C411[7].infohash]: { seedbox: "paused" } };
     S.decisions = [
       { feed: "f-films", infohash: C411[0].infohash, work: "dune part two", status: "queued", reason: "Best match for this work.", queue_key: "q1", decided: now() - 5 * H },
       { feed: "f-films", infohash: C411[1].infohash, work: "dune part two", status: "queued", reason: "Best match for this work.", queue_key: "q2", decided: now() - 8 * H },
@@ -200,6 +201,7 @@
     return Object.values(out).sort((a, b) => b.discovered_at - a.discovered_at).map((r) => ({
       ...r, in_clients: S.inClients[r.infohash] || [], client_inventory_unknown: S.unavailable ? ["seedbox"] : [],
       queue_status: S.queue[r.infohash] || "", queued: Boolean(S.queue[r.infohash]),
+      client_states: S.clientStates[r.infohash] || {},
     }));
   };
   const getSub = (id) => { const s = S.subs.find((x) => x.id === id); if (!s) throw Error("Unknown RSS subscription."); return s; };
@@ -284,6 +286,11 @@
       if (parts[1] === "mark") {
         const map = { read: (x) => (x.unread = false), unread: (x) => (x.unread = true), save: (x) => (x.saved = true), unsave: (x) => (x.saved = false), dismiss: (x) => (x.dismissed = true), restore: (x) => (x.dismissed = false) };
         for (const [feed, list] of Object.entries(S.members)) if (!body.feed_id || feed === body.feed_id) for (const x of list) if (body.hashes.includes(x.hash)) map[body.action](x);
+        return { updated: body.hashes.length };
+      }
+      if (parts[1] === "client") {
+        // Preview only: the app has no such route yet; it would pause or resume in each client.
+        for (const h of body.hashes) for (const c of S.inClients[h] || []) (S.clientStates[h] ||= {})[c] = body.action === "pause" ? "paused" : "seeding";
         return { updated: body.hashes.length };
       }
       if (parts[1] === "compare") { for (const h of Object.keys(S.byHash)) if (S.byHash[h].title.includes("Oppenheimer")) S.inClients[h] = body.client_ids || []; return inventory(); }

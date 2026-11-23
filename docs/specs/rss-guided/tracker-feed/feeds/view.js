@@ -9,6 +9,28 @@ const feedState = {
 const feedText = (en, fr) => say(en, fr);
 // #180: every element that is new in this change carries "n180" (outlined when "Show changes" is on).
 const n180 = (el) => (el.classList.add("n180"), el);
+// État: a state tag per client (seeding, downloading…), the client's name under it.
+const FEED_STATES = {
+  seeding: ["Seeding", "En seed"],
+  downloading: ["Downloading", "Téléchargement"],
+  paused: ["Paused", "En pause"],
+  checking: ["Checking", "Vérification"],
+  queued: ["Queued", "En file"],
+};
+function feedStateCell(r) {
+  const entries = r.in_clients.map((client) => [r.client_states?.[client] || "seeding", client]);
+  if (r.queue_status && !entries.length) entries.push(["queued", null]);
+  if (!entries.length) return null;
+  const cell = n180(element("span", undefined, "state-cell"));
+  for (const [state, client] of entries) {
+    const [en, fr] = FEED_STATES[state] || [state, state];
+    const one = element("span", undefined, "state-entry");
+    one.append(element("span", feedText(en, fr), `state-badge ${state}`));
+    if (client) one.append(element("span", client, "client-badge"));
+    cell.append(one);
+  }
+  return cell;
+}
 const feedTracker = (r) => r.tracker || r.metadata?.tracker || "c411";
 const TRACKER_NAMES = { c411: "c411", tr4ker: "tr4ker" };
 const feedCall = (path, body, method = "POST") => api(path, body, method);
@@ -311,24 +333,78 @@ async function loadFeeds() {
   };
   const count = element("span", "", "muted");
   count.id = "feeds-count";
+  // Torrents already in a client get client actions; queueing and saving only make sense for
+  // the others, so a mixed selection queues those and says how many it left out.
+  const picked = () => rows.filter((r) => feedState.selected.has(r.infohash));
+  const inClient = () => picked().filter((r) => r.in_clients.length);
+  const notInClient = () => picked().filter((r) => !r.in_clients.length);
+  const allPaused = () =>
+    inClient().every((r) => r.in_clients.every((c) => r.client_states?.[c] === "paused"));
+  const saveButton = button(feedText("Save", "Enregistrer"), async () => {
+    await feedCall("feed-inbox/mark", {
+      hashes: notInClient().map((r) => r.infohash),
+      feed_id: feedState.id,
+      action: "save",
+    });
+    await loadFeeds();
+  }, "quiet");
+  const selectionButton = button(feedText("Save selection", "Enregistrer la sélection"), async () => {
+    feedReport(
+      await feedCall("feed-selections", { hashes: notInClient().map((r) => r.infohash) }),
+    );
+  });
+  const queueButton = button(
+    feedText("Add to queue", "Ajouter à la file"),
+    async () => {
+      const skipped = inClient().length;
+      await feedEnqueue(notInClient().map((r) => r.infohash));
+      if (skipped)
+        return feedText(
+          `${skipped} already in a client, left out`,
+          `${skipped} déjà dans un client, ignoré(s)`,
+        );
+    },
+    "primary",
+  );
+  const viewButton = n180(
+    button(feedText("Show in Torrents", "Voir dans Torrents"), () => {
+      const names = inClient().map((r) => r.title);
+      return feedText(
+        `Opens Torrents filtered to: ${names.join(", ")}`,
+        `Ouvre Torrents filtré sur : ${names.join(", ")}`,
+      );
+    }, "quiet"),
+  );
+  const pauseButton = n180(
+    button("", async () => {
+      const resume = allPaused();
+      await feedCall("feed-inbox/client", {
+        hashes: inClient().map((r) => r.infohash),
+        action: resume ? "resume" : "pause",
+      });
+      await loadFeeds();
+      return resume ? feedText("Resumed", "Repris") : feedText("Paused", "Mis en pause");
+    }, "quiet"),
+  );
   bar.replaceChildren(
     count,
     element("span", undefined, "spacer"),
     button(feedText("Mark read", "Marquer lus"), mark("read"), "quiet"),
-    button(feedText("Save", "Enregistrer"), mark("save"), "quiet"),
+    saveButton,
     button(feedText("Dismiss", "Masquer"), mark("dismiss"), "quiet"),
-    button(feedText("Save selection", "Enregistrer la sélection"), async () => {
-      feedReport(
-        await feedCall("feed-selections", { hashes: [...feedState.selected] }),
-      );
-    }),
-    button(
-      feedText("Add to queue", "Ajouter à la file"),
-      () => feedEnqueue([...feedState.selected]),
-      "primary",
-    ),
+    viewButton,
+    pauseButton,
+    selectionButton,
+    queueButton,
   );
   const selectionChanged = () => {
+    const some = inClient().length, others = notInClient().length;
+    viewButton.hidden = pauseButton.hidden = !some;
+    saveButton.hidden = selectionButton.hidden = queueButton.hidden = !others;
+    pauseButton.textContent = allPaused()
+      ? feedText("Resume", "Reprendre")
+      : feedText("Pause", "Mettre en pause");
+    for (const b of [saveButton, selectionButton, queueButton]) b.classList.toggle("n180", some > 0);
     bar.hidden = !feedState.selected.size;
     count.textContent = feedText(
       `${feedState.selected.size} selected`,
@@ -382,8 +458,7 @@ async function loadFeeds() {
     {
       label: feedText("State", "État"),
       render: (r) =>
-        r.queue_status ||
-        r.in_clients.join(", ") ||
+        feedStateCell(r) ||
         (r.client_inventory_unknown.length
           ? feedText(
               "Client comparison needed",

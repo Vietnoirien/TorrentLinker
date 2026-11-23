@@ -541,3 +541,11 @@ dialog:has(.feed-editor) {
   gap: 8px;
   margin: 8px 0;
 }
+
+/* État: a state tag per client, with the client's name under it. */
+.state-cell { display: inline-flex; flex-direction: column; gap: 6px; }
+.state-entry { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.state-badge { display: inline-block; padding: 0 6px; border: 1px solid var(--line); border-radius: 999px; font-size: 11px; line-height: 18px; white-space: nowrap; color: var(--muted); }
+.state-badge.seeding { border-color: var(--success); color: var(--success); }
+.state-badge.downloading { border-color: var(--accent); color: var(--accent); }
+.client-badge { font-size: 10.5px; color: var(--muted); padding-left: 2px; }
