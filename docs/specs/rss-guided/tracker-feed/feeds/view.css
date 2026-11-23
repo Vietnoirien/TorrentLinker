@@ -524,6 +524,10 @@ dialog:has(.feed-editor) {
   gap: 4px;
   flex-wrap: wrap;
 }
+/* Room between the badge and the subscription's state text after it. */
+.feed-row-detail .tracker-badge {
+  margin-right: 8px;
+}
 .feed-titles + .tracker-badge,
 .feed-header .tracker-badge {
   align-self: center;
