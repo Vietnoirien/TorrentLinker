@@ -241,6 +241,23 @@ def test_refresh_recovers_after_client_removal_without_moving_originals(tmp_path
     assert board.rows()[0]["destination"] == destination
 
 
+def test_resumed_zero_percent_client_check_is_restarted(tmp_path):
+    board, client, original, links, meta = workspace(tmp_path)
+    for action in ("find", "compare", "prepare"):
+        assert not run(board, original, links, action)["errors"]
+    record = board.setup.store.reseed_record(str(original))
+    client.add(meta.data, record["destination"], ["torrentlinker", "torrentlinker:links"])
+    client._set(meta.infohash, state="checkingDL", progress=0.0)
+    record["status"] = "checking"
+    board.setup.store.save_reseed_record(str(original), record)
+
+    result = run(board, original, links, "verify")
+
+    assert not result["errors"], result
+    assert client.rechecked == [meta.infohash]
+    assert client.torrent(meta.infohash).progress == 1.0
+
+
 def test_foreign_torrent_is_never_adopted_removed_or_started(tmp_path):
     board, client, original, links, meta = workspace(tmp_path)
     client.add(meta.data, str(tmp_path / "foreign"), [])

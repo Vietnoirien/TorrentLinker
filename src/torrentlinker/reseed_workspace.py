@@ -640,18 +640,34 @@ class ReseedWorkspace:
                 )
             stop.wait(0.2)
         already_checking = torrent.state in CHECKING_STATES
-        if not already_checking:
+        if resume_check and torrent.state == "checkingDL" and torrent.progress == 0:
+            # After an interrupted run, qBittorrent can report checkingDL at 0%
+            # without reading the file. Pausing then rechecking restarts its check.
+            client.pause(record["hash"])
+            client.recheck(record["hash"])
+        elif not already_checking:
             client.recheck(record["hash"])
         record["status"] = "checking"
         save()
         start = time.monotonic()
         saw_checking = already_checking
+        restarted = resume_check and torrent.state == "checkingDL" and torrent.progress == 0
         while True:
             checkpoint(stop)
             torrent = self._owned(client, record)
             checking = torrent.state in CHECKING_STATES
             saw_checking |= checking
             progress("client-hash", fraction=torrent.progress)
+            if (
+                not restarted
+                and torrent.state == "checkingDL"
+                and torrent.progress == 0
+                and time.monotonic() - start > 120
+            ):
+                client.pause(record["hash"])
+                client.recheck(record["hash"])
+                restarted = True
+                continue
             if not checking and (saw_checking or time.monotonic() - start >= 10):
                 if torrent.progress < 1:
                     client.remove(record["hash"])  # never delete data through symlinks
