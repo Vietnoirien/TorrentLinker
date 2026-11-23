@@ -78,6 +78,7 @@ def test_an_accepted_call_records_the_browser_companion_version(tmp_path):
     workspace._receive = lambda *args: {"accepted": True}  # type: ignore[method-assign]
     workspace.receive("/api/companion/snapshot", "chrome-extension://x", "", {}, version="0.7.1")
     assert workspace.data["companion_seen"] == {"version": "0.7.1", "at": 1000.0}
+    assert ProfileWorkspace(tmp_path).data["companion_seen"]["version"] == "0.7.1"  # on disk
     workspace.receive("/api/companion/snapshot", "chrome-extension://x", "", {}, version="<b>")
     assert workspace.data["companion_seen"]["version"] == "0.7.1"  # junk is never recorded
 

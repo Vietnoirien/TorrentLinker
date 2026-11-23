@@ -446,7 +446,10 @@ class ProfileWorkspace:
         reply = self._receive(route, origin, authorization, body)
         if re.fullmatch(r"\d{1,4}(\.\d{1,4}){0,3}", version):  # only an accepted call counts
             with self.lock:
+                known = (self.data.get("companion_seen") or {}).get("version")
                 self.data["companion_seen"] = {"version": version, "at": self.clock()}
+                if known != version:  # a new version is worth a write; the time alone is not
+                    self._save()
         if route != "/api/companion/snapshot":
             return reply
         return {**reply, "companion_version": bundled_version()}
