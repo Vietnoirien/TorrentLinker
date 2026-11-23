@@ -55,6 +55,8 @@ from enum import StrEnum
 from functools import lru_cache
 from urllib.parse import urlsplit
 
+from torrentlinker.trackers import tracker_of_host, tracker_of_url
+
 GB = 1_000_000_000  # c411 sizes are decimal: 1 Zen buys 1 Go of download credit
 DIVISOR = 7  # OFFICIAL
 MIN_SEED_HOURS = 0.5  # OFFICIAL: under 30 minutes a day a torrent counts nothing
@@ -281,8 +283,12 @@ def compare_classes(
 
 
 def is_indexer_torrent(tracker: str, indexer_url: str) -> bool:
-    """Same-site trackers, including c411's alternate announce host."""
+    """Same-site trackers, including c411's alternate announce host. A Tracker is recognised
+    by its own announce hosts only: a tr4ker torrent is never c411's, nor the reverse."""
     host = _host(tracker)
+    if (mine := tracker_of_url(indexer_url)) is not None:
+        found = tracker_of_host(host)
+        return found is not None and found.id == mine.id
     site = ".".join(_host(indexer_url).split(".")[-2:])
     if site == "c411.org" and host == "tk.c411.tw":
         return True

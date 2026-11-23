@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 import sqlite3
 import threading
 import time
 import uuid
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
+
+from torrentlinker.trackers import DEFAULT_TRACKER, tracker
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS reseed_link_layout (
@@ -52,7 +55,8 @@ CREATE TABLE IF NOT EXISTS download_queue (
     payload TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'queued',
     reason TEXT NOT NULL DEFAULT '',
-    added_at REAL NOT NULL
+    added_at REAL NOT NULL,
+    tracker TEXT NOT NULL DEFAULT 'c411'
 );
 CREATE TABLE IF NOT EXISTS verification (
     hash TEXT PRIMARY KEY,
@@ -92,33 +96,46 @@ CREATE TABLE IF NOT EXISTS item_query (
     query TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS catalogue (
-    infohash TEXT PRIMARY KEY,
+    infohash TEXT NOT NULL,
     title TEXT NOT NULL,
     size INTEGER NOT NULL,
     seeders INTEGER NOT NULL,
     category INTEGER,
     download_url TEXT NOT NULL,
     details_url TEXT NOT NULL,
-    seen_at REAL NOT NULL
+    seen_at REAL NOT NULL,
+    source TEXT NOT NULL DEFAULT 'indexer',
+    root INTEGER,
+    tracker TEXT NOT NULL DEFAULT 'c411',
+    PRIMARY KEY (tracker, infohash)
 );
 -- Exact sizes find Library Candidates without spending a search (catalogue_sized).
 CREATE INDEX IF NOT EXISTS catalogue_by_size ON catalogue(size);
 CREATE TABLE IF NOT EXISTS catalogue_crawl (
-    category INTEGER PRIMARY KEY,
+    category INTEGER NOT NULL,
     next_offset INTEGER NOT NULL DEFAULT 0,
     complete INTEGER NOT NULL DEFAULT 0,
-    updated_at REAL
+    updated_at REAL,
+    limited INTEGER NOT NULL DEFAULT 0,
+    tracker TEXT NOT NULL DEFAULT 'c411',
+    PRIMARY KEY (tracker, category)
 );
 CREATE TABLE IF NOT EXISTS unavailable_torrent (
-    infohash TEXT PRIMARY KEY,
-    seen_at REAL NOT NULL
+    infohash TEXT NOT NULL,
+    seen_at REAL NOT NULL,
+    tracker TEXT NOT NULL DEFAULT 'c411',
+    PRIMARY KEY (tracker, infohash)
 );
 CREATE TABLE IF NOT EXISTS catalogue_feed (
-    name TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
     next_page INTEGER NOT NULL DEFAULT 1,
     updated_at REAL,
     count INTEGER NOT NULL DEFAULT 0,
-    limited INTEGER NOT NULL DEFAULT 0
+    limited INTEGER NOT NULL DEFAULT 0,
+    head_hashes TEXT NOT NULL DEFAULT '[]',
+    started_at REAL,
+    tracker TEXT NOT NULL DEFAULT 'c411',
+    PRIMARY KEY (tracker, name)
 );
 CREATE TABLE IF NOT EXISTS unpacked_archive (
     folder TEXT PRIMARY KEY,
@@ -132,9 +149,11 @@ CREATE TABLE IF NOT EXISTS upload (
     made_at REAL NOT NULL
 );
 CREATE TABLE IF NOT EXISTS category_options (
-    subcategory INTEGER PRIMARY KEY,
+    subcategory INTEGER NOT NULL,
     body TEXT NOT NULL,
-    fetched_at REAL NOT NULL
+    fetched_at REAL NOT NULL,
+    tracker TEXT NOT NULL DEFAULT 'c411',
+    PRIMARY KEY (tracker, subcategory)
 );
 CREATE TABLE IF NOT EXISTS plan_state (
     id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -172,7 +191,8 @@ CREATE TABLE IF NOT EXISTS profile_history (
     account TEXT NOT NULL,
     day TEXT NOT NULL,
     payload TEXT NOT NULL,
-    PRIMARY KEY (account, day)
+    tracker TEXT NOT NULL DEFAULT 'c411',
+    PRIMARY KEY (tracker, account, day)
 );
 """
 
@@ -265,6 +285,9 @@ class Verification:
     local_files: list[str] = field(default_factory=list)
 
 
+_COLUMNS = (
+    "infohash, title, size, seeders, category, download_url, details_url, seen_at, source, root"
+)
 _RANK = "(CASE {0}.source WHEN 'zen-lab' THEN 0 WHEN 'bundled' THEN 1 ELSE 2 END)"
 
 
@@ -272,6 +295,7 @@ class Store:
     def __init__(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         self.client_id = "default"
+        self.tracker = DEFAULT_TRACKER
         self.torrent_dir = path.parent / "torrents"
         self._db = sqlite3.connect(path, check_same_thread=False)
         self._lock = threading.Lock()
@@ -322,6 +346,16 @@ class Store:
             raise ValueError("Invalid Torrent Client profile ID.")
         result = copy.copy(self)
         result.client_id = identifier
+        return result
+
+    def for_tracker(self, identifier: str) -> Store:
+        """A Tracker scope (ADR-0025): the Catalogue, crawl state, unavailable torrents,
+        category options, queued downloads and Profile snapshots of that Tracker only.
+        It shares the connection and lock; the same hash or category ID on another
+        Tracker is another row."""
+        tracker(identifier)
+        result = copy.copy(self)
+        result.tracker = identifier
         return result
 
     def _verification_key(self, hash: str) -> str:
@@ -542,8 +576,9 @@ class Store:
         """Payload URLs must already have credentials redacted by the Indexer."""
         with self._lock, self._db:
             cursor = self._db.execute(
-                "INSERT OR IGNORE INTO download_queue(id, payload, added_at) VALUES (?, ?, ?)",
-                (key, json.dumps(payload), time.time()),
+                "INSERT OR IGNORE INTO download_queue(id, payload, added_at, tracker)"
+                " VALUES (?, ?, ?, ?)",
+                (key, json.dumps(payload), time.time(), self.tracker),
             )
             return cursor.rowcount > 0
 
@@ -745,6 +780,20 @@ class Store:
             self._db.execute(
                 "UPDATE catalogue_crawl SET complete = 0, next_offset = 0 WHERE complete = 1"
             )
+        for table in (
+            "catalogue",
+            "catalogue_crawl",
+            "unavailable_torrent",
+            "catalogue_feed",
+            "category_options",
+            "profile_history",
+        ):
+            self._add_tracker(table)
+        if "tracker" not in {r[1] for r in self._db.execute("PRAGMA table_info(download_queue)")}:
+            self._db.execute(
+                "ALTER TABLE download_queue ADD COLUMN tracker TEXT NOT NULL DEFAULT 'c411'"
+            )
+        self._db.execute("CREATE INDEX IF NOT EXISTS catalogue_by_size ON catalogue(size)")
         plan_columns = {r[1] for r in self._db.execute("PRAGMA table_info(plan_state)")}
         if "zen_added" not in plan_columns:  # 0.2.3 saved Plans without it
             self._db.execute("ALTER TABLE plan_state ADD COLUMN zen_added REAL")
@@ -760,6 +809,21 @@ class Store:
             self._db.execute("ALTER TABLE verification ADD COLUMN required_pieces TEXT")
         if "local_files" not in columns:
             self._db.execute("ALTER TABLE verification ADD COLUMN local_files TEXT")
+
+    def _add_tracker(self, table: str) -> None:
+        """Rebuild a table from before Trackers with its new key: every row becomes c411's."""
+        columns = [r[1] for r in self._db.execute(f"PRAGMA table_info({table})")]
+        if "tracker" in columns:
+            return
+        match = re.search(rf"CREATE TABLE IF NOT EXISTS {table} \(.*?\n\);", SCHEMA, re.S)
+        assert match is not None
+        self._db.execute(f"ALTER TABLE {table} RENAME TO {table}_before_trackers")
+        self._db.execute(match.group(0))
+        names = ", ".join(columns)
+        self._db.execute(
+            f"INSERT INTO {table} ({names}) SELECT {names} FROM {table}_before_trackers"
+        )
+        self._db.execute(f"DROP TABLE {table}_before_trackers")
 
     def cached_search(self, key: str, max_age: float) -> str | None:
         with self._lock:
@@ -1000,9 +1064,9 @@ class Store:
             return [
                 row[0]
                 for row in self._db.execute(
-                    "SELECT infohash FROM catalogue WHERE seen_at < ? AND (root = ?"
+                    "SELECT infohash FROM catalogue WHERE tracker = ? AND seen_at < ? AND (root = ?"
                     f" OR (root IS NULL AND category IN ({marks}))) ORDER BY seen_at LIMIT ?",
-                    (since, root, *sorted(categories), limit),
+                    (self.tracker, since, root, *sorted(categories), limit),
                 )
             ]
 
@@ -1012,7 +1076,9 @@ class Store:
         unknown: dict[int, int] = {}
         with self._lock:
             for root, category, count in self._db.execute(
-                "SELECT root, category, COUNT(*) FROM catalogue GROUP BY root, category"
+                "SELECT root, category, COUNT(*) FROM catalogue WHERE tracker = ?"
+                " GROUP BY root, category",
+                (self.tracker,),
             ):
                 if root is not None:
                     known[root] = known.get(root, 0) + count
@@ -1024,31 +1090,39 @@ class Store:
         with self._lock, self._db:
             for prefix in prefixes:
                 self._db.execute(
-                    "DELETE FROM catalogue_feed WHERE substr(name, 1, ?) = ?",
-                    (len(prefix), prefix),
+                    "DELETE FROM catalogue_feed WHERE tracker = ? AND substr(name, 1, ?) = ?",
+                    (self.tracker, len(prefix), prefix),
                 )
 
     def mark_catalogue_seen(self, infohash: str, when: float) -> None:
         with self._lock, self._db:
             self._db.execute(
-                "UPDATE catalogue SET seen_at = ? WHERE infohash = ?", (when, infohash.lower())
+                "UPDATE catalogue SET seen_at = ? WHERE tracker = ? AND infohash = ?",
+                (when, self.tracker, infohash.lower()),
             )
 
     def drop_unavailable_torrent(self, infohash: str) -> None:
         """Remove an explicitly unavailable torrent and keep refreshes from restoring it."""
         with self._lock, self._db:
             self._db.execute(
-                "INSERT OR IGNORE INTO unavailable_torrent VALUES (?, ?)",
-                (infohash.lower(), time.time()),
+                "INSERT OR IGNORE INTO unavailable_torrent (infohash, seen_at, tracker)"
+                " VALUES (?, ?, ?)",
+                (infohash.lower(), time.time(), self.tracker),
             )
-            self._db.execute("DELETE FROM catalogue WHERE infohash = ? COLLATE NOCASE", (infohash,))
+            self._db.execute(
+                "DELETE FROM catalogue WHERE tracker = ? AND infohash = ? COLLATE NOCASE",
+                (self.tracker, infohash),
+            )
 
     def save_catalogue(self, rows: list[CatalogueRow]) -> None:
         with self._lock, self._db:
             self._db.executemany(
-                "INSERT INTO catalogue SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?"
-                " WHERE NOT EXISTS (SELECT 1 FROM unavailable_torrent WHERE infohash = lower(?))"
-                " ON CONFLICT(infohash) DO UPDATE SET"
+                "INSERT INTO catalogue (infohash, title, size, seeders, category, download_url,"
+                " details_url, seen_at, source, root, tracker)"
+                " SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?"
+                " WHERE NOT EXISTS (SELECT 1 FROM unavailable_torrent"
+                " WHERE tracker = ? AND infohash = lower(?))"
+                " ON CONFLICT(tracker, infohash) DO UPDATE SET"
                 " title=excluded.title, size=excluded.size, seeders=excluded.seeders,"
                 " category=excluded.category, download_url=excluded.download_url,"
                 " details_url=excluded.details_url, seen_at=excluded.seen_at,"
@@ -1068,6 +1142,8 @@ class Store:
                         r.seen_at,
                         r.source,
                         r.root,
+                        self.tracker,
+                        self.tracker,
                         r.infohash,
                     )
                     for r in rows
@@ -1083,18 +1159,20 @@ class Store:
                 found |= {
                     str(r[0])
                     for r in self._db.execute(
-                        f"SELECT infohash FROM catalogue WHERE infohash IN ({marks})"
+                        "SELECT infohash FROM catalogue WHERE tracker = ?"
+                        f" AND infohash IN ({marks})"
                         + (" AND seen_at < ?" if seen_before is not None else ""),
-                        [*chunk, seen_before] if seen_before is not None else chunk,
+                        [self.tracker, *chunk, *([seen_before] if seen_before is not None else [])],
                     )
                 }
                 # Excluded torrents still count as seen when deciding where a crawl stops.
                 found |= {
                     str(r[0])
                     for r in self._db.execute(
-                        f"SELECT infohash FROM unavailable_torrent WHERE infohash IN ({marks})"
+                        f"SELECT infohash FROM unavailable_torrent WHERE tracker = ?"
+                        f" AND infohash IN ({marks})"
                         + (" AND seen_at < ?" if seen_before is not None else ""),
-                        [*chunk, seen_before] if seen_before is not None else chunk,
+                        [self.tracker, *chunk, *([seen_before] if seen_before is not None else [])],
                     )
                 }
             return found
@@ -1102,7 +1180,9 @@ class Store:
     def catalogue(self, hashes: list[str] | None = None) -> list[CatalogueRow]:
         with self._lock:
             if hashes is None:
-                rows = self._db.execute("SELECT * FROM catalogue").fetchall()
+                rows = self._db.execute(
+                    f"SELECT {_COLUMNS} FROM catalogue WHERE tracker = ?", (self.tracker,)
+                ).fetchall()
             else:
                 rows = []
                 for i in range(0, len(hashes), 500):
@@ -1110,7 +1190,9 @@ class Store:
                     marks = ",".join("?" * len(chunk))
                     rows.extend(
                         self._db.execute(
-                            f"SELECT * FROM catalogue WHERE infohash IN ({marks})", chunk
+                            f"SELECT {_COLUMNS} FROM catalogue WHERE tracker = ?"
+                            f" AND infohash IN ({marks})",
+                            [self.tracker, *chunk],
                         ).fetchall()
                     )
         return [CatalogueRow(*r) for r in rows]
@@ -1122,8 +1204,9 @@ class Store:
         where = " AND ".join("title LIKE ?" for _ in words)
         with self._lock:
             rows = self._db.execute(
-                f"SELECT * FROM catalogue WHERE {where} ORDER BY seeders DESC LIMIT ?",
-                [f"%{w}%" for w in words] + [limit],
+                f"SELECT {_COLUMNS} FROM catalogue WHERE tracker = ? AND {where}"
+                " ORDER BY seeders DESC LIMIT ?",
+                [self.tracker] + [f"%{w}%" for w in words] + [limit],
             ).fetchall()
         return [CatalogueRow(*r) for r in rows]
 
@@ -1131,23 +1214,25 @@ class Store:
         """Apply swarm observations without claiming size/category metadata was refreshed."""
         with self._lock, self._db:
             self._db.executemany(
-                "UPDATE catalogue SET seeders = ? WHERE infohash = ?",
-                [(count, h.lower()) for h, count in counts.items() if count >= 0],
+                "UPDATE catalogue SET seeders = ? WHERE tracker = ? AND infohash = ?",
+                [(count, self.tracker, h.lower()) for h, count in counts.items() if count >= 0],
             )
 
     def catalogue_sized(self, size: int, limit: int = 10) -> list[CatalogueRow]:
         """Catalogue torrents of exactly this many bytes, best seeded first."""
         with self._lock:
             rows = self._db.execute(
-                "SELECT * FROM catalogue WHERE size = ? ORDER BY seeders DESC LIMIT ?",
-                (size, limit),
+                f"SELECT {_COLUMNS} FROM catalogue WHERE tracker = ? AND size = ?"
+                " ORDER BY seeders DESC LIMIT ?",
+                (self.tracker, size, limit),
             ).fetchall()
         return [CatalogueRow(*r) for r in rows]
 
     def catalogue_row(self, infohash: str) -> CatalogueRow | None:
         with self._lock:
             row = self._db.execute(
-                "SELECT * FROM catalogue WHERE infohash = ?", (infohash.lower(),)
+                f"SELECT {_COLUMNS} FROM catalogue WHERE tracker = ? AND infohash = ?",
+                (self.tracker, infohash.lower()),
             ).fetchone()
         return CatalogueRow(*row) if row else None
 
@@ -1155,12 +1240,19 @@ class Store:
         """Every Catalogue torrent's exact size, to recognise a release folder by size."""
         with self._lock:
             return frozenset(
-                row[0] for row in self._db.execute("SELECT DISTINCT size FROM catalogue")
+                row[0]
+                for row in self._db.execute(
+                    "SELECT DISTINCT size FROM catalogue WHERE tracker = ?", (self.tracker,)
+                )
             )
 
     def catalogue_size(self) -> int:
         with self._lock:
-            return int(self._db.execute("SELECT COUNT(*) FROM catalogue").fetchone()[0])
+            return int(
+                self._db.execute(
+                    "SELECT COUNT(*) FROM catalogue WHERE tracker = ?", (self.tracker,)
+                ).fetchone()[0]
+            )
 
     def catalogue_categories(self, hashes: list[str]) -> set[int]:
         """Categories of the given torrents, as far as the Catalogue knows them."""
@@ -1172,9 +1264,9 @@ class Store:
                 found |= {
                     int(r[0])
                     for r in self._db.execute(
-                        f"SELECT DISTINCT category FROM catalogue WHERE infohash IN ({marks})"
-                        " AND category IS NOT NULL",
-                        chunk,
+                        f"SELECT DISTINCT category FROM catalogue WHERE tracker = ?"
+                        f" AND infohash IN ({marks}) AND category IS NOT NULL",
+                        [self.tracker, *chunk],
                     )
                 }
             return found
@@ -1183,8 +1275,8 @@ class Store:
         with self._lock:
             row = self._db.execute(
                 "SELECT next_offset, complete, updated_at, limited"
-                " FROM catalogue_crawl WHERE category = ?",
-                (category,),
+                " FROM catalogue_crawl WHERE tracker = ? AND category = ?",
+                (self.tracker, category),
             ).fetchone()
         if not row:
             return CrawlState(category)
@@ -1194,8 +1286,10 @@ class Store:
         with self._lock, self._db:
             self._db.execute(
                 "INSERT OR REPLACE INTO catalogue_crawl"
-                " (category, next_offset, complete, updated_at, limited) VALUES (?, ?, ?, ?, ?)",
+                " (tracker, category, next_offset, complete, updated_at, limited)"
+                " VALUES (?, ?, ?, ?, ?, ?)",
                 (
+                    self.tracker,
                     state.category,
                     state.next_offset,
                     int(state.complete),
@@ -1210,7 +1304,8 @@ class Store:
             return {
                 int(row[0])
                 for row in self._db.execute(
-                    "SELECT category FROM catalogue_crawl WHERE limited = 1"
+                    "SELECT category FROM catalogue_crawl WHERE tracker = ? AND limited = 1",
+                    (self.tracker,),
                 )
             }
 
@@ -1218,8 +1313,8 @@ class Store:
         with self._lock:
             row = self._db.execute(
                 "SELECT next_page, updated_at, count, limited, head_hashes, started_at"
-                " FROM catalogue_feed WHERE name = ?",
-                (name,),
+                " FROM catalogue_feed WHERE tracker = ? AND name = ?",
+                (self.tracker, name),
             ).fetchone()
         return (
             FeedState(name, row[0], row[1], row[2], bool(row[3]), tuple(json.loads(row[4])), row[5])
@@ -1231,9 +1326,10 @@ class Store:
         with self._lock, self._db:
             self._db.execute(
                 "INSERT OR REPLACE INTO catalogue_feed"
-                " (name, next_page, updated_at, count, limited, head_hashes, started_at)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                " (tracker, name, next_page, updated_at, count, limited, head_hashes, started_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
+                    self.tracker,
                     state.name,
                     state.next_page,
                     state.updated_at,
@@ -1246,18 +1342,23 @@ class Store:
 
     def catalogue_updated_at(self) -> float | None:
         with self._lock:
-            row = self._db.execute("SELECT MAX(updated_at) FROM catalogue_crawl").fetchone()
+            row = self._db.execute(
+                "SELECT MAX(updated_at) FROM catalogue_crawl WHERE tracker = ?", (self.tracker,)
+            ).fetchone()
         return float(row[0]) if row and row[0] is not None else None
 
     def crawl_paused(self) -> bool:
         """Whether a full crawl stopped before the end of some category."""
         with self._lock:
             row = self._db.execute(
-                "SELECT 1 FROM catalogue_crawl WHERE next_offset > 0 AND complete = 0 LIMIT 1"
+                "SELECT 1 FROM catalogue_crawl WHERE tracker = ? AND next_offset > 0"
+                " AND complete = 0 LIMIT 1",
+                (self.tracker,),
             ).fetchone()
             feed = self._db.execute(
-                "SELECT 1 FROM catalogue_feed WHERE next_page > 1"
-                " AND name NOT LIKE 'c411-latest:%' LIMIT 1"
+                "SELECT 1 FROM catalogue_feed WHERE tracker = ? AND next_page > 1"
+                " AND name NOT LIKE '%-latest:%' LIMIT 1",
+                (self.tracker,),
             ).fetchone()
         return row is not None or feed is not None
 
@@ -1309,17 +1410,18 @@ class Store:
         """The Category Options response kept for a subcategory, and when it was fetched."""
         with self._lock:
             row = self._db.execute(
-                "SELECT body, fetched_at FROM category_options WHERE subcategory = ?",
-                (subcategory,),
+                "SELECT body, fetched_at FROM category_options"
+                " WHERE tracker = ? AND subcategory = ?",
+                (self.tracker, subcategory),
             ).fetchone()
         return (str(row[0]), float(row[1])) if row else None
 
     def cache_options(self, subcategory: int, body: str, fetched_at: float) -> None:
         with self._lock, self._db:
             self._db.execute(
-                "INSERT OR REPLACE INTO category_options (subcategory, body, fetched_at) "
-                "VALUES (?, ?, ?)",
-                (subcategory, body, fetched_at),
+                "INSERT OR REPLACE INTO category_options (tracker, subcategory, body, fetched_at)"
+                " VALUES (?, ?, ?, ?)",
+                (self.tracker, subcategory, body, fetched_at),
             )
 
     # The saved Plan ---------------------------------------------------------
@@ -1431,22 +1533,24 @@ class Store:
     def profile_day(self, account: str, day: str) -> dict | None:
         with self._lock:
             row = self._db.execute(
-                "SELECT payload FROM profile_history WHERE account = ? AND day = ?",
-                (account, day),
+                "SELECT payload FROM profile_history WHERE tracker = ? AND account = ? AND day = ?",
+                (self.tracker, account, day),
             ).fetchone()
         return json.loads(row[0]) if row else None
 
     def save_profile_day(self, account: str, day: str, payload: dict) -> None:
         with self._lock, self._db:
             self._db.execute(
-                "INSERT OR REPLACE INTO profile_history VALUES (?, ?, ?)",
-                (account, day, json.dumps(payload, allow_nan=False)),
+                "INSERT OR REPLACE INTO profile_history (tracker, account, day, payload)"
+                " VALUES (?, ?, ?, ?)",
+                (self.tracker, account, day, json.dumps(payload, allow_nan=False)),
             )
 
     def profile_days(self, account: str) -> list[tuple[str, dict]]:
         with self._lock:
             rows = self._db.execute(
-                "SELECT day, payload FROM profile_history WHERE account = ? ORDER BY day",
-                (account,),
+                "SELECT day, payload FROM profile_history WHERE tracker = ? AND account = ?"
+                " ORDER BY day",
+                (self.tracker, account),
             ).fetchall()
         return [(day, json.loads(payload)) for day, payload in rows]

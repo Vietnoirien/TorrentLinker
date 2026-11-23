@@ -14,6 +14,7 @@ from torrentlinker.domain import Torrent
 from torrentlinker.downloads import IndexerCategory
 from torrentlinker.reseed import TAG
 from torrentlinker.store import CatalogueRow, Store
+from torrentlinker.trackers import tracker_of_url
 from torrentlinker.zen import (
     ZenDay,
     ZenProfile,
@@ -81,13 +82,27 @@ def indexer_torrents(
     or this app's tag. A stopped torrent may have no current tracker even though
     its announce list identifies the Indexer.
     """
+    mine = tracker_of_url(indexer_url)
+
+    def of_another_tracker(t: Torrent) -> bool:
+        """It announces to a Tracker that is not this one: its hash or tag cannot claim it."""
+        if mine is None:
+            return False
+        found = {tracker_of_url(url) for url in (t.tracker, *t.trackers)} - {None}
+        return bool(found) and mine not in found
+
     return [
         t
         for t in torrents
         if is_indexer_torrent(t.tracker, indexer_url)
         or any(is_indexer_torrent(url, indexer_url) for url in t.trackers)
-        or t.hash.lower() in known
-        or any(tag == TAG or tag.startswith(TAG + ":") for tag in t.tags)
+        or (
+            not of_another_tracker(t)
+            and (
+                t.hash.lower() in known
+                or any(tag == TAG or tag.startswith(TAG + ":") for tag in t.tags)
+            )
+        )
     ]
 
 

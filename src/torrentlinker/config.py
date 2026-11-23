@@ -9,6 +9,7 @@ from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from torrentlinker import trackers
 from torrentlinker.domain import (
     ContentKind,
     LibraryFolder,
@@ -25,6 +26,7 @@ from torrentlinker.matching import (
     MatchRules,
 )
 from torrentlinker.plan import PlanGoal, PlanOptions
+from torrentlinker.trackers import TRACKERS, valid_order
 from torrentlinker.zen import ZenClass, ZenProfile
 
 UI_SCALES = (0.75, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0)
@@ -217,6 +219,8 @@ class Settings:
     cross_seed: CrossSeedSettings = field(default_factory=CrossSeedSettings)
     proxy: ProxySettings = field(default_factory=ProxySettings)
     announce_hosts: list[str] = field(default_factory=list)
+    # Which Tracker wins a tie when the app picks a release itself (c411 first by default).
+    tracker_order: list[str] = field(default_factory=lambda: list(TRACKERS))
     matching: MatchingSettings = field(default_factory=MatchingSettings)
     release_score: dict = field(default_factory=dict)
     # Torznab categories searched for each Content Kind; none listed = all categories.
@@ -347,6 +351,13 @@ class Settings:
                 return indexer
         raise ValueError("Unknown Indexer.")
 
+    def tracker_indexer(self, tracker: str) -> IndexerSettings:
+        """The Indexer a Tracker owns (ADR-0025); c411 is always there, tr4ker once added."""
+        if tracker == C411_ID:
+            return self.indexer
+        trackers.tracker(tracker)  # an unknown Tracker is an error, not an unknown Indexer
+        return self.find_indexer(tracker)
+
     @staticmethod
     def indexer_secret(identifier: str) -> str:
         """Where an Indexer's API key is kept; c411's keeps the name it always had."""
@@ -370,6 +381,7 @@ class Settings:
             "cross_seed": asdict(self.cross_seed),
             "proxy": asdict(self.proxy),
             "announce_hosts": self.announce_hosts,
+            "tracker_order": valid_order(self.tracker_order),
             "matching": asdict(self.matching),
             "release_score": self.release_score,
             "kind_categories": {k.value: v for k, v in self.kind_categories.items()},
@@ -419,6 +431,7 @@ class Settings:
             cross_seed=CrossSeedSettings(**data.get("cross_seed", {})),
             proxy=ProxySettings(**data.get("proxy", {})),
             announce_hosts=list(data.get("announce_hosts", [])),
+            tracker_order=valid_order(data.get("tracker_order")),
             matching=MatchingSettings(**data.get("matching", {})),
             release_score=data.get("release_score", {}),
             language=str(data.get("language", "auto")),

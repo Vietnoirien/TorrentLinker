@@ -28,6 +28,7 @@ from torrentlinker.profile_workspace import ProfileWorkspace
 from torrentlinker.qbit import ClientApi
 from torrentlinker.store import Store
 from torrentlinker.torznab import TorznabIndexer
+from torrentlinker.trackers import DEFAULT_TRACKER
 from torrentlinker.web.security import ServerSecrets
 
 Connector = Callable[..., ClientApi]
@@ -581,6 +582,14 @@ class Setup:
                 held = ((entry.url, key), TorznabIndexer(entry.url, key, entry.name))
                 self._torznab[identifier] = held
             return held[1]
+
+    def tracker_indexer(self, tracker: str = DEFAULT_TRACKER) -> Indexer | TorznabIndexer:
+        """The Indexer a Tracker owns (ADR-0025); c411 unless another is asked for."""
+        return self.indexer_for(self.settings.tracker_indexer(tracker).id)
+
+    def tracker_store(self, tracker: str = DEFAULT_TRACKER):
+        """The Store scoped to a Tracker's own Catalogue, caches, queue and Profile days."""
+        return self.store.for_tracker(tracker)
 
     def set_cross_seed(self, body: CrossSeedRules) -> dict[str, Any]:
         with self.lock:
