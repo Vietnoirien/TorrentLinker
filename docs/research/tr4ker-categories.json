@@ -1,0 +1,510 @@
+[
+  {
+    "id": 54,
+    "slug": "formations-audio",
+    "name": "Audio",
+    "parent_id": 10,
+    "icon": "headphones",
+    "sort_order": 1
+  },
+  {
+    "id": 1,
+    "slug": "films",
+    "name": "Films",
+    "icon": "movie",
+    "sort_order": 1
+  },
+  {
+    "id": 14,
+    "slug": "films-animation",
+    "name": "Films d'animation",
+    "parent_id": 1,
+    "icon": "animation",
+    "sort_order": 1
+  },
+  {
+    "id": 60,
+    "slug": "porno-films",
+    "name": "Films/Vidéos",
+    "parent_id": 13,
+    "icon": "movie",
+    "sort_order": 1
+  },
+  {
+    "id": 40,
+    "slug": "jeux-linux",
+    "name": "Linux",
+    "parent_id": 6,
+    "icon": "terminal",
+    "sort_order": 1
+  },
+  {
+    "id": 28,
+    "slug": "livres-livre",
+    "name": "Livres",
+    "parent_id": 4,
+    "icon": "book",
+    "sort_order": 1
+  },
+  {
+    "id": 48,
+    "slug": "3d-personnages",
+    "name": "Personnages",
+    "parent_id": 8,
+    "icon": "person",
+    "sort_order": 1
+  },
+  {
+    "id": 26,
+    "slug": "audio-podcast",
+    "name": "Podcast",
+    "parent_id": 3,
+    "icon": "podcasts",
+    "sort_order": 1
+  },
+  {
+    "id": 46,
+    "slug": "emulation-rom",
+    "name": "ROM / ISO",
+    "parent_id": 7,
+    "icon": "save",
+    "sort_order": 1
+  },
+  {
+    "id": 21,
+    "slug": "series-tv",
+    "name": "Séries TV",
+    "parent_id": 2,
+    "icon": "live_tv",
+    "sort_order": 1
+  },
+  {
+    "id": 35,
+    "slug": "apps-windows",
+    "name": "Windows",
+    "parent_id": 5,
+    "icon": "desktop_windows",
+    "sort_order": 1
+  },
+  {
+    "id": 57,
+    "slug": "nulled-wordpress",
+    "name": "WordPress",
+    "parent_id": 11,
+    "icon": "web",
+    "sort_order": 1
+  },
+  {
+    "id": 15,
+    "slug": "films-documentaire",
+    "name": "Documentaire",
+    "parent_id": 1,
+    "icon": "info",
+    "sort_order": 2
+  },
+  {
+    "id": 22,
+    "slug": "series-emission",
+    "name": "Émission TV",
+    "parent_id": 2,
+    "icon": "tv",
+    "sort_order": 2
+  },
+  {
+    "id": 47,
+    "slug": "emulation-emulateurs",
+    "name": "Émulateurs",
+    "parent_id": 7,
+    "icon": "developer_board",
+    "sort_order": 2
+  },
+  {
+    "id": 61,
+    "slug": "porno-images",
+    "name": "Images",
+    "parent_id": 13,
+    "icon": "image",
+    "sort_order": 2
+  },
+  {
+    "id": 36,
+    "slug": "apps-linux",
+    "name": "Linux",
+    "parent_id": 5,
+    "icon": "terminal",
+    "sort_order": 2
+  },
+  {
+    "id": 29,
+    "slug": "livres-audio",
+    "name": "Livres Audio",
+    "parent_id": 4,
+    "icon": "headphones",
+    "sort_order": 2
+  },
+  {
+    "id": 41,
+    "slug": "jeux-macos",
+    "name": "MacOS",
+    "parent_id": 6,
+    "icon": "laptop_mac",
+    "sort_order": 2
+  },
+  {
+    "id": 27,
+    "slug": "audio-musique",
+    "name": "Musique",
+    "parent_id": 3,
+    "icon": "music_note",
+    "sort_order": 2
+  },
+  {
+    "id": 49,
+    "slug": "3d-objets",
+    "name": "Objets 3D",
+    "parent_id": 8,
+    "icon": "view_in_ar",
+    "sort_order": 2
+  },
+  {
+    "id": 58,
+    "slug": "nulled-scripts",
+    "name": "Scripts",
+    "parent_id": 11,
+    "icon": "code",
+    "sort_order": 2
+  },
+  {
+    "id": 2,
+    "slug": "series",
+    "name": "Séries",
+    "icon": "live_tv",
+    "sort_order": 2
+  },
+  {
+    "id": 55,
+    "slug": "formations-video",
+    "name": "Vidéos",
+    "parent_id": 10,
+    "icon": "videocam",
+    "sort_order": 2
+  },
+  {
+    "id": 3,
+    "slug": "audio",
+    "name": "Audio",
+    "icon": "library_music",
+    "sort_order": 3
+  },
+  {
+    "id": 30,
+    "slug": "livres-bd",
+    "name": "BD/Comics",
+    "parent_id": 4,
+    "icon": "collections_bookmark",
+    "sort_order": 3
+  },
+  {
+    "id": 59,
+    "slug": "nulled-divers",
+    "name": "Divers",
+    "parent_id": 11,
+    "icon": "more_horiz",
+    "sort_order": 3
+  },
+  {
+    "id": 16,
+    "slug": "films-film",
+    "name": "Film",
+    "parent_id": 1,
+    "icon": "movie",
+    "sort_order": 3
+  },
+  {
+    "id": 62,
+    "slug": "porno-jeux",
+    "name": "Jeux",
+    "parent_id": 13,
+    "icon": "sports_esports",
+    "sort_order": 3
+  },
+  {
+    "id": 37,
+    "slug": "apps-macos",
+    "name": "MacOS",
+    "parent_id": 5,
+    "icon": "laptop_mac",
+    "sort_order": 3
+  },
+  {
+    "id": 50,
+    "slug": "3d-pack",
+    "name": "Pack",
+    "parent_id": 8,
+    "icon": "inventory_2",
+    "sort_order": 3
+  },
+  {
+    "id": 56,
+    "slug": "formations-papier",
+    "name": "Papier",
+    "parent_id": 10,
+    "icon": "description",
+    "sort_order": 3
+  },
+  {
+    "id": 23,
+    "slug": "series-animees",
+    "name": "Séries Animées",
+    "parent_id": 2,
+    "icon": "animation",
+    "sort_order": 3
+  },
+  {
+    "id": 42,
+    "slug": "jeux-xbox",
+    "name": "XBOX",
+    "parent_id": 6,
+    "icon": "sports_esports",
+    "sort_order": 3
+  },
+  {
+    "id": 38,
+    "slug": "apps-android",
+    "name": "Android",
+    "parent_id": 5,
+    "icon": "android",
+    "sort_order": 4
+  },
+  {
+    "id": 17,
+    "slug": "films-concert",
+    "name": "Concerts",
+    "parent_id": 1,
+    "icon": "queue_music",
+    "sort_order": 4
+  },
+  {
+    "id": 63,
+    "slug": "porno-ebooks",
+    "name": "eBooks",
+    "parent_id": 13,
+    "icon": "book",
+    "sort_order": 4
+  },
+  {
+    "id": 4,
+    "slug": "livres",
+    "name": "Livres",
+    "icon": "menu_book",
+    "sort_order": 4
+  },
+  {
+    "id": 31,
+    "slug": "livres-manga",
+    "name": "Manga",
+    "parent_id": 4,
+    "icon": "auto_stories",
+    "sort_order": 4
+  },
+  {
+    "id": 24,
+    "slug": "series-manga",
+    "name": "Mangas Animés",
+    "parent_id": 2,
+    "icon": "auto_stories",
+    "sort_order": 4
+  },
+  {
+    "id": 43,
+    "slug": "jeux-nintendo",
+    "name": "Nintendo",
+    "parent_id": 6,
+    "icon": "sports_esports",
+    "sort_order": 4
+  },
+  {
+    "id": 5,
+    "slug": "applications",
+    "name": "Applications",
+    "icon": "apps",
+    "sort_order": 5
+  },
+  {
+    "id": 39,
+    "slug": "apps-autres",
+    "name": "Autres",
+    "parent_id": 5,
+    "icon": "more_horiz",
+    "sort_order": 5
+  },
+  {
+    "id": 64,
+    "slug": "porno-hentai",
+    "name": "Hentai",
+    "parent_id": 13,
+    "icon": "auto_stories",
+    "sort_order": 5
+  },
+  {
+    "id": 44,
+    "slug": "jeux-playstation",
+    "name": "Playstation",
+    "parent_id": 6,
+    "icon": "sports_esports",
+    "sort_order": 5
+  },
+  {
+    "id": 32,
+    "slug": "livres-presse",
+    "name": "Presse/Magazines",
+    "parent_id": 4,
+    "icon": "newspaper",
+    "sort_order": 5
+  },
+  {
+    "id": 18,
+    "slug": "films-spectacle",
+    "name": "Spectacle",
+    "parent_id": 1,
+    "icon": "theater_comedy",
+    "sort_order": 5
+  },
+  {
+    "id": 25,
+    "slug": "series-sport",
+    "name": "Sport",
+    "parent_id": 2,
+    "icon": "sports_soccer",
+    "sort_order": 5
+  },
+  {
+    "id": 65,
+    "slug": "porno-fansites",
+    "name": "Fan-sites",
+    "parent_id": 13,
+    "icon": "public",
+    "sort_order": 6
+  },
+  {
+    "id": 33,
+    "slug": "livres-jdr",
+    "name": "JDR",
+    "parent_id": 4,
+    "icon": "casino",
+    "sort_order": 6
+  },
+  {
+    "id": 6,
+    "slug": "jeux-video",
+    "name": "Jeux Vidéo",
+    "icon": "sports_esports",
+    "sort_order": 6
+  },
+  {
+    "id": 45,
+    "slug": "jeux-pc",
+    "name": "PC",
+    "parent_id": 6,
+    "icon": "computer",
+    "sort_order": 6
+  },
+  {
+    "id": 19,
+    "slug": "films-sport",
+    "name": "Sport",
+    "parent_id": 1,
+    "icon": "sports_soccer",
+    "sort_order": 6
+  },
+  {
+    "id": 7,
+    "slug": "emulation",
+    "name": "Emulation",
+    "icon": "developer_board",
+    "sort_order": 7
+  },
+  {
+    "id": 20,
+    "slug": "films-video",
+    "name": "Vidéo",
+    "parent_id": 1,
+    "icon": "videocam",
+    "sort_order": 7
+  },
+  {
+    "id": 68,
+    "slug": "jeux-vr",
+    "name": "VR",
+    "parent_id": 6,
+    "icon": "view_in_ar",
+    "sort_order": 7
+  },
+  {
+    "id": 69,
+    "slug": "porno-vr",
+    "name": "VR",
+    "parent_id": 13,
+    "icon": "view_in_ar",
+    "sort_order": 7
+  },
+  {
+    "id": 67,
+    "slug": "jeux-android",
+    "name": "Android",
+    "parent_id": 6,
+    "icon": "phone_android",
+    "sort_order": 8
+  },
+  {
+    "id": 66,
+    "slug": "films-musical",
+    "name": "Comédies musicales",
+    "parent_id": 1,
+    "icon": "theater_comedy",
+    "sort_order": 8
+  },
+  {
+    "id": 8,
+    "slug": "impression-3d",
+    "name": "Impression 3D",
+    "icon": "view_in_ar",
+    "sort_order": 8
+  },
+  {
+    "id": 10,
+    "slug": "formations",
+    "name": "Formations",
+    "icon": "school",
+    "sort_order": 10
+  },
+  {
+    "id": 11,
+    "slug": "nulled",
+    "name": "Nulled",
+    "icon": "code_off",
+    "sort_order": 11
+  },
+  {
+    "id": 12,
+    "slug": "autres",
+    "name": "Autres",
+    "icon": "more_horiz",
+    "sort_order": 12
+  },
+  {
+    "id": 13,
+    "slug": "porno",
+    "name": "Porno",
+    "icon": "18_up_rating",
+    "sort_order": 13
+  },
+  {
+    "id": 34,
+    "slug": "livres-autres",
+    "name": "Autres",
+    "parent_id": 4,
+    "icon": "more_horiz",
+    "sort_order": 99
+  }
+]

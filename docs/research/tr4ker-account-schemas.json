@@ -1,0 +1,30 @@
+{
+  "/api/me/stats": {
+    "status": 200,
+    "schema": {
+      "freeleech_count": "int",
+      "snapshots": [],
+      "statistics": "NoneType",
+      "summary": {
+        "uploaded": "int",
+        "downloaded": "int",
+        "raw_uploaded": "int",
+        "raw_downloaded": "int",
+        "bonus_upload": "int",
+        "bonus_download": "int",
+        "money": "int",
+        "ratio_warning": "bool"
+      }
+    }
+  },
+  "/api/me/downloads?limit=2&filter=all": {
+    "status": 200,
+    "schema": {
+      "items": [],
+      "limit": "int",
+      "page": "int",
+      "total": "int",
+      "total_pages": "int"
+    }
+  }
+}

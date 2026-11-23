@@ -1,0 +1,287 @@
+{
+ "/api/torrents/<slug>/comments?page=1&limit=20": {
+  "status": 200,
+  "shape": {
+   "comments": [],
+   "limit": "int",
+   "page": "int",
+   "total": "int"
+  }
+ },
+ "/api/torrents/<slug>/thanks": {
+  "status": 200,
+  "shape": {
+   "thanked": "bool",
+   "total": "int"
+  }
+ },
+ "/api/channels": {
+  "status": 200,
+  "shape": {
+   "channels": [
+    {
+     "id": "int",
+     "slug": "str",
+     "name": "str",
+     "description": "str",
+     "is_private": "bool",
+     "color": "str",
+     "message_retention_days": "int",
+     "created_at": "str",
+     "member_count": "int",
+     "is_member": "bool"
+    }
+   ]
+  }
+ },
+ "/api/conversations": {
+  "status": 200,
+  "shape": {
+   "conversations": [
+    {
+     "id": "int",
+     "type": "str",
+     "slug": "str",
+     "name": "str",
+     "last_message": "str",
+     "last_at": "str",
+     "unread_count": "int",
+     "color": "str"
+    }
+   ]
+  }
+ },
+ "/api/me/notifications/unread": {
+  "status": 200,
+  "shape": {
+   "chat": "int",
+   "unread": "int"
+  }
+ },
+ "/api/me/blocks": {
+  "status": 200,
+  "shape": {
+   "blocks": []
+  }
+ },
+ "/api/me/follows": {
+  "status": 200,
+  "shape": []
+ },
+ "/api/me/reports/submitted": {
+  "status": 200,
+  "shape": []
+ },
+ "/api/me/reports/received/count": {
+  "status": 200,
+  "shape": {
+   "active": "int",
+   "revision": "int",
+   "to_verify": "int"
+  }
+ },
+ "/api/requests-v2?limit=2": {
+  "status": 200,
+  "shape": {
+   "limit": "int",
+   "page": "int",
+   "topics": [
+    {
+     "id": "int",
+     "title": "str",
+     "excerpt": "str",
+     "status": "str",
+     "score": "int",
+     "my_vote": "int",
+     "comment_count": "int",
+     "user_id": "int",
+     "username": "str",
+     "avatar_url": "str",
+     "created_at": "str",
+     "category_id": "int",
+     "category_slug": "str",
+     "category_name": "str",
+     "external_id": "str",
+     "external_source": "str",
+     "bounty_credits": "int",
+     "admin_bounty_credits": "int",
+     "pool_credits": "int",
+     "claim_count": "int",
+     "claim_cap_reached": "bool",
+     "my_claimed": "bool"
+    }
+   ],
+   "total": "int"
+  }
+ },
+ "/api/polls/active": {
+  "status": 204,
+  "shape": "empty"
+ },
+ "/api/announcements": {
+  "status": 200,
+  "shape": [
+   {
+    "id": "int",
+    "title": "str",
+    "description": "NoneType",
+    "type": "str",
+    "body": "str",
+    "content_type": "str",
+    "link": "NoneType",
+    "author_name": "str",
+    "published_at": "str",
+    "is_read": "bool"
+   }
+  ]
+ },
+ "/api/badges": {
+  "status": 200,
+  "shape": [
+   {
+    "id": "int",
+    "name": "str",
+    "description": "str",
+    "image_url": "str",
+    "family": "str",
+    "is_secret": "bool",
+    "is_auto": "bool",
+    "auto_trigger_type": "str",
+    "power_type": "NoneType",
+    "power_value": "NoneType",
+    "power_title_label": "NoneType",
+    "earned": "bool",
+    "awarded_at": "NoneType"
+   }
+  ]
+ },
+ "/api/teams": {
+  "status": 200,
+  "shape": [
+   {
+    "id": "int",
+    "slug": "str",
+    "name": "str",
+    "tag": "str",
+    "description": "str",
+    "avatar_url": "str",
+    "banner_url": "NoneType",
+    "geometric_shape": "str",
+    "status": "str",
+    "owner_id": "int",
+    "owner_username": "str",
+    "member_count": "int",
+    "reup_policy": "str",
+    "is_internal": "bool",
+    "release_count": "int",
+    "created_at": "str",
+    "updated_at": "str"
+   }
+  ]
+ },
+ "/api/me/favorites/ids": {
+  "status": 200,
+  "shape": {
+   "ids": []
+  }
+ },
+ "/api/suggestions?limit=2": {
+  "status": 200,
+  "shape": {
+   "limit": "int",
+   "page": "int",
+   "topics": [
+    {
+     "id": "int",
+     "title": "str",
+     "excerpt": "str",
+     "status": "str",
+     "score": "int",
+     "my_vote": "int",
+     "comment_count": "int",
+     "user_id": "int",
+     "username": "str",
+     "avatar_url": "str",
+     "created_at": "str",
+     "bounty_credits": "int",
+     "admin_bounty_credits": "int",
+     "pool_credits": "int",
+     "claim_count": "int",
+     "claim_cap_reached": "bool",
+     "my_claimed": "bool"
+    }
+   ],
+   "total": "int"
+  }
+ },
+ "/api/conversations/<channel-id>/messages?limit=1": {
+  "status": 200,
+  "shape": {
+   "has_more": "bool",
+   "messages": [
+    {
+     "id": "int",
+     "sender_id": "int",
+     "sender": "str",
+     "sender_role": "str",
+     "avatar_url": "str",
+     "sender_title": "str",
+     "body": "str",
+     "content_type": "str",
+     "parent": {
+      "at": "str",
+      "id": "int",
+      "body": "str",
+      "sender": "str"
+     },
+     "created_at": "str"
+    }
+   ]
+  }
+ },
+ "/api/requests-v2/<id>": {
+  "status": 200,
+  "shape": "topic row fields plus body:str, bounty_paid:bool"
+ },
+ "/api/requests-v2/<id>/comments?page=1&limit=1": {
+  "status": 200,
+  "shape": {
+   "comments": [
+    {
+     "id": "int",
+     "body": "str",
+     "created_at": "str",
+     "updated_at": "str",
+     "user_id": "int",
+     "username": "str",
+     "avatar_url": "str",
+     "role_color": "str",
+     "role_name": "str",
+     "joined_at": "str",
+     "uploaded": "int",
+     "downloaded": "int",
+     "bonus_upload": "int",
+     "bonus_download": "int",
+     "hide_ratio": "bool"
+    }
+   ],
+   "limit": "int",
+   "page": "int",
+   "total": "int"
+  }
+ },
+ "_notes": {
+  "method": "GET only, session cookie, 23 Nov 2026, field types only",
+  "torrent_comments_row": "not observed populated; row shape assumed same as requests-v2 comments (frontend reads user_id, username, body, created_at, reactions, my_reactions)",
+  "channels_observed_slugs": [
+   "general",
+   "petites-annonces",
+   "aide",
+   "wiki",
+   "migrations",
+   "hors-sujet"
+  ],
+  "channels_message_retention_days": "7-300 per channel",
+  "websocket": "/api/ws, JSON frames; client types msg.send{conv_id,body,parent_id?}, msg.edit{message_id,body}, reaction.add/remove{message_id,emoji}, read; server types msg.received, msg.edited, msg.deleted, msg.deleted_bulk, reaction.updated, chan.cleared, notification, error{message|error}, ping/pong"
+ }
+}

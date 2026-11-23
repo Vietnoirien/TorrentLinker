@@ -38,8 +38,12 @@ A Local Item of which some files, but not all, are content of Indexer torrents i
 A Local Item that no Indexer torrent in the Torrent Client covers, even if a torrent of another tracker does; the kind searched automatically. Explicit compatible discovery also accepts Seeded and Partially Seeded Items.
 _Avoid_: Missing, unseeded
 
+**Tracker**:
+A site TorrentLinker fully supports, with an account, a native API, Upload rules and an economy: c411 and tr4ker (ADR-0025). Each owns one Indexer; discovery screens merge both, account screens pick one.
+_Avoid_: Site, provider, Indexer (when the whole site is meant)
+
 **Indexer**:
-A Torznab endpoint (URL + API key) where Candidates are searched, added by hand or imported from Prowlarr or Jackett; c411 is one of them.
+A Torznab endpoint (URL + API key) where Candidates are searched, added by hand or imported from Prowlarr or Jackett; each Tracker owns one.
 _Avoid_: Tracker (when meaning the search API), site
 
 **Candidate**:
@@ -88,7 +92,7 @@ A new torrent the app creates from an Orphan that no Candidate matches, named an
 _Avoid_: Reupload (c411's term for one kind of Upload), release, post
 
 **Upload Category**:
-The c411 category an Upload is made for (Films & Vidéos, Ebook, Imprimante 3D…); it decides the Upload's rules, name, NFO and description. The Library Folder's Content Kind only proposes one; the user can pick another.
+The Tracker category an Upload is made for (Films & Vidéos, Ebook, Imprimante 3D…); it decides the Upload's rules, name, NFO and description. The Library Folder's Content Kind only proposes one; the user can pick another.
 _Avoid_: Kind (a Content Kind is the Library's notion, not c411's)
 
 **Category Options**:
@@ -96,13 +100,13 @@ The choices c411 asks for beyond the category (language, genre, format…), list
 _Avoid_: Tags, metadata
 
 **Local Draft**:
-An editable Upload snapshot saved in TorrentLinker for review, scoped to one named Torrent Client. It contains the form, file snapshot and category checks. Saving it does not create a torrent or contact c411. Each edit creates a new revision.
+An editable Upload snapshot saved in TorrentLinker for review, scoped to one named Torrent Client, with one or more target Trackers (ADR-0026). It contains the shared file snapshot and, per target, the form and category checks. Saving it does not create a torrent or contact a Tracker. Each edit creates a new revision; one approval covers the revision and its targets, and each target keeps its own send state.
 
 **Local Draft Queue**:
 The persistent collection of Local Drafts. Users review them here before explicitly sending a saved revision to c411. Automated Upload tasks stop here; an agent's send request always needs owner approval. Editing invalidates older send approvals. An uncertain send requires checking c411 before allowing another attempt.
 
 **Draft**:
-An Upload saved on c411 but not yet published; the user reviews and publishes it there.
+An Upload saved on c411 but not yet published; the user reviews and publishes it there. tr4ker has none: its target publishes after a preflight.
 
 **Refusal**:
 A c411 rule a program can check (archives, formats, no file…): while an Orphan breaks one, its Draft cannot be sent to c411. A Local Draft can still be saved for correction.
@@ -146,8 +150,8 @@ The Zen the user currently holds on c411, as reported by their profile; distinct
 The c411 role a user picks, which decides how Zen is paid; Tanker and Swarm Keeper are paid on seeding, Reuploader on uploads.
 
 **Catalogue**:
-The locally stored list of torrents available on an Indexer, with size, seeders and category, that a Plan chooses from.
-For c411, the Catalogue bundled with the app (or, in a build without one, the public Zen Lab snapshot) supplies older entries, and direct c411 metadata takes precedence. A snapshot or paging limit does not establish complete tracker coverage.
+The locally stored list of torrents available on a Tracker, kept apart per Tracker, with size, seeders and category, that a Plan chooses from.
+For c411, the Catalogue bundled with the app (or, in a build without one, the public Zen Lab snapshot) supplies older entries, and direct c411 metadata takes precedence. For tr4ker, it is crawled from `/api/torznab/all`, which includes torrents without seeders; no snapshot ships. A snapshot or paging limit does not establish complete tracker coverage.
 _Avoid_: Database, index
 
 **Plan**:
@@ -158,10 +162,14 @@ _Avoid_: Portfolio, selection
 Where a Plan's torrents are downloaded, set per Indexer category or subcategory (falling back to the category's, then a default); it may lie inside a Library Folder.
 _Avoid_: Save path (qBittorrent's term), download location (Deluge's), destination
 
+**Credits**:
+tr4ker's reward for seeding, spent in its shop on upload volume; its rules are unpublished, so any figure is an estimate from the user's own payouts (ADR-0027), never a Zen Estimate.
+_Avoid_: Zen (c411's), bonus, points
+
 ### Sharing
 
 **Owner**:
-The person whose c411 account, passkey and Torrent Clients TorrentLinker works for; they hold every Permission and cannot be restricted.
+The person whose Tracker accounts, passkeys and Torrent Clients TorrentLinker works for; they hold every Permission and cannot be restricted.
 _Avoid_: Admin, main user, user (when this person is meant)
 
 **Member**:
@@ -203,7 +211,7 @@ The project's own site on `torrentlinker.fr`, run by the project's maintainer: a
 _Avoid_: Community (the tracker's community page in the app), website, portal
 
 **Site Account**:
-A person's account on the Community Site, created only from a Linked App that is signed in to the tracker; one per tracker account.
+A person's account on the Community Site, created only from a Linked App that is signed in to a Tracker; it may link one identity per Tracker.
 _Avoid_: Member (a person on one TorrentLinker server), user
 
 **Linked App**:

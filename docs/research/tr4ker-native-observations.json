@@ -1,0 +1,133 @@
+{
+  "api_key_only_search": {
+    "status": 200,
+    "count": 1
+  },
+  "download_route": {
+    "origin": "https://tr4ker.net",
+    "path": "/api/torrents/big-buck-bunny-2008-vo-2160p-ac3-5-1-x264-adec4311/download",
+    "query_names": [
+      "apikey"
+    ]
+  },
+  "/api/torrents?limit=2": {
+    "status": 200,
+    "schema": {
+      "limit": "int",
+      "page": "int",
+      "torrents": [
+        {
+          "id": "int",
+          "slug": "str",
+          "name": "str",
+          "size_bytes": "int",
+          "file_count": "int",
+          "seeders": "int",
+          "leechers": "int",
+          "times_completed": "int",
+          "poster_url": "NoneType",
+          "year": "NoneType",
+          "is_freeleech": "bool",
+          "is_anonymous": "bool",
+          "tags": [
+            "str"
+          ],
+          "created_at": "str",
+          "synopsis": "NoneType",
+          "tmdb_id": "NoneType",
+          "imdb_id": "NoneType",
+          "tvdb_id": "NoneType",
+          "rawg_id": "NoneType",
+          "season": "NoneType",
+          "episode": "NoneType",
+          "episode_end": "NoneType",
+          "release_type": "NoneType",
+          "parent_cat_id": "int",
+          "parent_cat_slug": "str",
+          "parent_cat_name": "str",
+          "parent_cat_icon": "str",
+          "sub_cat_id": "NoneType",
+          "sub_cat_slug": "NoneType",
+          "sub_cat_name": "NoneType",
+          "sub_cat_icon": "NoneType",
+          "uploader": "str",
+          "uploader_badges": [],
+          "description_snippet": "str",
+          "classic_cover_url": "str",
+          "source": "NoneType"
+        }
+      ],
+      "total": "int",
+      "total_capped": "bool"
+    },
+    "page": 1,
+    "limit": 2,
+    "total": 1001,
+    "total_capped": true
+  },
+  "/api/torrents?limit=2&page=2": {
+    "status": 200,
+    "schema": {
+      "limit": "int",
+      "page": "int",
+      "torrents": [
+        {
+          "id": "int",
+          "slug": "str",
+          "name": "str",
+          "size_bytes": "int",
+          "file_count": "int",
+          "seeders": "int",
+          "leechers": "int",
+          "times_completed": "int",
+          "poster_url": "str",
+          "year": "int",
+          "is_freeleech": "bool",
+          "is_anonymous": "bool",
+          "tags": [
+            "str"
+          ],
+          "created_at": "str",
+          "synopsis": "NoneType",
+          "tmdb_id": "int",
+          "imdb_id": "NoneType",
+          "tvdb_id": "NoneType",
+          "rawg_id": "NoneType",
+          "season": "NoneType",
+          "episode": "NoneType",
+          "episode_end": "NoneType",
+          "release_type": "NoneType",
+          "parent_cat_id": "int",
+          "parent_cat_slug": "str",
+          "parent_cat_name": "str",
+          "parent_cat_icon": "str",
+          "sub_cat_id": "NoneType",
+          "sub_cat_slug": "NoneType",
+          "sub_cat_name": "NoneType",
+          "sub_cat_icon": "NoneType",
+          "uploader": "str",
+          "uploader_badges": [],
+          "description_snippet": "str",
+          "classic_cover_url": "str",
+          "source": "NoneType"
+        }
+      ],
+      "total": "int",
+      "total_capped": "bool"
+    },
+    "page": 2,
+    "limit": 2,
+    "total": 1001,
+    "total_capped": true
+  },
+  "/api/torrents?q=Big%20Buck%20Bunny&limit=2&search_in=title": {
+    "status": 500,
+    "schema": {
+      "error": "str"
+    },
+    "page": null,
+    "limit": null,
+    "total": null,
+    "total_capped": null
+  }
+}

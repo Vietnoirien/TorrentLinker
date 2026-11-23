@@ -1,0 +1,47 @@
+<caps>
+  <server version="1.0" title="TR4KER" strapline="Partager, Oui. Mais pas n importe comment ! " email="" url="https://tr4ker.net" image="" />
+  <limits max="100" default="50" />
+  <registration available="no" open="no" />
+  <searching>
+    <search available="yes" supportedParams="q,cat,limit,offset,apikey" />
+    <tv-search available="yes" supportedParams="q,season,ep,tvdbid,imdbid,cat,limit,offset,apikey" />
+    <movie-search available="yes" supportedParams="q,imdbid,tmdbid,cat,limit,offset,apikey" />
+    <music-search available="yes" supportedParams="q,artist,album,cat,limit,offset,apikey" />
+    <book-search available="yes" supportedParams="q,cat,limit,offset,apikey" />
+  </searching>
+  <categories>
+    <category id="1000" name="PC Games">
+      <subcat id="1010" name="Xbox" />
+      <subcat id="1020" name="Nintendo" />
+      <subcat id="1030" name="PlayStation" />
+    </category>
+    <category id="2000" name="Movies">
+      <subcat id="2010" name="Movies/Foreign" />
+      <subcat id="2040" name="Movies/HD" />
+    </category>
+    <category id="3000" name="Audio">
+      <subcat id="3010" name="Audio/MP3" />
+      <subcat id="3030" name="Audio/Audiobook" />
+      <subcat id="3040" name="Audio/Lossless" />
+    </category>
+    <category id="4000" name="PC">
+      <subcat id="4030" name="PC/Mac" />
+      <subcat id="4070" name="PC/Android" />
+    </category>
+    <category id="5000" name="TV">
+      <subcat id="5040" name="TV/HD" />
+      <subcat id="5060" name="TV/Sport" />
+      <subcat id="5070" name="TV/Anime" />
+    </category>
+    <category id="6000" name="XXX" />
+    <category id="7000" name="Books">
+      <subcat id="7010" name="Books/Mags" />
+      <subcat id="7020" name="Books/eBook" />
+      <subcat id="7030" name="Books/Comics" />
+    </category>
+    <category id="8000" name="Other">
+      <subcat id="8010" name="Other/Misc" />
+    </category>
+  </categories>
+  <tags />
+</caps>

@@ -1,0 +1,218 @@
+{
+  "/api?t=caps": {
+    "status": 200,
+    "content_type": "application/xml; charset=utf-8",
+    "capabilities": "<caps>\n  <server version=\"1.0\" title=\"TR4KER\" strapline=\"Partager, Oui. Mais pas n importe comment ! \" email=\"\" url=\"https://tr4ker.net\" image=\"\" />\n  <limits max=\"100\" default=\"50\" />\n  <registration available=\"no\" open=\"no\" />\n  <searching>\n    <search available=\"yes\" supportedParams=\"q,cat,limit,offset,apikey\" />\n    <tv-search available=\"yes\" supportedParams=\"q,season,ep,tvdbid,imdbid,cat,limit,offset,apikey\" />\n    <movie-search available=\"yes\" supportedParams=\"q,imdbid,tmdbid,cat,limit,offset,apikey\" />\n    <music-search available=\"yes\" supportedParams=\"q,artist,album,cat,limit,offset,apikey\" />\n    <book-search available=\"yes\" supportedParams=\"q,cat,limit,offset,apikey\" />\n  </searching>\n  <categories>\n    <category id=\"1000\" name=\"PC Games\">\n      <subcat id=\"1010\" name=\"Xbox\" />\n      <subcat id=\"1020\" name=\"Nintendo\" />\n      <subcat id=\"1030\" name=\"PlayStation\" />\n    </category>\n    <category id=\"2000\" name=\"Movies\">\n      <subcat id=\"2010\" name=\"Movies/Foreign\" />\n      <subcat id=\"2040\" name=\"Movies/HD\" />\n    </category>\n    <category id=\"3000\" name=\"Audio\">\n      <subcat id=\"3010\" name=\"Audio/MP3\" />\n      <subcat id=\"3030\" name=\"Audio/Audiobook\" />\n      <subcat id=\"3040\" name=\"Audio/Lossless\" />\n    </category>\n    <category id=\"4000\" name=\"PC\">\n      <subcat id=\"4030\" name=\"PC/Mac\" />\n      <subcat id=\"4070\" name=\"PC/Android\" />\n    </category>\n    <category id=\"5000\" name=\"TV\">\n      <subcat id=\"5040\" name=\"TV/HD\" />\n      <subcat id=\"5060\" name=\"TV/Sport\" />\n      <subcat id=\"5070\" name=\"TV/Anime\" />\n    </category>\n    <category id=\"6000\" name=\"XXX\" />\n    <category id=\"7000\" name=\"Books\">\n      <subcat id=\"7010\" name=\"Books/Mags\" />\n      <subcat id=\"7020\" name=\"Books/eBook\" />\n      <subcat id=\"7030\" name=\"Books/Comics\" />\n    </category>\n    <category id=\"8000\" name=\"Other\">\n      <subcat id=\"8010\" name=\"Other/Misc\" />\n    </category>\n  </categories>\n  <tags />\n</caps>"
+  },
+  "/api/torznab/all?t=caps": {
+    "status": 200,
+    "content_type": "application/xml; charset=utf-8",
+    "capabilities": "<caps>\n  <server version=\"1.0\" title=\"TR4KER\" strapline=\"Partager, Oui. Mais pas n importe comment ! \" email=\"\" url=\"https://tr4ker.net\" image=\"\" />\n  <limits max=\"100\" default=\"50\" />\n  <registration available=\"no\" open=\"no\" />\n  <searching>\n    <search available=\"yes\" supportedParams=\"q,cat,limit,offset,apikey\" />\n    <tv-search available=\"yes\" supportedParams=\"q,season,ep,tvdbid,imdbid,cat,limit,offset,apikey\" />\n    <movie-search available=\"yes\" supportedParams=\"q,imdbid,tmdbid,cat,limit,offset,apikey\" />\n    <music-search available=\"yes\" supportedParams=\"q,artist,album,cat,limit,offset,apikey\" />\n    <book-search available=\"yes\" supportedParams=\"q,cat,limit,offset,apikey\" />\n  </searching>\n  <categories>\n    <category id=\"1000\" name=\"PC Games\">\n      <subcat id=\"1010\" name=\"Xbox\" />\n      <subcat id=\"1020\" name=\"Nintendo\" />\n      <subcat id=\"1030\" name=\"PlayStation\" />\n    </category>\n    <category id=\"2000\" name=\"Movies\">\n      <subcat id=\"2010\" name=\"Movies/Foreign\" />\n      <subcat id=\"2040\" name=\"Movies/HD\" />\n    </category>\n    <category id=\"3000\" name=\"Audio\">\n      <subcat id=\"3010\" name=\"Audio/MP3\" />\n      <subcat id=\"3030\" name=\"Audio/Audiobook\" />\n      <subcat id=\"3040\" name=\"Audio/Lossless\" />\n    </category>\n    <category id=\"4000\" name=\"PC\">\n      <subcat id=\"4030\" name=\"PC/Mac\" />\n      <subcat id=\"4070\" name=\"PC/Android\" />\n    </category>\n    <category id=\"5000\" name=\"TV\">\n      <subcat id=\"5040\" name=\"TV/HD\" />\n      <subcat id=\"5060\" name=\"TV/Sport\" />\n      <subcat id=\"5070\" name=\"TV/Anime\" />\n    </category>\n    <category id=\"6000\" name=\"XXX\" />\n    <category id=\"7000\" name=\"Books\">\n      <subcat id=\"7010\" name=\"Books/Mags\" />\n      <subcat id=\"7020\" name=\"Books/eBook\" />\n      <subcat id=\"7030\" name=\"Books/Comics\" />\n    </category>\n    <category id=\"8000\" name=\"Other\">\n      <subcat id=\"8010\" name=\"Other/Misc\" />\n    </category>\n  </categories>\n  <tags />\n</caps>"
+  },
+  "/api/torznab/all?t=search&q=Big+Buck+Bunny&limit=2": {
+    "status": 200,
+    "content_type": "application/xml; charset=utf-8",
+    "root": "rss",
+    "item_count": 2,
+    "item_fields": [
+      "comments",
+      "enclosure",
+      "guid",
+      "link",
+      "pubDate",
+      "title",
+      "{http://torznab.com/schemas/2015/feed}attr"
+    ],
+    "attributes": [
+      {
+        "name": "category",
+        "value": "2000"
+      },
+      {
+        "name": "size",
+        "value": "673223862"
+      },
+      {
+        "name": "seeders",
+        "value": "12"
+      },
+      {
+        "name": "leechers",
+        "value": "0"
+      },
+      {
+        "name": "peers",
+        "value": "12"
+      },
+      {
+        "name": "grabs",
+        "value": "42"
+      },
+      {
+        "name": "infohash",
+        "value": "adec4311a4b102586cf9a21bd6b775001406facb"
+      },
+      {
+        "name": "downloadvolumefactor",
+        "value": "1"
+      },
+      {
+        "name": "uploadvolumefactor",
+        "value": "1"
+      },
+      {
+        "name": "tmdbid",
+        "value": "10378"
+      },
+      {
+        "name": "category",
+        "value": "3000"
+      },
+      {
+        "name": "size",
+        "value": "6740610077"
+      },
+      {
+        "name": "seeders",
+        "value": "2"
+      },
+      {
+        "name": "leechers",
+        "value": "0"
+      },
+      {
+        "name": "peers",
+        "value": "2"
+      },
+      {
+        "name": "grabs",
+        "value": "0"
+      },
+      {
+        "name": "infohash",
+        "value": "7e85a1626db0e3cb53eae3ceaba24e42c9ff9b57"
+      },
+      {
+        "name": "downloadvolumefactor",
+        "value": "1"
+      },
+      {
+        "name": "uploadvolumefactor",
+        "value": "1"
+      }
+    ],
+    "response_attributes": [
+      {
+        "offset": "0",
+        "total": "3"
+      },
+      {
+        "offset": "0",
+        "total": "3"
+      }
+    ]
+  },
+  "/api?t=search&q=Big+Buck+Bunny&limit=2": {
+    "status": 200,
+    "content_type": "application/xml; charset=utf-8",
+    "root": "rss",
+    "item_count": 2,
+    "item_fields": [
+      "comments",
+      "enclosure",
+      "guid",
+      "link",
+      "pubDate",
+      "title",
+      "{http://torznab.com/schemas/2015/feed}attr"
+    ],
+    "attributes": [
+      {
+        "name": "category",
+        "value": "2000"
+      },
+      {
+        "name": "size",
+        "value": "673223862"
+      },
+      {
+        "name": "seeders",
+        "value": "12"
+      },
+      {
+        "name": "leechers",
+        "value": "0"
+      },
+      {
+        "name": "peers",
+        "value": "12"
+      },
+      {
+        "name": "grabs",
+        "value": "42"
+      },
+      {
+        "name": "infohash",
+        "value": "adec4311a4b102586cf9a21bd6b775001406facb"
+      },
+      {
+        "name": "downloadvolumefactor",
+        "value": "1"
+      },
+      {
+        "name": "uploadvolumefactor",
+        "value": "1"
+      },
+      {
+        "name": "tmdbid",
+        "value": "10378"
+      },
+      {
+        "name": "category",
+        "value": "3000"
+      },
+      {
+        "name": "size",
+        "value": "6740610077"
+      },
+      {
+        "name": "seeders",
+        "value": "2"
+      },
+      {
+        "name": "leechers",
+        "value": "0"
+      },
+      {
+        "name": "peers",
+        "value": "2"
+      },
+      {
+        "name": "grabs",
+        "value": "0"
+      },
+      {
+        "name": "infohash",
+        "value": "7e85a1626db0e3cb53eae3ceaba24e42c9ff9b57"
+      },
+      {
+        "name": "downloadvolumefactor",
+        "value": "1"
+      },
+      {
+        "name": "uploadvolumefactor",
+        "value": "1"
+      }
+    ],
+    "response_attributes": [
+      {
+        "offset": "0",
+        "total": "3"
+      },
+      {
+        "offset": "0",
+        "total": "3"
+      }
+    ]
+  }
+}

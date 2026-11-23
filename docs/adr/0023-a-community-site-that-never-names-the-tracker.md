@@ -24,3 +24,7 @@ The site is a separate private repository (`Vietnoirien/torrentlinker-site`): Ne
 ## Consequences
 
 The app gains a link to the Community Site, "Partager" buttons and a Pré-rolls panel in Médias that browses and imports Community Items. The domain's A records move from OVH's shared hosting to the VPS. The publisher stays anonymous as a non-professional (LCEN), the legal notice naming OVH as host; the site needs a privacy policy and account deletion. Backups of the database and videos are pulled nightly to the Owner's PC, since the VPS has little free disk.
+
+## Two Trackers, 2026-11-23
+
+c411 and tr4ker are both Trackers now (ADR-0025). A Linked App signed in to either one can vouch, and it sends a keyed hash of the username for each Tracker. One Site Account can link identities on both Trackers. A ban attaches to every linked identity. The public site still names neither Tracker.

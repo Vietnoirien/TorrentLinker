@@ -1,0 +1,127 @@
+{
+  "observed_on": "2026-11-23",
+  "bundle_url": "https://tr4ker.net/assets/V6OUW5OR.js",
+  "bundle_sha256": "7f92511caca6df485a36219e69e2fd65dda664df106e37a7d12ea8023770b300",
+  "wiki_articles": [
+    {
+      "slug": "configurer-client",
+      "title": "Configurer son client BitTorrent",
+      "updated_at": "2026-05-03T15:16:11Z",
+      "url": "https://tr4ker.net/wiki/configurer-client"
+    },
+    {
+      "slug": "credits",
+      "title": "Les Crédits",
+      "updated_at": "2026-07-22T08:40:20Z",
+      "url": "https://tr4ker.net/wiki/credits"
+    },
+    {
+      "slug": "l-outil-cross-seed",
+      "title": "L'outil cross-seed",
+      "updated_at": "2026-08-21T10:12:47Z",
+      "url": "https://tr4ker.net/wiki/l-outil-cross-seed"
+    },
+    {
+      "slug": "le-cross-seeding",
+      "title": "Le Cross-seeding",
+      "updated_at": "2026-08-19T11:55:21Z",
+      "url": "https://tr4ker.net/wiki/le-cross-seeding"
+    },
+    {
+      "slug": "prowlarr-radarr-sonarr",
+      "title": "Prowlarr, Radarr & Sonarr",
+      "updated_at": "2026-06-12T01:11:12Z",
+      "url": "https://tr4ker.net/wiki/prowlarr-radarr-sonarr"
+    },
+    {
+      "slug": "ratio",
+      "title": "Comprendre le ratio",
+      "updated_at": "2026-05-24T06:56:43Z",
+      "url": "https://tr4ker.net/wiki/ratio"
+    },
+    {
+      "slug": "regles-apps",
+      "title": "Applications",
+      "updated_at": "2026-05-11T13:43:19Z",
+      "url": "https://tr4ker.net/wiki/regles-apps"
+    },
+    {
+      "slug": "regles-audio",
+      "title": "Audio",
+      "updated_at": "2026-05-12T08:55:23Z",
+      "url": "https://tr4ker.net/wiki/regles-audio"
+    },
+    {
+      "slug": "regles-autres",
+      "title": "Autres",
+      "updated_at": "2026-05-11T13:44:26Z",
+      "url": "https://tr4ker.net/wiki/regles-autres"
+    },
+    {
+      "slug": "regles-emulation",
+      "title": "Émulation",
+      "updated_at": "2026-05-11T13:43:59Z",
+      "url": "https://tr4ker.net/wiki/regles-emulation"
+    },
+    {
+      "slug": "regles-films",
+      "title": "Films",
+      "updated_at": "2026-11-12T15:36:59Z",
+      "url": "https://tr4ker.net/wiki/regles-films"
+    },
+    {
+      "slug": "regles-formations",
+      "title": "Formations",
+      "updated_at": "2026-05-11T13:44:10Z",
+      "url": "https://tr4ker.net/wiki/regles-formations"
+    },
+    {
+      "slug": "regles-generales",
+      "title": "Règles générales",
+      "updated_at": "2026-08-20T11:36:01Z",
+      "url": "https://tr4ker.net/wiki/regles-generales"
+    },
+    {
+      "slug": "regles-impression-3d",
+      "title": "Impression 3D",
+      "updated_at": "2026-04-24T13:05:20Z",
+      "url": "https://tr4ker.net/wiki/regles-impression-3d"
+    },
+    {
+      "slug": "regles-jeux",
+      "title": "Jeux Vidéo",
+      "updated_at": "2026-08-17T14:10:07Z",
+      "url": "https://tr4ker.net/wiki/regles-jeux"
+    },
+    {
+      "slug": "regles-livres",
+      "title": "Livres / eBooks",
+      "updated_at": "2026-11-07T17:02:28Z",
+      "url": "https://tr4ker.net/wiki/regles-livres"
+    },
+    {
+      "slug": "regles-porno",
+      "title": "Porno",
+      "updated_at": "2026-05-27T13:14:05Z",
+      "url": "https://tr4ker.net/wiki/regles-porno"
+    },
+    {
+      "slug": "regles-series",
+      "title": "Séries",
+      "updated_at": "2026-09-08T17:27:55Z",
+      "url": "https://tr4ker.net/wiki/regles-series"
+    },
+    {
+      "slug": "regles-upload",
+      "title": "Règles d'upload",
+      "updated_at": "2026-11-13T08:27:31Z",
+      "url": "https://tr4ker.net/wiki/regles-upload"
+    },
+    {
+      "slug": "regles-vo",
+      "title": "VO; Version Originale",
+      "updated_at": "2026-05-11T13:42:35Z",
+      "url": "https://tr4ker.net/wiki/regles-vo"
+    }
+  ]
+}
