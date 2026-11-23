@@ -1,9 +1,12 @@
+import hashlib
 from pathlib import Path
+
+import torf
 
 from torrentlinker.domain import LocalItem
 from torrentlinker.indexer import Candidate
 from torrentlinker.matching import IgnoreList, MatchRules
-from torrentlinker.review import candidate_key, check_candidates
+from torrentlinker.review import candidate_key, check_candidate, check_candidates
 from torrentlinker.store import Store
 
 RULES = MatchRules(0.02, 0.5, IgnoreList.default())
@@ -15,6 +18,29 @@ class NoFetch:
 
     def fetch_torrent(self, candidate: Candidate) -> bytes:
         raise AssertionError(f"fetched {candidate.title}")
+
+
+def test_nonstandard_v1_piece_length_can_be_checked_for_reseed(tmp_path: Path) -> None:
+    from tests.torrents import make_torrent
+
+    file = tmp_path / "Film.mkv"
+    content = b"film" * 2500
+    file.write_bytes(content)
+    item = LocalItem(file, {file.name: len(content)})
+    candidate = Candidate(file.name, len(content), "https://tracker.example/film.torrent")
+    torrent = torf.Torrent.read_stream(make_torrent(file), validate=False)
+    torrent.metainfo["info"]["piece length"] = 3_876_307
+    torrent.metainfo["info"]["pieces"] = hashlib.sha1(content).digest()
+    data = torrent.dump(validate=False)
+
+    class Indexer:
+        def fetch_torrent(self, _: Candidate) -> bytes:
+            return data
+
+    checked = check_candidate(Indexer(), item, candidate, RULES)  # type: ignore[arg-type]
+
+    assert checked.match is not None and checked.match.is_full
+    assert checked.meta is not None and checked.meta.piece_length == 3_876_307
 
 
 def test_rejected_candidates_are_dropped_before_anything_is_fetched(tmp_path: Path) -> None:

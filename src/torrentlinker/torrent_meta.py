@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 from dataclasses import dataclass
 
 import torf
+from torf import _flatbencode
 
 
 @dataclass(frozen=True)
@@ -22,11 +24,50 @@ def read_torrent(data: bytes) -> TorrentMeta:
     files = {"/".join(f.parts): int(f.size) for f in t.files}
     return TorrentMeta(
         name=str(t.name),
-        infohash=str(t.infohash),
+        infohash=_infohash(t, files),
         files=files,
         data=data,
         piece_length=int(t.piece_size),
     )
+
+
+def _infohash(t: torf.Torrent, files: dict[str, int]) -> str:
+    try:
+        return str(t.infohash)
+    except torf.MetainfoError as exc:
+        info = t.metainfo["info"]
+        piece_length = info.get("piece length")
+        if (
+            not isinstance(piece_length, int)
+            or isinstance(piece_length, bool)
+            or piece_length <= 0
+            or info.get("meta version") == 2
+            or str(exc) != f"Invalid metainfo: ['info']['piece length'] is invalid: {piece_length}"
+        ):
+            raise
+
+        # BEP 3 permits a positive v1 piece length that is not a 16 KiB multiple.
+        # torf requires the multiple when validating, so check the original piece
+        # count and validate the other fields with a temporary conforming length.
+        pieces = info.get("pieces")
+        size = sum(files.values())
+        expected_count = (size + piece_length - 1) // piece_length
+        if not isinstance(pieces, bytes) or len(pieces) != expected_count * 20:
+            raise torf.MetainfoError(
+                f"Expected {expected_count} pieces but there are "
+                f"{len(pieces) // 20 if isinstance(pieces, bytes) else 0}"
+            ) from exc
+
+        valid_length = ((piece_length + 16_383) // 16_384) * 16_384
+        info["piece length"] = valid_length
+        info["pieces"] = b"\0" * (20 * ((size + valid_length - 1) // valid_length))
+        try:
+            t.validate()
+        finally:
+            info["piece length"] = piece_length
+            info["pieces"] = pieces
+
+        return hashlib.sha1(_flatbencode.encode(t.convert()[b"info"])).hexdigest()
 
 
 def pieces_inside(meta: TorrentMeta, absent: set[str]) -> list[tuple[int, int]]:
