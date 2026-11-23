@@ -360,7 +360,7 @@ function renderRows(result) {
 }
 function renderSummary(result) {
   $("seeding-total").textContent =
-    `${Number(result.summary.count).toLocaleString("fr-FR")} ${say("torrents seeding", "torrents en partage")} · ≈ ${num(result.summary.daily)} Zen/${say("day", "jour")} (${say("paid", "payés")} ≈ ${result.summary.paid})`;
+    `${num(result.summary.count)} ${say("torrents seeding", "torrents en partage")} · ≈ ${num(result.summary.daily)} Zen/${say("day", "jour")} (${say("paid", "payés")} ≈ ${result.summary.paid})`;
   $("seeding-page").textContent =
     `${result.total ? result.offset + 1 : 0}–${result.offset + result.rows.length} / ${result.total}`;
   $("seeding-jump").max = Math.max(1, Math.ceil(result.total / pageSize));

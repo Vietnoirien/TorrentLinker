@@ -6,7 +6,7 @@ seedingFrame.src = "static/seeding/view.html";
 seedingFrame.style.cssText =
   "width:100%;border:0;display:block";
 $("zen-seeding-panel").append(seedingFrame);
-const seedingHost = { revision: 0, generation: 0, busy: new Set(), error: "" };
+const seedingHost = { revision: 0, generation: 0, busy: new Set(), error: "", count: null };
 const seedingPreferenceKey = (client) =>
   `${location.pathname}:seeding:${client}`;
 function expandedCategories() {
@@ -19,6 +19,8 @@ function expandedCategories() {
   }
 }
 function seedingEnvironment() {
+  if (seedingHost.count != null)
+    $("zen-count").textContent = Number(seedingHost.count).toLocaleString(language);
   const active =
     state.view === "zen" &&
     !$("zen-seeding-panel").hidden &&
@@ -71,7 +73,7 @@ async function loadZenSeeding() {
     else seedingHost.busy.delete(client);
     shellSetSeeding(client, result.summary.daily);
     $("zen-daily").textContent = num(result.summary.daily);
-    $("zen-count").textContent = Number(result.summary.count).toLocaleString("fr-FR");
+    seedingHost.count = result.summary.count;
   } catch (error) {
     if (client !== state.clientId || generation !== seedingHost.generation)
       return;
