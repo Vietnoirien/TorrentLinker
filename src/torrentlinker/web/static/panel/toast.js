@@ -69,6 +69,8 @@ const TLToast = (() => {
       "Des candidats ont été trouvés, mais aucun ne correspond aux fichiers de cet élément.",
     "No candidate found. Try another search.":
       "Aucun candidat trouvé. Cet élément reste orphelin ; relancez la recherche plus tard.",
+    "This torrent is absent or uses another location. Check the Torrent Client.":
+      "Ce torrent est absent du client ou enregistré à un autre emplacement. Vérifiez son dossier dans le client torrent.",
     "Only partial Candidates match this item. Review the missing files.":
       "Seuls des candidats partiels correspondent à cet élément. Vérifiez les fichiers manquants.",
     "A full Candidate matches files inside an archive. Extract and verify it.":
