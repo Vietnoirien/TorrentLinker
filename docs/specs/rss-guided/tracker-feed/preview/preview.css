@@ -1,0 +1,18 @@
+/* Preview chrome only: the toolbar and the #180 marks. Not part of the real view. */
+#preview-bar {
+  position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center;
+  margin: -12px -16px 10px -8px; padding: 6px 12px; background: var(--raised); border-bottom: 1px solid var(--line); font-size: 12px;
+}
+#preview-bar select, #preview-bar button { padding: 3px 8px; font-size: 12px; }
+.pv-switch { display: inline-flex; gap: 4px; align-items: center; }
+.n180 { position: relative; }
+html.show-180 .n180 { outline: 1.5px dashed #e0a100; outline-offset: 2px; }
+html.show-180 .n180::after {
+  content: "#180"; position: absolute; top: -9px; right: 2px; z-index: 2; padding: 0 4px; border-radius: 3px;
+  background: #e0a100; color: #000; font: 700 9px/13px system-ui; pointer-events: none; letter-spacing: .3px;
+}
+html.show-180 th.n180::after { top: -2px; }
+html.show-180 .tracker-badge.n180::after { top: -12px; }
+@media (max-width: 700px) {
+  #preview-bar { margin: -8px -8px 8px -8px; }
+}
