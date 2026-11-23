@@ -847,7 +847,8 @@ class Setup:
             listing = {h.source_id: h for h in self._hub_listing()}
             imported = [i for i in self.settings.indexers if i.source == hub.service]
             renamed, removed = [], []
-            for entry in imported:
+            # An adopted Tracker stays listed as imported but keeps its own address and key.
+            for entry in [i for i in imported if i.id not in TRACKERS]:
                 found = listing.get(entry.source_id)
                 entry.missing = found is None
                 if found is None:

@@ -498,8 +498,8 @@ function adoptCard(offer) {
     element(
       "p",
       say(
-        `“${offer.name}”${offer.source ? `, imported from ${offer.source},` : ""} points to tr4ker. You can take it over here: its API key and the history of its Cross-seeds (${records}) move to tr4ker, and it leaves the Indexers list, so tr4ker is never searched twice.`,
-        `« ${offer.name} »${offer.source ? `, importé de ${offer.source},` : ""} pointe vers tr4ker. Vous pouvez le reprendre ici : sa clé API et l’historique de ses cross-seeds (${records}) passent à tr4ker, et il quitte la liste des indexeurs, pour que tr4ker ne soit jamais cherché deux fois.`,
+        `“${offer.name}”${offer.source ? `, imported from ${offer.source},` : ""} points to tr4ker. You can take it over here: the history of its Cross-seeds (${records}) moves to tr4ker, which then searches its own address with its own API key${offer.needs_key ? " (enter it below; the hub's key is not tr4ker's)" : ""}, and it leaves the Indexers list, so tr4ker is never searched twice.`,
+        `« ${offer.name} »${offer.source ? `, importé de ${offer.source},` : ""} pointe vers tr4ker. Vous pouvez le reprendre ici : l’historique de ses cross-seeds (${records}) passe à tr4ker, qui cherche ensuite à sa propre adresse avec sa propre clé API${offer.needs_key ? " (saisissez-la ci-dessous ; la clé du hub n’est pas celle de tr4ker)" : ""}, et il quitte la liste des indexeurs, pour que tr4ker ne soit jamais cherché deux fois.`,
       ),
     ),
   );
@@ -568,8 +568,8 @@ function tr4kerTab(form) {
     power.append(
       note(
         say(
-          "Indexer taken over: API key and Cross-seed history kept.",
-          "Indexeur repris : clé API et historique des cross-seeds conservés.",
+          "Indexer taken over: Cross-seed history kept; tr4ker searches its own address with its own API key.",
+          "Indexeur repris : historique des cross-seeds conservé ; tr4ker cherche à sa propre adresse avec sa propre clé API.",
         ),
       ),
     );

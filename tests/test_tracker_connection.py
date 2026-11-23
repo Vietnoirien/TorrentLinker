@@ -139,13 +139,20 @@ def test_adopting_an_indexer_keeps_its_key_and_cross_seed_history_and_leaves_one
     add_hand_indexer(setup, monkeypatch)
     workspace = SettingsWorkspace(setup)
     offer = workspace.snapshot()["adoptable"]["tr4ker"]
-    assert offer == {"name": "Tr4ker", "source": "", "url": "https://tr4ker.net/api", "history": 3}
+    assert offer == {
+        "name": "Tr4ker",
+        "source": "",
+        "url": "https://tr4ker.net/api",
+        "history": 3,
+        "needs_key": False,
+    }
     assert workspace.snapshot()["indexer_count"] == 2  # c411 and the one to adopt
     snapshot = workspace.adopt("tr4ker")
     assert snapshot["adoptable"] == {"tr4ker": None}
     assert snapshot["indexer_count"] == 1
     assert snapshot["connections"]["trackers"]["tr4ker"] == {"enabled": True}
     assert [i.id for i in setup.settings.indexers] == ["c411", "tr4ker"]
+    assert setup.settings.indexers[1].url == "https://tr4ker.net/api"
     assert setup.secrets.get("indexer-key-tr4ker") == "OLD-KEY"
     assert setup.secrets.get("indexer-key-ab12cd34") == ""
     assert setup.store.crossseed_count("ab12cd34") == 0
@@ -161,15 +168,16 @@ def test_adopting_an_indexer_keeps_its_key_and_cross_seed_history_and_leaves_one
         workspace.adopt("c411")
 
 
-def test_adoption_refuses_to_replace_a_tr4ker_that_already_has_its_own_key(tmp_path, monkeypatch):
+def test_adoption_keeps_the_key_tr4ker_already_has(tmp_path, monkeypatch):
     _, setup, _, _ = prepared(tmp_path)
     add_hand_indexer(setup, monkeypatch)
     workspace = SettingsWorkspace(setup)
     workspace.save("connections", tr4ker_body(setup, enabled=True, api_key="OWN-KEY"))
-    assert workspace.snapshot()["adoptable"] == {"tr4ker": None}
-    with pytest.raises(ValueError, match="already has its own API key"):
-        workspace.adopt("tr4ker")
+    assert workspace.snapshot()["adoptable"]["tr4ker"]["needs_key"] is False
+    workspace.adopt("tr4ker")
     assert setup.secrets.get("indexer-key-tr4ker") == "OWN-KEY"
+    assert setup.secrets.get("indexer-key-ab12cd34") == ""
+    assert setup.store.crossseed_count("tr4ker") == 3
 
 
 def test_a_prowlarr_resync_does_not_recreate_the_adopted_indexer(tmp_path, monkeypatch):
@@ -198,9 +206,14 @@ def test_a_prowlarr_resync_does_not_recreate_the_adopted_indexer(tmp_path, monke
         assert web.post("/api/indexers/hub", json=entry).status_code == 200
         done = web.post("/api/indexers/hub/import", json={"ids": ["9", "1"]})
         assert sorted(done.json()["added"]) == ["Nebula", "tr4ker"]
-        assert web.get("/api/settings").json()["adoptable"]["tr4ker"]["source"] == "prowlarr"
+        offer = web.get("/api/settings").json()["adoptable"]["tr4ker"]
+        assert offer["source"] == "prowlarr" and offer["needs_key"] is True
         adopted = web.post("/api/settings/adopt/tr4ker", json={})
         assert adopted.status_code == 200, adopted.text
+        # It now searches tr4ker itself; the hub's key is not tr4ker's and does not follow.
+        own = next(i for i in setup.settings.indexers if i.id == "tr4ker")
+        assert own.url == "https://tr4ker.net/api" and own.source == "prowlarr"
+        assert setup.secrets.get("indexer-key-tr4ker") == ""
         assert adopted.json()["adoptable"] == {"tr4ker": None}
         rows = web.get("/api/indexers").json()["indexers"]
         assert [r["id"] for r in rows if r["tracker"] and not r["c411"]] == ["tr4ker"]
@@ -216,6 +229,9 @@ def test_a_prowlarr_resync_does_not_recreate_the_adopted_indexer(tmp_path, monke
             assert synced["new"] == [] and synced["removed"] == []
         ids = [r["id"] for r in web.get("/api/indexers").json()["indexers"]]
         assert ids.count("tr4ker") == 1 and len(ids) == 3
+        own = next(i for i in setup.settings.indexers if i.id == "tr4ker")
+        assert own.url == "https://tr4ker.net/api"  # the re-sync left the Tracker alone
+        assert setup.secrets.get("indexer-key-tr4ker") == ""
         assert "hubkey" not in (config / "settings.json").read_text()
 
 

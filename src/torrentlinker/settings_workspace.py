@@ -425,22 +425,27 @@ class SettingsWorkspace:
         return None
 
     def _adoptable(self, found: Tracker) -> dict[str, Any] | None:
-        """What the Tracker's tab offers to take over, unless the Tracker has its own key."""
+        """What the Tracker's tab offers to take over, so the site is never searched twice."""
         settings = self.setup.settings
         entry = self._adoptable_entry(settings, found)
-        if entry is None or self.setup.secrets.get(found.api_key_secret):
+        if entry is None:
             return None
+        direct = tracker_of_url(entry.url) is found
         return {
             "name": entry.name,
             "source": entry.source,
             "url": entry.url,
             "history": self.setup.store.crossseed_count(entry.id),
+            # A hub import's key is the hub's: the Tracker then needs its own.
+            "needs_key": not direct and not self.setup.secrets.get(found.api_key_secret),
         }
 
     def adopt(self, tracker_id: str) -> dict[str, Any]:
-        """The Tracker takes over its existing Indexer in place: its key and Cross-seed
-        history follow it, it leaves the Indexers list, and an Indexer import still lists it
-        as imported, so a re-sync never creates it again."""
+        """The Tracker takes over its existing Indexer in place: its Cross-seed history
+        follows it, it leaves the Indexers list, and an Indexer import still lists it as
+        imported, so a re-sync never creates it again. It then searches the Tracker's own
+        address with the Tracker's own key; only an Indexer that already pointed at the site
+        lends its key, and only when the Tracker has none (a hub's key never follows)."""
         found = tracker(tracker_id)
         if found.id == C411_ID:
             raise ValueError("c411 is built in.")
@@ -453,12 +458,13 @@ class SettingsWorkspace:
             entry = self._adoptable_entry(draft, found)
             if entry is None:
                 raise ValueError(f"No Indexer of {found.name} to adopt.")
-            if setup.secrets.get(found.api_key_secret):
-                raise ValueError(f"{found.name} already has its own API key.")
             old = entry.id
-            key = setup.secrets.get(Settings.indexer_secret(old))
+            direct = tracker_of_url(entry.url) is found
+            own = setup.secrets.get(found.api_key_secret)
+            key = own or (setup.secrets.get(Settings.indexer_secret(old)) if direct else "")
             draft.indexers[:] = [i for i in draft.indexers if i.id != found.indexer_id]
             entry.id = found.indexer_id
+            entry.url = found.indexer_url
             entry.enabled = True
             root.settings = draft
             try:
