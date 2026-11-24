@@ -1,4 +1,5 @@
-"""The Web shell's api() reports a proxy's HTML error page as a readable error, not a JSON parse error."""
+"""The Web shell's api() reports a proxy's HTML error page as a readable error,
+not a JSON parse error."""
 
 import shutil
 import subprocess
@@ -29,13 +30,16 @@ async function fetch() { return answer; }
 eval(process.argv[1] + `
 (async () => {
   answer = page(502);
-  await assert.rejects(api('torrents'), {message:'The server did not answer (HTTP 502). Try again in a moment.'});
+  await assert.rejects(api('torrents'),
+    {message:'The server did not answer (HTTP 502). Try again in a moment.'});
   answer = page(200);
   await assert.rejects(api('torrents'), /HTTP 200/);
   language = 'fr'; answer = page(504);
-  await assert.rejects(api('torrents'), error => error.message.startsWith('Le serveur n’a pas répondu (HTTP 504)'));
+  await assert.rejects(api('torrents'),
+    error => error.message.startsWith('Le serveur n’a pas répondu (HTTP 504)'));
   language = 'en'; answer = json(409, {detail:'Busy', action:'retry'});
-  await assert.rejects(api('torrents'), error => error.message === 'Busy' && error.action === 'retry');
+  await assert.rejects(api('torrents'),
+    error => error.message === 'Busy' && error.action === 'retry');
   answer = json(401, {detail:'Sign in'});
   await assert.rejects(api('torrents'), /Sign in/);
   assert.equal($('workspace').hidden, true);

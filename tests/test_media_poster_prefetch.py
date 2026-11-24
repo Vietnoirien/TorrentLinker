@@ -55,7 +55,8 @@ def test_the_scan_caches_every_remote_poster_with_both_sizes(tmp_path, monkeypat
     for n in range(2):
         asset = body(media, n)["artwork"]
         assert asset.startswith("asset:")
-        key = asset[6:-4]
+        # The stored poster is a WebP; its variants are named from the stem, not the suffix.
+        key = asset.removeprefix("asset:").rsplit(".", 1)[0]
         for size in media_artwork.WIDTHS:
             assert (folder / "variants" / f"{key}-{size}.webp").is_file()
 

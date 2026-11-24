@@ -1381,26 +1381,47 @@ class MediaLibrary(TrackerRows, AgeRatings):
             "next_offset": offset + limit if offset + limit < total else None,
         }
 
+    def items_revision(self, client_id) -> tuple:
+        """What the items of this library are, cheaply: how many, how much body between them,
+        and the newest modification. `revision` hashes every body, which costs as much as the
+        work this guards; this measures 1.3 ms on a library of 873.
+        """
+        with self.lock:
+            return tuple(
+                self.db.execute(
+                    "SELECT count(*), coalesce(sum(length(body)), 0), coalesce(max(modified), 0) "
+                    "FROM media_items WHERE client=?",
+                    (client_id,),
+                ).fetchone()
+            )
+
     def _built_rows(self, records, client_id, check, who, registered, adult):
         """A row for each of these records, built once and kept for a moment.
 
         One Media page asks for a dozen listings of the same library, differing only in the
         kind, view or genre they then filter by, so every one of them rebuilt a row for every
-        record. They are kept against what they were built from — which records, the folders
-        Settings registers, who is asking, whether availability was checked — and only for
-        ROWS_HELD, because the player writes a position every second and the whole library
-        would otherwise be rebuilt between one listing and the next.
+        record. They are kept against what they were built from: which records, the folders
+        Settings registers, who is asking, whether availability was checked, and what the
+        items of this library are (`items_revision`), so an edited item is classified and
+        filtered on its new body straight away.
 
-        A short window is safe here: every row this listing actually shows is read again
-        below (`checked`), so a stale position or watched mark never reaches the page. Only
-        which rows match a filter, and how many there are, may be a second behind.
+        It is the items alone, not every write this library makes. A scan writes constantly
+        and the player writes a position every second, and keying on all of that voided these
+        rows between one shelf of a page and the next: a Media home asks for twelve, and
+        during a scan every one of them rebuilt the whole library while contending for the
+        lock that scan takes for each of its writes. That is how a page measuring a tenth of
+        a second on its own came to answer in nineteen.
+
+        ROWS_HELD then bounds what the revision misses — a body edited to the same length
+        and modification time — and every row a listing shows is read again below
+        (`checked`), so a stale position or watched mark never reaches the page.
 
         The rows are never changed after this: each step copies what it keeps
         (`{**row, ...}`) and filters into a new list, so handing out the same objects is safe.
         """
         key = (
             tuple(record["id"] for record in records),
-            self.db.total_changes,
+            self.items_revision(client_id),
             frozenset(registered),
             check,
             adult,

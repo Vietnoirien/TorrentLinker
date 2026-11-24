@@ -44,9 +44,10 @@ def test_v1_torrent_with_nonstandard_positive_piece_length_can_be_reseeded(tmp_p
     assert meta.name == file.name
     assert meta.files == {file.name: len(content)}
     assert meta.piece_length == 3_876_307
-    assert meta.infohash == hashlib.sha1(
-        torf._flatbencode.encode(torrent.convert()[b"info"])
-    ).hexdigest()
+    assert (
+        meta.infohash
+        == hashlib.sha1(torf._flatbencode.encode(torrent.convert()[b"info"])).hexdigest()
+    )
 
 
 def test_nonstandard_piece_length_still_requires_consistent_piece_hashes(tmp_path: Path) -> None:

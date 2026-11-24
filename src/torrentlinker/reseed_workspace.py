@@ -55,8 +55,7 @@ def candidate_review_error(candidates: list[dict]) -> str:
     if any(c.get("archive") for c in matches):
         return "An archive matches some files. Review the missing files before extraction."
     if any(
-        c.get("match") == "full"
-        and any(f.get("status") == "ignored" for f in c.get("files", []))
+        c.get("match") == "full" and any(f.get("status") == "ignored" for f in c.get("files", []))
         for c in matches
     ):
         return (
@@ -189,9 +188,7 @@ class ReseedWorkspace:
                 # records still exist, so rebuild the current Local Items before
                 # rejecting every resumed path as unknown.
                 self.library.scan(stop, emit_scan)
-                seeded_paths = {
-                    r["path"] for r in self.library.rows() if r["state"] == "seeded"
-                }
+                seeded_paths = {r["path"] for r in self.library.rows() if r["state"] == "seeded"}
             with ThreadPoolExecutor(max_workers=3, thread_name_prefix="reseed-step") as pool:
                 while True:
                     with self._control_lock:
@@ -446,9 +443,7 @@ class ReseedWorkspace:
                                         stage="candidates" if eligible else "incomplete",
                                         error="Choose one full Candidate."
                                         if eligible
-                                        else (
-                                            candidate_review_error(candidates)
-                                        ),
+                                        else (candidate_review_error(candidates)),
                                     )
                                     result["errors"].append(
                                         {"path": path, "message": record["error"]}
@@ -651,8 +646,7 @@ class ReseedWorkspace:
             ):
                 return False
             if any(
-                os.path.lexists(existing.save_path / relative_path(name))
-                for name in existing.files
+                os.path.lexists(existing.save_path / relative_path(name)) for name in existing.files
             ):
                 return False
         proposed = {**record, "destination": str(destination), "files": files}
@@ -702,9 +696,7 @@ class ReseedWorkspace:
         recovered = bool(
             existing is not None
             and existing.save_path != Path(record["destination"])
-            and self._recover_missing_location(
-                item, checked, record, existing, client, stop, save
-            )
+            and self._recover_missing_location(item, checked, record, existing, client, stop, save)
         )
         if (
             existing is not None

@@ -37,7 +37,9 @@ globalThis.chrome = {{ runtime: {{ sendMessage: async (id, message) => {{
 {PAGE.read_text()}
 await new Promise((resolve) => setImmediate(resolve));
 await new Promise((resolve) => setImmediate(resolve));
-console.log(JSON.stringify({{ status: shownStatus.textContent, install: !shownInstall.hidden, sent }}));
+console.log(JSON.stringify(
+  {{ status: shownStatus.textContent, install: !shownInstall.hidden, sent }}
+));
 """
     out = subprocess.run(
         ["node", "--input-type=module", "-e", script], capture_output=True, text=True, check=True

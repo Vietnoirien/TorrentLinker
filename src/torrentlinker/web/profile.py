@@ -32,7 +32,9 @@ async def companion_request(request: Request, route: str, setup: Setup) -> Respo
             headers={
                 **headers,
                 "Access-Control-Allow-Methods": "POST",
-                "Access-Control-Allow-Headers": "content-type, authorization, x-torrentlinker-companion",
+                "Access-Control-Allow-Headers": (
+                    "content-type, authorization, x-torrentlinker-companion"
+                ),
             },
         )
     if request.method != "POST":
