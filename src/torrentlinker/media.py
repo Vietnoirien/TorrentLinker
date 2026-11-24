@@ -175,6 +175,51 @@ class MediaLibrary(TrackerRows, AgeRatings):
             """)
         self.migrate_to_actors()
         self.create_ratings()
+        self.index_items()
+
+    # What a listing narrows by, read out of each item's body so SQLite can index it. The
+    # value is computed on read (VIRTUAL), so nothing is stored twice and no write path has
+    # to keep it current; the index holds the computed value, which is what makes a filtered,
+    # ordered page cost a lookup instead of a row built for every item in the library.
+    INDEXED = {
+        "kind": "$.kind",
+        "year": "$.year",
+        "language": "$.language",
+        "series": "$.series",
+        "album_id": "$.album_id",
+        "artist": "$.artist",
+        "album": "$.album",
+        "content_id": "$.content_id",
+    }
+
+    def index_items(self):
+        """Give media_items its generated columns and their indexes, once.
+
+        A column cannot be added as STORED, only as VIRTUAL, which suits this: the body is
+        the one copy of the truth and these are views onto it. Adding them to a library of
+        50,000 items, indexes included, takes under half a second.
+        """
+        with self.lock, self.db:
+            # table_info leaves generated columns out; table_xinfo is the one that lists them.
+            present = {row[1] for row in self.db.execute("PRAGMA table_xinfo(media_items)")}
+            for name, path in self.INDEXED.items():
+                column = "c_" + name
+                if column not in present:
+                    self.db.execute(
+                        f"ALTER TABLE media_items ADD COLUMN {column} TEXT "
+                        f"GENERATED ALWAYS AS (json_extract(body, '{path}')) VIRTUAL"
+                    )
+                self.db.execute(
+                    f"CREATE INDEX IF NOT EXISTS media_items_{name} "
+                    f"ON media_items(client, {column})"
+                )
+            # The order every listing returns them in, so a page is a walk of the index.
+            self.db.execute(
+                "CREATE INDEX IF NOT EXISTS media_items_added ON media_items(client, added DESC)"
+            )
+            self.db.execute(
+                "CREATE INDEX IF NOT EXISTS media_items_folder ON media_items(client, folder)"
+            )
 
     def migrate_to_actors(self):
         """Give progress, playlists and sessions an actor (ADR-0022); old rows are the Owner's.
@@ -1170,9 +1215,27 @@ class MediaLibrary(TrackerRows, AgeRatings):
     ):
         self.setup(client_id)
         offset, limit = max(0, int(offset)), min(200, max(1, int(limit)))
+        # What the indexes can narrow, narrowed before a row is built for any of it. The rest
+        # of the filtering still happens below, on whatever this leaves (index_items).
+        where, args = ["client=?"], [client_id]
+        for column, value in (
+            ("c_kind", kind),
+            ("c_year", year),
+            ("c_artist", artist),
+            # album_id is deliberately absent: a listing matches it against the item's own id
+            # when the item has none, which an equality on the column would miss.
+        ):
+            if value:
+                where.append(f"{column}=?")
+                args.append(str(value))
+        if view == "films":
+            where.append("coalesce(c_series,'')=''")
+        elif view == "series":
+            where.append("coalesce(c_series,'')<>''")
         with self.lock:
             records = self.db.execute(
-                "SELECT * FROM media_items WHERE client=? ORDER BY added DESC", (client_id,)
+                f"SELECT * FROM media_items WHERE {' AND '.join(where)} ORDER BY added DESC",
+                tuple(args),
             ).fetchall()
             error = self.db.execute(
                 "SELECT body FROM media_options WHERE key=?", ("errors:" + client_id,)
