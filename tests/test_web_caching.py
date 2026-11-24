@@ -1,4 +1,5 @@
-"""Static files revalidate, text is gzipped, and streams, ranges and downloads stay as they are."""
+"""Bundled assets are kept and their markup revalidates, text is gzipped, and streams,
+ranges and downloads stay as they are."""
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse, Response, StreamingResponse
@@ -6,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from tests.test_media_api import login, media_app, scan
 from tests.test_web_jobs import login as owner_login
-from torrentlinker.web.app import create_app
+from torrentlinker.web.app import STATIC_MAX_AGE, create_app
 from torrentlinker.web.compression import TextGZip
 
 
@@ -15,15 +16,17 @@ def test_static_files_revalidate_and_answer_304(tmp_path):
     with TestClient(app) as browser:
         first = browser.get("/static/app.js")
         assert first.status_code == 200
-        assert first.headers["cache-control"] == "no-cache"
+        # A script may be kept: a panel pulls a dozen, and revalidating each one on every page
+        # load cost a remote shell a round trip per file (STATIC_MAX_AGE).
+        assert first.headers["cache-control"] == f"max-age={STATIC_MAX_AGE}"
         assert first.headers["etag"]
-        assert (
-            "frame-ancestors"
-            in browser.get("/static/shell/view.html").headers["content-security-policy"]
-        )
+        # Its markup still revalidates, so a new build is picked up on the next load.
+        markup = browser.get("/static/shell/view.html")
+        assert markup.headers["cache-control"] == "no-cache"
+        assert "frame-ancestors" in markup.headers["content-security-policy"]
         again = browser.get("/static/app.js", headers={"If-None-Match": first.headers["etag"]})
         assert again.status_code == 304
-        assert again.headers["cache-control"] == "no-cache"
+        assert again.headers["cache-control"] == f"max-age={STATIC_MAX_AGE}"
         assert (
             browser.get("/static/app.js", headers={"If-None-Match": '"other"'}).status_code == 200
         )

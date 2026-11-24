@@ -74,6 +74,11 @@ from torrentlinker.web.setup import (
 )
 from torrentlinker.web.zen_preferences import ZenPreferences
 
+# How long a browser may keep a bundled script, style or image before asking again. Their
+# markup is never cached, so a new build is picked up on the next load; this only bounds how
+# long that build's assets may lag behind it.
+STATIC_MAX_AGE = 600
+
 logger = logging.getLogger(__name__)
 
 
@@ -579,9 +584,16 @@ def create_app(
             # restarts the cookie's too.
             session_cookie(response, *renewed)
         if "cache-control" not in response.headers:
-            # Bundled files revalidate (StaticFiles answers 304 by ETag); the rest is private.
+            # The rest is private and never stored. Bundled files may be kept: a panel pulls a
+            # dozen of them and "no-cache" made the browser revalidate every one on every page
+            # load. That costs nothing over localhost and about 75 ms each over a tunnel, so a
+            # remote shell spent seconds asking whether files it already held had changed.
+            # Their markup still revalidates, so a new build is picked up on the next load and
+            # only its scripts and styles can lag, for at most STATIC_MAX_AGE.
             response.headers["Cache-Control"] = (
-                "no-cache" if route.startswith("/static/") else "no-store"
+                ("no-cache" if route.endswith((".html", ".htm")) else f"max-age={STATIC_MAX_AGE}")
+                if route.startswith("/static/")
+                else "no-store"
             )
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
