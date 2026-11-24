@@ -467,6 +467,7 @@ def test_the_head_box_selects_every_match_and_the_table_scrolls_on(tmp_path):
                 f"Book {i:04}",
                 Path("/data"),
                 state="pausedUP" if i % 4 == 0 else "uploading",
+                category="Ebook" if i % 4 == 1 else "",
             )
             for i in range(1200)
         }
@@ -532,6 +533,21 @@ def test_the_head_box_selects_every_match_and_the_table_scrolls_on(tmp_path):
             expect(panel.locator("#dialog")).not_to_be_visible()
             expect(panel.locator("tbody tr").first).to_contain_text("No torrents match")
             assert sum(t.state == "pausedUP" for t in fake.by_hash.values()) == 0
+
+            # Removing every torrent of a category leaves no such category: the filter goes
+            # back to all categories and the list shows what remains.
+            panel.locator("[data-filter=state]").select_option("")
+            panel.locator("[data-filter=category]").select_option("Ebook")
+            panel.locator("#select-page").check()
+            expect(panel.locator(".status span").first).to_have_text(
+                "All 300 matching torrents selected"
+            )
+            panel.locator("[data-action=remove]").click()
+            expect(panel.locator("#dialog")).to_contain_text("300 torrents")
+            panel.locator("#confirm").click()
+            expect(panel.locator("[data-filter=category]")).to_have_value("")
+            expect(panel.locator("tbody tr")).to_have_count(100)
+            expect(panel.locator(".status small")).to_contain_text("100 of 900 torrents shown")
             browser.close()
     finally:
         server.should_exit = True

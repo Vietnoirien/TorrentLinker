@@ -151,6 +151,17 @@ async function load() {
     const result = await request("list", body);
     if (current !== generation) return;
     snapshot = result;
+    // A category or tag whose last torrent is gone shows as "all" in its list: filter as it
+    // says, or the list stays empty on a value nothing carries any more.
+    const gone = [["category", result.categories], ["tag", result.tags]].filter(
+      ([key, values]) => filters[key] && !values.includes(filters[key]),
+    );
+    if (gone.length) {
+      for (const [key] of gone) filters[key] = "";
+      shown = STEP;
+      pendingReload = true;
+      return;
+    }
     data = result.rows.map(toRow);
     data.forEach((r) => rowCache.set(r.id, r));
     // A ticked head box means every match: when the filters change, so does the selection.
