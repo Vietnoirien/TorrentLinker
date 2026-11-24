@@ -1789,7 +1789,7 @@ class MediaLibrary(TrackerRows, AgeRatings):
                 return False
             try:
                 if isinstance(item, dict):
-                    path = self.tracker_artwork(client_id, item["hash"])
+                    path = self.tracker_artwork(client_id, item["hash"], item.get("entry"))
                 else:
                     path = self.artwork(client_id, item["id"])
                 if path is not None:

@@ -419,25 +419,34 @@ class TrackerRows:
         }
 
     def tracker_entry(self, client_id, infohash: str) -> dict[str, Any]:
+        # Only the suggestions naming this hash are parsed: a scan asks for each poster, and
+        # reading every suggestion each time held Médias for a minute on about 1,200 of them.
         for kind in ("tracker-new", "tracker-upgrade"):
-            for entry in self._tracker_cache(client_id, kind).values():
+            with self.lock:
+                rows = self.db.execute(
+                    "SELECT body FROM media_options WHERE key LIKE ? AND instr(body, ?) > 0",
+                    (f"{kind}:{client_id}:%", infohash),
+                ).fetchall()
+            for (body,) in rows:
+                entry = json.loads(body)
                 for release in entry.get("releases") or []:
                     if release["hash"] == infohash:
                         return {**entry, "release": release}
         raise ValueError("This tracker release is no longer suggested.")
 
     def tracker_poster_entries(self, client_id) -> list[dict[str, Any]]:
-        """New suggestions with a TMDb poster, as `{"hash": ...}`; the scan caches their posters."""
+        """New suggestions with a TMDb poster, as `{"hash": ..., "entry": ...}`; the scan caches
+        their posters from the entry it already read."""
         found = []
         for entry in self._tracker_cache(client_id, "tracker-new").values():
             poster = (entry.get("facts") or {}).get("poster_url") or ""
             if entry.get("releases") and poster.startswith("https://image.tmdb.org/"):
-                found.append({"hash": entry["releases"][0]["hash"]})
+                found.append({"hash": entry["releases"][0]["hash"], "entry": entry})
         return found
 
-    def tracker_artwork(self, client_id, infohash: str):
+    def tracker_artwork(self, client_id, infohash: str, entry: dict[str, Any] | None = None):
         """An upgrade shows the library film's poster; a new film its c411 poster, once."""
-        entry = self.tracker_entry(client_id, infohash)
+        entry = entry if entry is not None else self.tracker_entry(client_id, infohash)
         if entry.get("library_id"):
             return self.artwork(client_id, entry["library_id"])  # type: ignore[attr-defined]
         poster = (entry.get("facts") or {}).get("poster_url") or ""

@@ -313,3 +313,51 @@ def test_download_queues_the_release_and_sends_it_like_search_start(library, mon
     result = library.tracker_download("default", setup_with(folder=tmp_path), infohash)
     assert result["queued"] and result["job"] == "search-send-queue:default"
     assert sent == [("send-queue", [infohash])]
+
+
+def test_a_tracker_poster_is_found_without_reading_every_suggestion(library):
+    # The scan asks for each suggestion's poster. Reading and parsing every saved suggestion
+    # for each one held Médias for a minute on about 1,200 of them.
+    hashes = [f"{i:040x}" for i in range(1200)]
+    for h in hashes:
+        library._tracker_save(
+            "default",
+            "tracker-new",
+            h,
+            {
+                "title": f"Film {h[-4:]}",
+                "facts": {"poster_url": "https://image.tmdb.org/t/p/w500/x.jpg"},
+                "releases": [{"hash": h, "name": f"Film.{h[-4:]}.1080p", "size": 1}],
+                "artwork": "asset:" + "a" * 64 + ".webp",
+            },
+        )
+    reads = []
+    every = library._tracker_cache
+    library._tracker_cache = lambda *args: reads.append(args) or every(*args)
+    entry = library.tracker_entry("default", hashes[700])
+    assert entry["release"]["hash"] == hashes[700]
+    assert entry["title"] == f"Film {hashes[700][-4:]}"
+    assert library.tracker_artwork("default", hashes[3]).name == "a" * 64 + ".webp"
+    with pytest.raises(ValueError, match="no longer suggested"):
+        library.tracker_entry("default", "f" * 40)
+    assert reads == []
+
+
+def test_the_scan_caches_tracker_posters_from_the_suggestions_it_already_read(library):
+    hashes = [f"{i:040x}" for i in range(50)]
+    for h in hashes:
+        library._tracker_save(
+            "default",
+            "tracker-new",
+            h,
+            {
+                "facts": {"poster_url": "https://image.tmdb.org/t/p/w500/x.jpg"},
+                "releases": [{"hash": h, "name": "Film", "size": 1}],
+                "artwork": "asset:" + "b" * 64 + ".webp",
+            },
+        )
+    looked_up = []
+    find = library.tracker_entry
+    library.tracker_entry = lambda *args: looked_up.append(args) or find(*args)
+    library.prefetch_posters("default", threading.Event(), lambda _p: None)
+    assert looked_up == []
