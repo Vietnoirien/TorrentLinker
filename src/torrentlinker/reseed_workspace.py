@@ -54,6 +54,15 @@ def candidate_review_error(candidates: list[dict]) -> str:
         return "A full Candidate matches files inside an archive. Extract and verify it."
     if any(c.get("archive") for c in matches):
         return "An archive matches some files. Review the missing files before extraction."
+    if any(
+        c.get("match") == "full"
+        and any(f.get("status") == "ignored" for f in c.get("files", []))
+        for c in matches
+    ):
+        return (
+            "A Candidate matches all required files, but its torrent also contains "
+            "ignored files. Full verification requires those files."
+        )
     if matches:
         return "Only partial Candidates match this item. Review the missing files."
     return "Candidates were found, but none match this item's files."
@@ -77,7 +86,10 @@ class ReseedWorkspace:
         rows = []
         for row in self.library.rows():
             record = records.get(row["path"], {})
-            if record.get("error") == "Incomplete or archived content needs a separate review.":
+            if record.get("error") in {
+                "Incomplete or archived content needs a separate review.",
+                "Only partial Candidates match this item. Review the missing files.",
+            }:
                 record = {**record, "error": candidate_review_error(record.get("candidates", []))}
             rows.append(
                 {

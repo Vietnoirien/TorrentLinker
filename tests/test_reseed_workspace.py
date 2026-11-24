@@ -89,6 +89,10 @@ def run(board, original, links, action="all", stop=None, report=lambda _: None):
         ([{"match": "none", "archive": False}], "none match this item's files"),
         ([{"match": "partial", "archive": False}], "Only partial Candidates"),
         ([{"match": "full", "archive": True}], "inside an archive"),
+        (
+            [{"match": "full", "archive": False, "files": [{"status": "ignored"}]}],
+            "Full verification requires those files",
+        ),
     ],
 )
 def test_candidate_review_error_describes_the_actual_match(candidates, expected):

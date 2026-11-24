@@ -73,6 +73,8 @@ const TLToast = (() => {
       "Ce torrent est absent du client ou enregistré à un autre emplacement. Vérifiez son dossier dans le client torrent.",
     "Only partial Candidates match this item. Review the missing files.":
       "Seuls des candidats partiels correspondent à cet élément. Vérifiez les fichiers manquants.",
+    "A Candidate matches all required files, but its torrent also contains ignored files. Full verification requires those files.":
+      "Un candidat correspond à tous les fichiers requis, mais son torrent contient aussi des fichiers ignorés. Ces fichiers sont nécessaires pour une vérification complète.",
     "tr4ker provided only a magnet link. A .torrent file is required to verify local files.":
       "tr4ker ne fournit qu’un lien magnet. Le fichier .torrent est nécessaire pour vérifier les fichiers locaux.",
     "A full Candidate matches files inside an archive. Extract and verify it.":
