@@ -55,6 +55,8 @@ def make_library(tmp_path, monkeypatch):
     monkeypatch.setattr(web_library, "start_reseed", start_reseed)
     setup = SimpleNamespace(
         indexer=lambda: object(),
+        # What Reseed searches and downloads through, now that it also looks on tr4ker.
+        reseed_indexer=lambda: object(),
         store=SimpleNamespace(
             rejections=lambda path: {"e" * 40} if path == items["partial"] else {}
         ),
