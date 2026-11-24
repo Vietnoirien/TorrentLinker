@@ -676,6 +676,7 @@ class FeedService:
         unread: bool = False,
         saved: bool = False,
         dismissed: bool = False,
+        include_blocked: bool = False,
     ) -> list[dict[str, Any]]:
         with self.lock:
             rows = self.db.execute(
@@ -693,10 +694,16 @@ class FeedService:
             # blocks is left out of that subscription's inbox; one its preferences cannot
             # judge is kept, since that is what `unknown` is for and only you can settle it.
             # The rows stay in the database, so widening a range shows them again at once.
-            wanted = {
-                row["id"]: Preferences.model_validate(row.get("preferences") or {})
-                for row in self.subscriptions()
-            }
+            # Dispatch alone asks for them all: an entry already pending must be checked again
+            # and refused with its reason when its preferences tighten.
+            wanted = (
+                {}
+                if include_blocked
+                else {
+                    row["id"]: Preferences.model_validate(row.get("preferences") or {})
+                    for row in self.subscriptions()
+                }
+            )
             result = {}
             for row in rows:
                 prefs = wanted.get(row["feed"])

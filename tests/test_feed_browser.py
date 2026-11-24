@@ -648,7 +648,10 @@ def test_rss_genre_chips_rows_and_review_line(tmp_path):
             ).click()
             frame.locator("#feeds-header").get_by_role("button", name="Refresh now").click()
             rows = frame.locator("#feeds-results tbody tr")
-            expect(rows).to_have_count(3)
+            # Horror is required: Drame, known not to be horror, stays out of the inbox, and
+            # Inconnu, whose genre is unknown, stays in it for you to settle.
+            expect(rows).to_have_count(2)
+            expect(rows.filter(has_text="Drame.2160p")).to_have_count(0)
             alien = rows.filter(has_text="Alien.2160p")
             expect(alien.locator(".tracker-badge.genre")).to_have_text(
                 ["Horror", "Science Fiction +1"]
@@ -656,7 +659,7 @@ def test_rss_genre_chips_rows_and_review_line(tmp_path):
             expect(
                 rows.filter(has_text="Inconnu").locator(".tracker-badge.genre.unknown")
             ).to_have_text("genre ?")
-            heights = {round(rows.nth(i).bounding_box()["height"]) for i in range(3)}
+            heights = {round(rows.nth(i).bounding_box()["height"]) for i in range(2)}
             assert len(heights) == 1
             assert not errors
             browser.close()

@@ -367,7 +367,7 @@ class FeedControl:
             return [{"status": "blocked", "reason": "No approved download authority."}]
         eligible = {
             row["infohash"]
-            for row in self.feeds.inbox(feed_id=feed.id)
+            for row in self.feeds.inbox(feed_id=feed.id, include_blocked=True)
             if feed.include_current or not row["baseline"]
         }
         keys = {
