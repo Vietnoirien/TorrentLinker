@@ -15,7 +15,9 @@ pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="Node is ne
 def run(expression: str, remembered: str = ""):
     program = f"""
     const store = {{"torrentlinker.quality": {json.dumps(remembered)}}};
-    globalThis.localStorage = {{getItem: k => store[k] || null, setItem: (k, v) => {{ store[k] = v; }}}};
+    globalThis.localStorage = {{
+      getItem: k => store[k] || null, setItem: (k, v) => {{ store[k] = v; }},
+    }};
     require("vm").runInThisContext(require("fs").readFileSync({json.dumps(str(SCRIPT))}, "utf8"));
     const all = {{qualities: ["original", "360", "480", "720", "1080"]}};
     const limited = {{qualities: ["360", "480", "720"]}};
