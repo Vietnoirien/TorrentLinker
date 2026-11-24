@@ -3,6 +3,23 @@
 const mediaStreams = new WeakMap();
 const mediaPlaybackFacts = new Map();
 let mediaQuality = "original", mediaAudioChoice = 0, mediaSwitching = false;
+// The last quality chosen on this device opens the next film; failing that, the best allowed one.
+const mediaQualityKey = "torrentlinker.quality";
+let mediaQualityChosen = "";
+try { mediaQualityChosen = localStorage.getItem(mediaQualityKey) || ""; } catch { /* nothing remembered */ }
+function mediaQualityRemember(quality) {
+  mediaQualityChosen = quality;
+  try { localStorage.setItem(mediaQualityKey, quality); } catch { /* not remembered */ }
+}
+function mediaQualityStart(facts) {
+  const allowed = facts?.qualities || ["original"];
+  return allowed.includes(mediaQualityChosen) ? mediaQualityChosen : allowed.includes("original") ? "original" : allowed[allowed.length - 1] || "original";
+}
+// The best transcoded quality strictly below `than` (below everything for the original).
+function mediaQualityBelow(facts, than = "original") {
+  const ceiling = than === "original" ? Infinity : Number(than);
+  return (facts?.qualities || []).filter(q => q !== "original" && Number(q) < ceiling).pop() || "";
+}
 function mediaFilmPosition(player) { return (player.currentTime || 0) + Number(player.dataset.streamOffset || 0); }
 function mediaFilmDuration(player) {
   return player.dataset.streamOffset ? Number(mediaItems.get(player.dataset.mediaId)?.duration || mediaPlaybackFacts.get(player.dataset.mediaId)?.duration || 0) : (Number.isFinite(player.duration) && player.duration > 0 ? player.duration : Number(mediaItems.get(player.dataset.mediaId)?.duration || mediaPlaybackFacts.get(player.dataset.mediaId)?.duration || 0));
@@ -18,6 +35,9 @@ function mediaStreamError(player, stream, error) {
   if (stream.abort.signal.aborted || mediaStreams.get(player) !== stream) return;
   stream.abort.abort();
   api(stream.cancel, undefined, "DELETE").catch(() => {});
+  // A start that fails retries one quality lower by itself; only the last failure is shown.
+  const lower = mediaQualityBelow(mediaPlaybackFacts.get(player.dataset.mediaId), mediaQuality);
+  if (lower && !mediaSwitching) { mediaChangeQuality({quality:lower}).catch(() => {}); return; }
   $("media-codec-message").textContent = error.message || say("Compatible playback failed.", "La lecture compatible a échoué.");
   $("media-codec-error").hidden = false;
   mediaPlayerEnvironment();

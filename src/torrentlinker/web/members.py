@@ -31,12 +31,15 @@ class MemberCaps(BaseModel):
 
 
 AgeLimit = Literal["TP", "10", "12", "16", "18"] | None
+MaxQuality = Literal[360, 480, 720, 1080] | None
 
 
 class MediaLimits(BaseModel):
-    """What Médias shows: an Age Rating limit and the visible Library Folders (None: all)."""
+    """What Médias shows: an Age Rating limit, the visible Library Folders (None: all) and the
+    tallest playback, in pixels of height."""
 
     age_limit: AgeLimit = None
+    max_quality: MaxQuality = None
     folders: list[str] | None = Field(default=None, max_length=500)
 
 
@@ -137,10 +140,11 @@ def member_routes(
     def may_limit(editor: Actor, account: str, before: dict, body: MediaLimits) -> None:
         """A manager never widens what Médias shows past their own limits, nor their own."""
         folders = None if body.folders is None else sorted(set(body.folders))
-        if editor.owner or (before.get("age_limit"), before.get("folders")) == (
-            body.age_limit,
-            folders,
-        ):
+        if editor.owner or (
+            before.get("age_limit"),
+            before.get("folders"),
+            before.get("max_quality"),
+        ) == (body.age_limit, folders, body.max_quality):
             return
         if account == editor.account:
             raise PermissionError("Ask another manager to change your own Permissions.")
@@ -151,6 +155,10 @@ def member_routes(
             body.folders is None or not set(body.folders) <= editor.folders
         ):
             raise PermissionError("You cannot show a Library Folder you do not see.")
+        if editor.max_quality is not None and (
+            body.max_quality is None or body.max_quality > editor.max_quality
+        ):
+            raise PermissionError("You cannot allow a higher quality than your own.")
 
     def caps(body: Member, account: str) -> Caps:
         kept = body.caps.assistant_per_day
@@ -204,6 +212,7 @@ def member_routes(
                 note=body.note,
             )
             accounts.set_media_limits(account, body.age_limit, body.folders)
+            accounts.set_max_quality(account, body.max_quality)
             return account, token
 
         account, token = answer(work)
@@ -321,6 +330,7 @@ def member_routes(
             )
             accounts.set_caps(account, caps(body, account))
             accounts.set_media_limits(account, body.age_limit, body.folders)
+            accounts.set_max_quality(account, body.max_quality)
             return account
 
         return current(answer(work))
@@ -349,6 +359,7 @@ def member_routes(
                 )
             accounts.update(account, body.name, body.login, body.proxy_user)
             accounts.set_media_limits(account, body.age_limit, body.folders)
+            accounts.set_max_quality(account, body.max_quality)
             accounts.grant(account, body.permissions)
             accounts.set_caps(account, new_caps)
             if body.password:

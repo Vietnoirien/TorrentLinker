@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 
 from tests.test_members_signin import member, sign_in
 from tests.test_web_jobs import login
+from torrentlinker import media_conversion as conversion
 from torrentlinker.accounts import Accounts, Permission
 from torrentlinker.config import Settings
 from torrentlinker.domain import ContentKind, LibraryFolder
@@ -233,3 +234,95 @@ def test_utilisateurs_sets_the_age_limit_and_folders_within_the_managers_own(ser
     assert browser.post(f"/api/members/{hugo['id']}", json=within).json()["age_limit"] == "12"
     own = {"name": "Max", "login": "max", "permissions": ["films", "manage-members"]}
     assert browser.post(f"/api/members/{manager}", json=own).status_code == 403
+
+
+def facts(height=1080, available=True):
+    """What ffprobe tells about a film, without needing FFmpeg."""
+    return {
+        "available": available,
+        "qualities": ["original", "360", "480", "720", "1080"] if available else ["original"],
+        "audio": [],
+        "duration": 7200.0,
+        "width": height * 16 // 9,
+        "height": height,
+        "hdr": False,
+    }
+
+
+def test_a_maximum_quality_is_stored_with_the_other_media_limits(tmp_path):
+    accounts = Accounts(tmp_path)
+    lea = accounts.create("Léa", "lea", {Permission.FILMS})
+    assert accounts.actor(lea).max_quality is None  # type: ignore[union-attr]
+    accounts.set_max_quality(lea, 720)
+    accounts.set_media_limits(lea, "12", None)  # another limit does not reset it
+    actor = accounts.actor(lea)
+    assert actor is not None and actor.max_quality == 720
+    assert accounts.members()[0]["max_quality"] == 720
+    hugo = accounts.add_viewer(lea, "Hugo", {Permission.FILMS}, 2)
+    viewer = accounts.viewer_actor(lea, hugo)
+    assert viewer is not None and viewer.max_quality == 720
+    accounts.set_max_quality(lea, None)
+    assert accounts.actor(lea).max_quality is None  # type: ignore[union-attr]
+    with pytest.raises(ValueError):
+        accounts.set_max_quality(lea, 900)
+
+
+def test_a_limited_member_cannot_play_above_their_quality(server, monkeypatch):
+    app, browser, ids, _ = server
+    lea = member(app, "lea", Permission.FILMS)
+    app.state.accounts.set_max_quality(lea, 720)
+    current = {"height": 1080}
+    monkeypatch.setattr(
+        "torrentlinker.media_conversion.inspect", lambda path: facts(current["height"])
+    )
+    conversion._height.cache_clear()
+    item = f"/api/media/items/{ids['Vice Versa']}"
+    sign_in(browser, "lea")
+    # Only what the limit allows is offered, the original file included only when it fits.
+    assert browser.get(f"{item}/playback").json()["qualities"] == ["360", "480", "720"]
+    assert browser.get(f"{item}/stream", headers={"Range": "bytes=0-3"}).status_code == 403
+    assert (
+        browser.get(f"{item}/playback/stream?quality=1080&playback_id=test-player").status_code
+        == 403
+    )
+    assert browser.post(f"{item}/preview", json={}).status_code == 403
+    current["height"] = 720
+    conversion._height.cache_clear()  # the height of a file is remembered between requests
+    assert browser.get(f"{item}/playback").json()["qualities"] == ["original", "360", "480", "720"]
+    assert browser.get(f"{item}/stream", headers={"Range": "bytes=0-3"}).status_code == 206
+    # Without FFmpeg a limit cannot be checked, so the original stays closed.
+    monkeypatch.setattr("torrentlinker.media_conversion.inspect", lambda path: facts(0, False))
+    conversion._height.cache_clear()
+    assert browser.get(f"{item}/playback").json()["qualities"] == []
+    assert browser.get(f"{item}/stream", headers={"Range": "bytes=0-3"}).status_code == 403
+    # No limit, and the Owner: everything as before.
+    app.state.accounts.set_max_quality(lea, None)
+    assert browser.get(f"{item}/stream", headers={"Range": "bytes=0-3"}).status_code == 206
+    login(browser)
+    assert browser.get(f"{item}/stream", headers={"Range": "bytes=0-3"}).status_code == 206
+
+
+def test_the_owner_sets_a_member_quality_and_a_manager_cannot_widen_it(server):
+    app, browser, _, _ = server
+    login(browser)
+    body = {
+        "name": "Hugo",
+        "login": "hugo",
+        "password": "hugo-password-long",
+        "permissions": ["films"],
+        "max_quality": 480,
+    }
+    hugo = browser.post("/api/members", json=body).json()
+    assert hugo["max_quality"] == 480
+    assert (
+        browser.post("/api/members", json={**body, "login": "x", "max_quality": 900}).status_code
+        == 422
+    )
+    manager = member(app, "max", Permission.FILMS, Permission.MANAGE_MEMBERS)
+    app.state.accounts.set_max_quality(manager, 720)
+    sign_in(browser, "max")
+    for wider in (None, 1080):
+        response = browser.post(f"/api/members/{hugo['id']}", json={**body, "max_quality": wider})
+        assert response.status_code == 403
+    narrower = browser.post(f"/api/members/{hugo['id']}", json={**body, "max_quality": 360})
+    assert narrower.json()["max_quality"] == 360

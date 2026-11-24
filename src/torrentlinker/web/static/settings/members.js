@@ -94,6 +94,13 @@ const memberAges = () => [
   ["10", say("Under 10", "-10 ans")],
   ["TP", say("All audiences", "Tous publics")],
 ];
+const memberQualities = () => [
+  [null, say("No limit", "Aucune limite")],
+  [1080, "1080p · Full HD"],
+  [720, "720p · HD"],
+  [480, "480p"],
+  [360, "360p"],
+];
 const WATCHING = ["films", "series", "anime", "music", "media-center"];
 // Presets only pre-tick Permissions; nothing remembers which one was used.
 const memberPresets = () => ({
@@ -392,6 +399,14 @@ function memberCard(root, member) {
         "member-tag",
       ),
     );
+  if (member.max_quality)
+    tags.append(
+      element(
+        "span",
+        `${say("Quality", "Qualité")} ${member.max_quality}p`,
+        "member-tag",
+      ),
+    );
   if (member.folders)
     tags.append(
       element(
@@ -571,6 +586,29 @@ function memberEditor(root, draft) {
       ),
     ),
   );
+  const quality = element("label", say("Maximum quality", "Qualité maximale"), "settings-field");
+  const qualities = element("select");
+  // A manager cannot allow a taller playback than their own limit.
+  const ceiling = data.members.find((m) => m.id === data.you)?.max_quality ?? null;
+  for (const [height, label] of memberQualities()) {
+    if (ceiling !== null && (height === null || height > ceiling)) continue;
+    const option = element("option", label);
+    option.value = height ?? "";
+    qualities.append(option);
+  }
+  qualities.value = draft.max_quality ?? "";
+  qualities.disabled = mine;
+  qualities.onchange = () => (draft.max_quality = qualities.value ? Number(qualities.value) : null);
+  quality.append(
+    qualities,
+    element(
+      "small",
+      say(
+        "A Member cannot play above it, the original file included. Their profiles follow it.",
+        "Un membre ne peut pas lire au-dessus, fichier d’origine compris. Ses profils la suivent.",
+      ),
+    ),
+  );
   const folders = element("div", say("Visible folders", "Dossiers visibles"), "settings-field");
   const all = data.library_folders.map((f) => f.path);
   const shown = new Set(draft.folders ?? all);
@@ -582,7 +620,7 @@ function memberEditor(root, draft) {
     });
   if (!data.library_folders.length)
     folders.append(element("small", say("No Library Folder yet.", "Aucun dossier de bibliothèque.")));
-  limits.append(age, folders);
+  limits.append(age, quality, folders);
   watch.append(limits);
   form.append(watch);
 

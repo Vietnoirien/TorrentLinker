@@ -166,8 +166,8 @@ async function mediaPlayerControl(body) {
     if (!Number.isFinite(values[key])) throw Error("Invalid player value.");
     return values[key];
   };
-  if(action === "quality") await mediaChangeQuality({quality:values.quality});
-  else if(action === "audio") await mediaChangeQuality({quality:mediaQuality==="original"?"720":mediaQuality,audio:values.audio});
+  if(action === "quality") { await mediaChangeQuality({quality:values.quality}); mediaQualityRemember(values.quality); }
+  else if(action === "audio") await mediaChangeQuality({quality:mediaQuality==="original"?mediaQualityBelow(mediaPlaybackFacts.get(mediaPlayer().dataset.mediaId)):mediaQuality,audio:values.audio});
   else if(action === "rate") {
     if(![.5,.75,1,1.25,1.5,1.75,2].includes(values.rate))throw Error("Invalid playback speed.");
     player.defaultPlaybackRate=values.rate;player.playbackRate=values.rate;

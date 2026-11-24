@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from torrentlinker.accounts import OWNER_ACTOR, WATCH, Actor, Permission
+from torrentlinker.media import VIDEO
 from torrentlinker.web.permissions import needs
 
 NOT_FOUND = "Media item not found."
@@ -110,6 +111,13 @@ def media_routes(app, agent, assistant):
         if opened is None or opened[2] != found.account:
             raise HTTPException(404, "Preview expired. Select Preview downloaded portion again.")
         return item(request, opened[0], opened[1])
+
+    def limit(request: Request) -> int | None:
+        """The tallest playback this actor may watch; None for no limit."""
+        return actor(request).max_quality
+
+    def too_tall() -> HTTPException:
+        return HTTPException(403, "Your account limits playback quality. Choose a lower quality.")
 
     def watchable(request: Request, media_ids) -> None:
         for identifier in media_ids or ():
@@ -344,6 +352,13 @@ def media_routes(app, agent, assistant):
             raise HTTPException(
                 409, "Media is unavailable or unfinished. Refresh its details."
             ) from error
+        cap = limit(request)
+        if cap is not None and path.suffix.lower() in VIDEO:
+            from torrentlinker.media_conversion import original_height
+
+            height = original_height(path)
+            if height is None or height > cap:
+                raise too_tall()
         # Starlette validates Range and serves 206/416 without loading the file into memory.
         import mimetypes
 
@@ -356,10 +371,10 @@ def media_routes(app, agent, assistant):
     @app.get("/api/media/items/{identifier}/playback")
     @needs(*WATCH)
     def playback_info(identifier: str, request: Request, client_id: str = ""):
-        from torrentlinker.media_conversion import inspect
+        from torrentlinker.media_conversion import inspect, within
 
         chosen = item(request, client_id, identifier)
-        return inspect(media.resolve(chosen, identifier))
+        return within(inspect(media.resolve(chosen, identifier)), limit(request))
 
     @app.get("/api/media/items/{identifier}/playback/stream")
     @needs(*WATCH)
@@ -377,6 +392,9 @@ def media_routes(app, agent, assistant):
         from torrentlinker.media_conversion import PlaybackChoice, inspect
 
         chosen = item(request, client_id, identifier)
+        cap = limit(request)
+        if cap is not None and int(quality) > cap:
+            raise too_tall()
         path = await asyncio.to_thread(media.resolve, chosen, identifier)
         facts = await asyncio.to_thread(inspect, path)
         found = actor(request)
@@ -408,8 +426,11 @@ def media_routes(app, agent, assistant):
     @app.post("/api/media/items/{identifier}/preview")
     @needs(*WATCH)
     def create_preview(identifier: str, body: MediaClient, request: Request):
+        chosen = item(request, body.client_id, identifier)
+        if limit(request) is not None:
+            raise too_tall()  # a preview plays the original file
         return media.create_preview(
-            item(request, body.client_id, identifier),
+            chosen,
             identifier,
             account=actor(request).account,
         )
@@ -425,6 +446,8 @@ def media_routes(app, agent, assistant):
         import mimetypes
         import re
 
+        if limit(request) is not None:
+            raise too_tall()
         chosen = preview(request, client_id, preview_id)
         try:
             path, size = media.preview_source(chosen, preview_id)

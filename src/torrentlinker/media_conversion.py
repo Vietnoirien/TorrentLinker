@@ -6,6 +6,7 @@ can pass FFmpeg switches, output paths or network URLs. Output stays in a pipe.
 
 from __future__ import annotations
 
+import functools
 import io
 import json
 import math
@@ -77,6 +78,36 @@ def inspect(path: Path) -> dict[str, Any]:
         }
     except (OSError, subprocess.SubprocessError, ValueError, KeyError, StopIteration):
         raise ValueError("Cannot inspect this video for compatible playback.") from None
+
+
+@functools.lru_cache(maxsize=512)
+def _height(path: str, modified: int, size: int) -> int | None:
+    try:
+        facts = inspect(Path(path))
+    except ValueError:
+        return None
+    return int(facts["height"]) if facts.get("available") and facts.get("height") else None
+
+
+def original_height(path: Path) -> int | None:
+    """The file's own height; None when it cannot be told (no FFmpeg, unreadable file)."""
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    return _height(str(path), stat.st_mtime_ns, stat.st_size)
+
+
+def within(facts: dict[str, Any], limit: int | None) -> dict[str, Any]:
+    """The playback facts of a Member limited to this height: no quality above it, and the
+    original file only when it fits."""
+    if limit is None:
+        return facts
+    height = int(facts.get("height") or 0)
+    fits = [q for q in facts["qualities"] if q != "original" and int(q) <= limit]
+    if facts.get("available") and 0 < height <= limit:
+        fits.insert(0, "original")
+    return {**facts, "qualities": fits}
 
 
 @dataclass(frozen=True)

@@ -24,6 +24,7 @@ OWNER = "owner"  # the fixed account of the Owner; never restricted, edited or d
 SESSION_IDLE = 30 * 86400  # a Member's session ends after 30 days of disuse
 SCREEN_IDLE = 90 * 86400  # a Shared Screen's after 90 days of disuse
 PICKING = "?"  # the Viewer of a Shared Screen until someone chooses who watches
+QUALITIES = (360, 480, 720, 1080)  # the playback heights a Member can be limited to
 LINK_DAYS = (1, 3, 7)  # an invitation or password link is valid 24 h, 3 or 7 days
 
 
@@ -63,6 +64,7 @@ class Actor:
     # Library Folders by path (None: every folder, those added later included).
     age_limit: int | None = None
     folders: frozenset[str] | None = None
+    max_quality: int | None = None  # the tallest playback, in pixels of height (None: no limit)
     screen: str = ""  # the Shared Screen this actor watches on, if any
 
     @property
@@ -141,6 +143,10 @@ class Accounts:
                     created REAL NOT NULL, expires REAL NOT NULL, used REAL
                 );
             """)
+            if "max_quality" not in {
+                r[1] for r in self.db.execute("PRAGMA table_info(media_limits)")
+            }:
+                self.db.execute("ALTER TABLE media_limits ADD COLUMN max_quality INTEGER")
             self.db.execute(
                 "INSERT OR IGNORE INTO accounts (id, name, created) VALUES (?, 'Owner', ?)",
                 (OWNER, time.time()),
@@ -168,6 +174,7 @@ class Accounts:
             frozenset(Permission(r["permission"]) for r in granted if r["permission"] in known),
             age_limit=age_limit,
             folders=None if folders is None else frozenset(folders),
+            max_quality=self.max_quality(account),
         )
 
     def create(
@@ -464,11 +471,31 @@ class Accounts:
             return None, None
         return row["age_limit"], None if row["folders"] is None else json.loads(row["folders"])
 
+    def max_quality(self, account: str) -> int | None:
+        """The tallest playback, in pixels of height, the account may watch."""
+        with self.lock:
+            row = self.db.execute(
+                "SELECT max_quality FROM media_limits WHERE account=?", (account,)
+            ).fetchone()
+        return None if row is None else row["max_quality"]
+
+    def set_max_quality(self, account: str, height: int | None) -> None:
+        if height is not None and height not in QUALITIES:
+            raise ValueError("Choose 360, 480, 720 or 1080.")
+        with self.lock, self.db:
+            self._member(account)
+            self.db.execute(
+                "INSERT INTO media_limits (account, max_quality) VALUES (?,?) "
+                "ON CONFLICT(account) DO UPDATE SET max_quality=excluded.max_quality",
+                (account, height),
+            )
+
     def _public_limits(self, account: str) -> dict:
         age_limit, folders = self.media_limits(account)
         return {
             "age_limit": None if age_limit is None else age_ratings.SCALE[age_limit],
             "folders": folders,
+            "max_quality": self.max_quality(account),
         }
 
     def set_media_limits(
@@ -482,7 +509,9 @@ class Accounts:
         with self.lock, self.db:
             self._member(account)
             self.db.execute(
-                "INSERT OR REPLACE INTO media_limits VALUES (?,?,?)",
+                "INSERT INTO media_limits (account, age_limit, folders) VALUES (?,?,?) "
+                "ON CONFLICT(account) DO UPDATE SET age_limit=excluded.age_limit, "
+                "folders=excluded.folders",
                 (account, rank, None if chosen is None else json.dumps(chosen)),
             )
             if not adult_allowed(rank):
@@ -825,6 +854,7 @@ class Accounts:
             viewer=viewer,
             age_limit=found["age_limit"],
             folders=base.folders,
+            max_quality=base.max_quality,
             screen=screen,
         )
 

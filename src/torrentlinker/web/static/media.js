@@ -236,6 +236,7 @@ async function mediaLoad(id, position = null, paused = false, preview = null, re
     if (!mediaRequestCurrent(request)) return false;
   }
   mediaAudioChoice=0;
+  if(!preview && row.kind==="video")mediaQuality=mediaQualityStart(mediaPlaybackFacts.get(id));
   const converted=!preview && row.kind==="video" && mediaQuality!=="original" && mediaPlaybackFacts.get(id)?.qualities.includes(mediaQuality);
   if(converted)mediaStreamLoad(player,id,position ?? row.position ?? 0);
   else {player.src = preview ? mediaPreviewURL(preview.preview_id) : mediaURL(id); player.load();}
@@ -269,7 +270,13 @@ async function mediaTryPlay(player = mediaPlayer()) {
   try { await player.play(); return true; }
   catch (error) { if (error.name === "NotAllowedError") mediaStatus("Press Play in the player to continue playback."); else if (error.name !== "AbortError") mediaCodecError(); return false; }
 }
-function mediaCodecError() { if (typeof mediaEnvironment === "function") queueMicrotask(mediaEnvironment); $("media-codec-error").hidden = false; $("media-codec-message").textContent = media.preview ? say("This partial preview cannot play yet. The format may need the missing end of the file, or its codec may be unsupported. Wait for more data and use Refresh preview.", "Cet aperçu partiel ne peut pas encore être lu. Le format peut exiger la fin du fichier ou son codec peut être incompatible. Attendez davantage de données, puis actualisez l’aperçu.") : say("This browser could not play this format. Choose a compatible quality or open the original in an external player.", "Ce navigateur ne peut pas lire ce format. Choisissez une qualité compatible ou ouvrez l’original dans un lecteur externe."); }
+function mediaCodecError() {
+  // The original that this browser cannot play gives way to the best compatible quality, unasked.
+  if (!media.preview && !mediaSwitching && mediaQuality === "original") {
+    const next = mediaQualityBelow(mediaPlaybackFacts.get(mediaPlayer().dataset.mediaId));
+    if (next) { mediaChangeQuality({quality:next}).catch(() => {}); return; }
+  }
+  if (typeof mediaEnvironment === "function") queueMicrotask(mediaEnvironment); $("media-codec-error").hidden = false; $("media-codec-message").textContent = media.preview ? say("This partial preview cannot play yet. The format may need the missing end of the file, or its codec may be unsupported. Wait for more data and use Refresh preview.", "Cet aperçu partiel ne peut pas encore être lu. Le format peut exiger la fin du fichier ou son codec peut être incompatible. Attendez davantage de données, puis actualisez l’aperçu.") : say("This browser could not play this format. Choose a compatible quality or open the original in an external player.", "Ce navigateur ne peut pas lire ce format. Choisissez une qualité compatible ou ouvrez l’original dans un lecteur externe."); }
 async function mediaStart(ids, index = 0) {
   const request = {generation: mediaInvalidatePlayback(), client: mediaClient(), selectedClient: state.clientId, session: null};
   ids = await ids;
