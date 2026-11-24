@@ -419,7 +419,7 @@ class MediaLibrary(TrackerRows, AgeRatings):
             ).fetchone()
         return row["client"] if row else None
 
-    def resolve(self, client_id, identifier):
+    def resolve(self, client_id, identifier, incomplete=None):
         row = self.record(client_id, identifier)
         body = json.loads(row["body"])
         if body.get("incomplete"):
@@ -427,11 +427,23 @@ class MediaLibrary(TrackerRows, AgeRatings):
         path = self.checked_path(client_id, row["path"], row["folder"])
         if not path.is_file() or path.stat().st_size != row["size"] or row["size"] <= 0:
             raise ValueError("This file is missing or has changed. Refresh the media library.")
-        if any(path.is_relative_to(p) for p in self.incomplete_paths(client_id)):
+        unfinished = self.incomplete_paths(client_id) if incomplete is None else incomplete
+        if any(path.is_relative_to(p) for p in unfinished):
             raise UnfinishedMedia("This file is still downloading or awaiting Verification.")
         return path
 
     def incomplete_paths(self, client_id):
+        """Which files belong to a torrent that is not finished, so a listing never offers
+        one to play.
+
+        `resolve` asks for this per item, and a page resolves every row it shows, so one
+        request asked a hundred times or more. It was kept against the identity of the
+        Torrent Client's observed list, which a refresh replaces every fifteen seconds: after
+        each one the next row walked all of the client's torrents again, 30 ms at 11,766 of
+        them, three seconds across a page. A listing therefore builds it once and hands it
+        to every row it resolves (`incomplete`), rather than this being kept for a while: a
+        window here would offer a file that has just started downloading as playable.
+        """
         target = self.agent.for_client(client_id)
         observed = target.observed
         cached = self.observations.get(client_id)
@@ -1143,7 +1155,17 @@ class MediaLibrary(TrackerRows, AgeRatings):
                 continue
         return body
 
-    def row(self, record, *, check=True, account=OWNER, viewer="", progress=UNREAD, rating=UNREAD):
+    def row(
+        self,
+        record,
+        *,
+        check=True,
+        account=OWNER,
+        viewer="",
+        progress=UNREAD,
+        rating=UNREAD,
+        incomplete=None,
+    ):
         body = json.loads(record["body"])
         public = {
             k: v
@@ -1204,7 +1226,7 @@ class MediaLibrary(TrackerRows, AgeRatings):
             )
             return public
         try:
-            self.resolve(record["client"], record["id"])
+            self.resolve(record["client"], record["id"], incomplete)
             public.update(available=True, availability="available", reason="")
         except (ValueError, OSError) as error:
             reason = str(error)
@@ -1355,11 +1377,14 @@ class MediaLibrary(TrackerRows, AgeRatings):
         total = len(rows)
         by_id = {record["id"]: record for record in records}
         page = []
+        # Which files are still downloading, walked once for this page instead of once per row
+        # it shows and once per alternative it tries (incomplete_paths).
+        unfinished = self.incomplete_paths(client_id)
         for row in rows[offset : offset + limit]:
-            checked = self.row(by_id[row["id"]], **who)
+            checked = self.row(by_id[row["id"]], incomplete=unfinished, **who)
             if not checked["available"] and row["kind"] == "video" and not availability:
                 for alternative in releases_by_content[row["content_id"]][:200]:
-                    candidate = self.row(by_id[alternative], **who)
+                    candidate = self.row(by_id[alternative], incomplete=unfinished, **who)
                     if candidate["available"]:
                         checked = candidate
                         break
