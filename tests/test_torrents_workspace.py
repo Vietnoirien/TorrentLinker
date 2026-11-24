@@ -244,3 +244,22 @@ def test_file_review_names_original_indexes_and_rejects_changed_files(operations
     assert files[1]["wanted"] is False
     with pytest.raises(ValueError, match="file indexes"):
         service.request("review", {**payload, "file_indexes": [99]})
+
+
+def test_an_action_takes_every_torrent_the_filters_match(operations):
+    service = workspace(operations)
+    client = operations.setup._client
+    for i in range(1500):
+        h = f"{i:040x}"
+        client.by_hash[h] = Torrent(h, f"Book {i}", Path("/data"), state="uploading")
+    listed = service.request("list", {"limit": 2000})
+    assert len(listed["rows"]) == listed["total"] == 1503
+    items = [{"client_id": r["client_id"], "hash": r["hash"]} for r in listed["rows"]]
+    looked_up = []
+    lookup = client.torrent
+    client.torrent = lambda h, with_files=True: looked_up.append(h) or lookup(h, with_files)
+    review = service.request("review", {"action": "pause", "items": items})
+    assert len(review["rows"]) == 1503
+    result = service.request("apply", {"action": "pause", "items": items, "token": review["token"]})
+    assert [r["outcome"] for r in result["rows"]] == ["sent"] * 1503
+    assert looked_up == []

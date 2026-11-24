@@ -429,7 +429,7 @@ def test_a_slow_list_neither_chains_refreshes_nor_closes_an_open_filter(tmp_path
             lists.clear()
             page.wait_for_timeout(26000)
             assert len(lists) >= 2, lists
-            gaps = [later[0] - earlier[1] for earlier, later in zip(lists, lists[1:])]
+            gaps = [later[0] - earlier[1] for earlier, later in zip(lists, lists[1:], strict=False)]
             assert min(gaps) >= 4, gaps
 
             slow["seconds"] = 0.0
@@ -439,6 +439,95 @@ def test_a_slow_list_neither_chains_refreshes_nor_closes_an_open_filter(tmp_path
             state.evaluate("(e)=>e.dataset.kept='yes'")
             page.wait_for_timeout(6000)
             expect(panel.locator("[data-filter=state][data-kept=yes]")).to_have_count(1)
+            browser.close()
+    finally:
+        server.should_exit = True
+        thread.join(10)
+
+
+def test_the_head_box_selects_every_match_and_the_table_scrolls_on(tmp_path):
+    import uvicorn
+    from playwright.sync_api import expect, sync_playwright
+
+    from tests.fake_qbit import FakeQbit
+    from torrentlinker.domain import Torrent
+    from torrentlinker.web.app import create_app
+
+    class Client(FakeQbit):
+        def check(self):
+            return "fake"
+
+        def folder_settings(self):
+            return []
+
+    fake = Client(
+        by_hash={
+            f"{i:040x}": Torrent(
+                f"{i:040x}",
+                f"Book {i:04}",
+                Path("/data"),
+                state="pausedUP" if i % 4 == 0 else "uploading",
+            )
+            for i in range(1200)
+        }
+    )
+    app = create_app(
+        tmp_path / "config", password="test-password-long", connector=lambda *args: fake
+    )
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    for _ in range(100):
+        if server.started:
+            break
+        time.sleep(0.02)
+    try:
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page(viewport={"width": 1500, "height": 950})
+            page.goto(f"http://127.0.0.1:{port}")
+            page.locator("#login-password").fill("test-password-long")
+            page.locator("#login-form button").click()
+            expect(page.locator("#workspace")).to_be_visible()
+            saved = page.request.post(
+                f"http://127.0.0.1:{port}/api/setup/client",
+                data={"client": "qbittorrent", "host": "http://fake"},
+                headers={"X-TorrentLinker": "1"},
+            )
+            assert saved.ok, saved.text()
+            page.reload()
+            page.frame_locator("#shell-navigation-frame").locator("#language").select_option("en")
+            shell_navigate(page, "torrents")
+            panel = page.frame_locator("#torrents-frame")
+            expect(panel.locator("tbody tr")).to_have_count(100)
+            expect(panel.locator("#prev")).to_have_count(0)
+
+            panel.locator(".table-scroll").evaluate("(e)=>e.scrollTop=e.scrollHeight")
+            expect(panel.locator("tbody tr")).to_have_count(200)
+            expect(panel.locator(".status small")).to_contain_text("200 of 1,200 torrents shown")
+
+            panel.locator("#select-page").check()
+            expect(panel.locator(".status span").first).to_have_text(
+                "All 1,200 matching torrents selected"
+            )
+            panel.locator("[data-filter=state]").select_option("paused")
+            expect(panel.locator(".status span").first).to_have_text(
+                "All 300 matching torrents selected"
+            )
+            panel.locator("tbody [data-select]").first.uncheck()
+            expect(panel.locator(".status span").first).to_have_text("299 selected")
+            expect(panel.locator("#select-page")).not_to_be_checked()
+
+            panel.locator("#select-page").check()
+            panel.locator("[data-action=resume]").click()
+            expect(panel.locator("#dialog")).to_contain_text("300 torrents")
+            panel.locator("#confirm").click()
+            expect(panel.locator("#dialog")).not_to_be_visible()
+            expect(panel.locator("tbody tr").first).to_contain_text("No torrents match")
+            assert sum(t.state == "pausedUP" for t in fake.by_hash.values()) == 0
             browser.close()
     finally:
         server.should_exit = True

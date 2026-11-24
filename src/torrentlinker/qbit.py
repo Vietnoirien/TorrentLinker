@@ -494,6 +494,19 @@ class QbitApi:
     def remove(self, hash: str, *, delete_files: bool = False) -> None:
         self._client.torrents_delete(delete_files=delete_files, torrent_hashes=hash)
 
+    def act_many(self, hashes: list[str], action: str) -> None:
+        """Pause, resume, recheck, remove or delete many torrents in one request."""
+        if action == "pause":
+            self._client.torrents_stop(torrent_hashes=hashes)
+        elif action == "resume":
+            self._client.torrents_start(torrent_hashes=hashes)
+        elif action == "recheck":
+            self._client.torrents_recheck(torrent_hashes=hashes)
+        elif action in {"remove", "delete"}:
+            self._client.torrents_delete(delete_files=action == "delete", torrent_hashes=hashes)
+        else:
+            raise ValueError("Unknown torrent action")
+
     def add_tags(self, hash: str, tags: list[str]) -> None:
         self._client.torrents_add_tags(tags=tags, torrent_hashes=hash)
 

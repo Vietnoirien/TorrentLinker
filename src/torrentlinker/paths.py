@@ -233,6 +233,11 @@ class MappedQbit:
     def add_tags_many(self, hashes: list[str], tags: list[str]) -> None:
         self._inner.add_tags_many(hashes, tags)
 
+    @property
+    def act_many(self) -> Callable[[list[str], str], None] | None:
+        """The client's one-request action on many torrents, when it has one."""
+        return getattr(self._inner, "act_many", None)
+
     def remove_tags(self, hash: str, tags: list[str]) -> None:
         self._inner.remove_tags(hash, tags)
 

@@ -40,7 +40,7 @@ class TorrentQuery(BaseModel):
     ] = "name"
     descending: bool = False
     offset: int = Field(default=0, ge=0)
-    limit: int = Field(default=100, ge=1, le=200)
+    limit: int = Field(default=100, ge=1)
     tracker: str = ""
     state: str = ""
     category: str = ""
@@ -68,6 +68,12 @@ class TorrentInstance(BaseModel):
     client_id: str = Field(min_length=1)
     hash: str = Field(pattern=r"^[a-fA-F0-9]{40}$")
 
+    @field_validator("hash")
+    @classmethod
+    def lower_hash(cls, value: str) -> str:
+        # Client listings name torrents by lower-case hash.
+        return value.lower()
+
 
 class TorrentAction(BaseModel):
     action: Literal[
@@ -83,7 +89,7 @@ class TorrentAction(BaseModel):
         "category",
         "location",
     ]
-    items: list[TorrentInstance] = Field(min_length=1, max_length=1000)
+    items: list[TorrentInstance] = Field(min_length=1)
     file_indexes: list[int] = Field(default_factory=list, max_length=10000)
     download_limit: int = Field(default=0, ge=0)
     upload_limit: int = Field(default=0, ge=0)
@@ -627,15 +633,23 @@ class TorrentWorkspace:
 
     def action(self, operation, body):
         payload = body.model_dump_json(exclude={"token"})
+        # One listing per client answers for every selected torrent: a lookup per torrent
+        # takes minutes on thousands of them.
+        clients: dict[str, tuple] = {}
         identities, rows = [], []
         for item in body.items:
-            target = self.target(item.client_id)
-            identities.append(str(target.setup.snapshot()))
-            torrent = target.setup.client().torrent(item.hash, with_files=False)
+            if item.client_id not in clients:
+                target = self.target(item.client_id)
+                client = target.setup.client()
+                if body.action not in self.capabilities(client):
+                    raise ValueError("This operation is not supported by this Torrent Client.")
+                listed = {t.hash: t for t in client.torrents(with_files=False)}
+                clients[item.client_id] = (target, client, str(target.setup.snapshot()), listed)
+            target, client, identity, listed = clients[item.client_id]
+            identities.append(identity)
+            torrent = listed.get(item.hash)
             if torrent is None:
                 raise ValueError("A selected torrent no longer exists. Refresh the list.")
-            if body.action not in self.capabilities(target.setup.client()):
-                raise ValueError("This operation is not supported by this Torrent Client.")
             rows.append(
                 {
                     "client_id": item.client_id,
@@ -646,7 +660,7 @@ class TorrentWorkspace:
                 }
             )
             if body.action.endswith("_files"):
-                listing = target.setup.client().file_listing(item.hash)
+                listing = client.file_listing(item.hash)
                 indexes = {f.index for f in listing}
                 if not body.file_indexes or not set(body.file_indexes) <= indexes:
                     raise ValueError("Choose existing file indexes.")
@@ -663,40 +677,49 @@ class TorrentWorkspace:
         record = self.pending.pop(body.token, None)
         if record is None or record[0] < time.monotonic() or record[1] != identity:
             raise ValueError("Review and confirm this exact action first.")
-        results, seen = [], set()
+        groups: dict[str, list[str]] = {}
         for item in body.items:
-            key = (item.client_id, item.hash)
-            if key in seen:
-                continue
-            seen.add(key)
-            target = self.target(item.client_id)
-            client = target.setup.client()
+            hashes = groups.setdefault(item.client_id, [])
+            if item.hash not in hashes:
+                hashes.append(item.hash)
+        results = []
+        for client_id, hashes in groups.items():
+            client = self.target(client_id).setup.client()
             if body.action in {"reannounce", "limits", "category", "location"}:
-                # Share the existing Reseed setup lock; never relocate or relabel protected links.
-                from torrentlinker import reseed
-
-                try:
-                    with reseed._LOCK:
-                        torrent = client.torrent(item.hash, with_files=False)
-                        if torrent is None or any(
-                            t.startswith("torrentlinker:link") or t == reseed.VERIFYING
-                            for t in torrent.tags
-                        ):
-                            raise ValueError(
-                                "Protected or missing torrent. Use its Reseed workflow."
-                            )
-                        client.manage_control(item.hash, body.action, body.model_dump())
-                    result = {"hash": item.hash, "outcome": "sent", "detail": ""}
-                except Exception as error:
-                    result = {"hash": item.hash, "outcome": "failed", "detail": safe_error(error)}
+                sent = self.control(client, hashes, body)
             else:
                 if body.action.endswith("_files"):
-                    indexes = {f.index for f in client.file_listing(item.hash)}
-                    if not body.file_indexes or not set(body.file_indexes) <= indexes:
-                        raise ValueError("Choose existing file indexes.")
-                result = asdict(
-                    manage(client, [item.hash], body.action, file_indexes=body.file_indexes)[0]
-                )
-            results.append({**result, "client_id": item.client_id})
-            self.updated.pop(item.client_id, None)
+                    for hash in hashes:
+                        indexes = {f.index for f in client.file_listing(hash)}
+                        if not body.file_indexes or not set(body.file_indexes) <= indexes:
+                            raise ValueError("Choose existing file indexes.")
+                sent = [
+                    asdict(r)
+                    for r in manage(client, hashes, body.action, file_indexes=body.file_indexes)
+                ]
+            results.extend({**r, "client_id": client_id} for r in sent)
+            self.updated.pop(client_id, None)
         return {"rows": results}
+
+    @staticmethod
+    def control(client, hashes, body):
+        """Send a management control to each torrent, never to a protected link."""
+        # Share the existing Reseed setup lock; never relocate or relabel protected links.
+        from torrentlinker import reseed
+
+        rows = []
+        with reseed._LOCK:
+            listed = {t.hash: t for t in client.torrents(with_files=False)}
+            for hash in hashes:
+                try:
+                    torrent = listed.get(hash)
+                    if torrent is None or any(
+                        t.startswith("torrentlinker:link") or t == reseed.VERIFYING
+                        for t in torrent.tags
+                    ):
+                        raise ValueError("Protected or missing torrent. Use its Reseed workflow.")
+                    client.manage_control(hash, body.action, body.model_dump())
+                    rows.append({"hash": hash, "outcome": "sent", "detail": ""})
+                except Exception as error:
+                    rows.append({"hash": hash, "outcome": "failed", "detail": safe_error(error)})
+        return rows

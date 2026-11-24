@@ -198,3 +198,50 @@ def test_all_client_adapters_send_explicit_data_deletion_flag(delete_files):
     client = FakeQbit(by_hash={"a": torrent()})
     MappedQbit(client, PathMapper([])).remove("a", delete_files=delete_files)
     assert client.removed == [("a", delete_files)]
+
+
+def test_many_torrents_are_checked_from_one_listing():
+    class Counting(FakeQbit):
+        lookups = 0
+
+        def torrent(self, hash, with_files=True):
+            self.lookups += 1
+            return super().torrent(hash, with_files)
+
+    hashes = [f"{i:040x}" for i in range(3000)]
+    client = Counting(by_hash={h: torrent(h) for h in hashes})
+    results = manage(client, hashes, "pause")
+    assert [r.outcome for r in results] == ["sent"] * 3000
+    assert client.lookups == 0
+    assert {status(t) for t in client.by_hash.values()} == {"paused"}
+
+
+def test_a_client_that_acts_on_many_torrents_gets_one_call():
+    class Batching(FakeQbit):
+        batches: list = []
+
+        def act_many(self, hashes, action):
+            self.batches.append((action, list(hashes)))
+
+    client = Batching(
+        by_hash={"a": torrent(), "b": torrent("b"), "c": torrent("c", tags=frozenset({VERIFYING}))}
+    )
+    results = manage(client, ["a", "b", "c", "gone"], "remove")
+    assert [r.outcome for r in results] == ["sent", "sent", "verifying", "missing"]
+    assert client.batches == [("remove", ["a", "b"])]
+
+
+def test_qbit_acts_on_many_torrents_in_one_request():
+    from unittest.mock import Mock
+
+    from torrentlinker.paths import MappedQbit, PathMapper
+
+    api = QbitApi("http://127.0.0.1:1", "", "")
+    api._client = Mock()
+    client = MappedQbit(api, PathMapper([]))
+    client.act_many(["a", "b"], "pause")
+    api._client.torrents_stop.assert_called_once_with(torrent_hashes=["a", "b"])
+    client.act_many(["a", "b"], "delete")
+    api._client.torrents_delete.assert_called_once_with(
+        delete_files=True, torrent_hashes=["a", "b"]
+    )

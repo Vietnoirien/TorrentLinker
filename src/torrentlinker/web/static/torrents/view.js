@@ -1,4 +1,5 @@
 let queryTimer;
+const STEP = 100;
 const sizeUnits = { sizeMin: "GiB", sizeMax: "GiB" };
 const $ = (id) => document.getElementById(id),
   q = new URLSearchParams(location.search);
@@ -6,7 +7,9 @@ let lang = "en",
   mode = q.get("mode") || "desktop",
   theme = q.get("theme") || "dark",
   scenario = "loading",
-  page = 0,
+  shown = 100, // rows loaded so far; scrolling loads STEP more
+  allMatching = false, // the head box is ticked: the selection is every match
+  allSignature = "",
   focus = "",
   tab = "summary",
   selected = new Set(),
@@ -81,6 +84,10 @@ function metricControls() {
   return TLTorrentFilters.metrics({ metrics, sizeUnits, language: lang });
 }
 
+const count = (n) => n.toLocaleString(lang === "fr" ? "fr-FR" : "en-US");
+// The head box is ticked only while the selection is every torrent the filters match.
+const everyMatch = () => allMatching && snapshot.total > 0 && selected.size === snapshot.total;
+
 function stateText(s) {
   return {
     seeding: t("En partage", "Seeding"),
@@ -123,9 +130,9 @@ function paint() {
             )
             .join("")}</div>`
         : ""
-    }<div class="toolbar"><button id="columns">${t("Colonnes", "Columns")}</button><button id="refresh">${t("Actualiser", "Refresh")}</button><button id="tracker-updates">${t("Trackers c411…", "c411 trackers…")}</button><button id="audit-history">${t("Audit c411", "c411 audit")}</button><button id="transfer-history">${t("Transferts", "Transfers")}</button><button id="trackers">${t("Vue par tracker", "Group by tracker")}</button><span class="muted">${t("Actualisation toutes les 5 s · sélection conservée", "Refresh every 5 s · selection preserved")}</span></div><div class="workspace"><section class="panel">${TLTorrentFilters.controls({ query, filters, language: lang, options: { state: ["seeding", "downloading", "paused", "checking", "error", "other"], category: snapshot.categories, tracker: snapshot.trackers, tag: snapshot.tags } })}${metricControls()}<div class="status"><span>${selected.size} ${t("sélectionné(s)", "selected")}</span><div class="toolbar"><button data-action="resume" ${selected.size ? "" : "disabled"}>${t("Reprendre", "Resume")}</button><button data-action="pause" ${selected.size ? "" : "disabled"}>${t("Suspendre", "Pause")}</button><button id="transfer-selection" ${selected.size ? "" : "disabled"}>${t("Transférer…", "Transfer…")}</button><button id="more-actions" ${selected.size ? "" : "disabled"}>${t("Plus…", "More…")}</button><button data-action="remove" ${selected.size ? "" : "disabled"}>${t("Retirer…", "Remove…")}</button></div></div>${
+    }<div class="toolbar"><button id="columns">${t("Colonnes", "Columns")}</button><button id="refresh">${t("Actualiser", "Refresh")}</button><button id="tracker-updates">${t("Trackers c411…", "c411 trackers…")}</button><button id="audit-history">${t("Audit c411", "c411 audit")}</button><button id="transfer-history">${t("Transferts", "Transfers")}</button><button id="trackers">${t("Vue par tracker", "Group by tracker")}</button><span class="muted">${t("Actualisation toutes les 5 s · sélection conservée", "Refresh every 5 s · selection preserved")}</span></div><div class="workspace"><section class="panel">${TLTorrentFilters.controls({ query, filters, language: lang, options: { state: ["seeding", "downloading", "paused", "checking", "error", "other"], category: snapshot.categories, tracker: snapshot.trackers, tag: snapshot.tags } })}${metricControls()}<div class="status"><span>${everyMatch() ? t(`Les ${count(snapshot.total)} torrents correspondants sont sélectionnés`, `All ${count(snapshot.total)} matching torrents selected`) : `${count(selected.size)} ${t("sélectionné(s)", "selected")}`}</span><div class="toolbar"><button data-action="resume" ${selected.size ? "" : "disabled"}>${t("Reprendre", "Resume")}</button><button data-action="pause" ${selected.size ? "" : "disabled"}>${t("Suspendre", "Pause")}</button><button id="transfer-selection" ${selected.size ? "" : "disabled"}>${t("Transférer…", "Transfer…")}</button><button id="more-actions" ${selected.size ? "" : "disabled"}>${t("Plus…", "More…")}</button><button data-action="remove" ${selected.size ? "" : "disabled"}>${t("Retirer…", "Remove…")}</button></div></div>${
       scenario === "normal"
-        ? `<div class="table-scroll"><table class="torrent-list"><thead><tr><th><input type="checkbox" id="select-page" aria-label="${t("Sélectionner la page", "Select page")}" ${slice.length && slice.every((r) => selected.has(r.id)) ? "checked" : ""}></th>${sortHeader("name", t("Torrent / état", "Torrent / state"))}${Object.entries(
+        ? `<div class="table-scroll"><table class="torrent-list"><thead><tr><th><input type="checkbox" id="select-page" aria-label="${t(`Tout sélectionner (${count(snapshot.total)})`, `Select all (${count(snapshot.total)})`)}" title="${t(`Tout sélectionner (${count(snapshot.total)})`, `Select all (${count(snapshot.total)})`)}" ${everyMatch() ? "checked" : ""}></th>${sortHeader("name", t("Torrent / état", "Torrent / state"))}${Object.entries(
             cols,
           )
             .filter(([, v]) => v)
@@ -147,7 +154,7 @@ function paint() {
             )
             .join("")}</tbody></table></div>`
         : `<div class="empty">${{ empty: t("Aucun torrent pour ces filtres.", "No torrents match these filters."), loading: t("Chargement des torrents…", "Loading torrents…"), error: escape(TLToast.translate(lastError)) }[scenario]}${scenario === "error" ? `<p><button id="retry">${t("Réessayer", "Retry")}</button></p>` : ""}</div>`
-    }<div class="status"><small>${snapshot.total.toLocaleString()} torrents · ${t("100 lignes par page", "100 rows per page")}</small><div><button id="prev" ${page ? "" : "disabled"}>←</button> ${page + 1} / ${Math.max(1, Math.ceil(snapshot.total / 100))} <button id="next" ${(page + 1) * 100 >= snapshot.total ? "disabled" : ""}>→</button></div></div></section><section class="panel inspector" id="inspector"></section></div>`;
+    }<div class="status"><small>${data.length < snapshot.total ? t(`${count(data.length)} sur ${count(snapshot.total)} torrents affichés · la suite se charge au défilement`, `${count(data.length)} of ${count(snapshot.total)} torrents shown · more load as you scroll`) : t(`${count(snapshot.total)} torrents, tous affichés`, `All ${count(snapshot.total)} torrents shown`)}</small></div></section><section class="panel inspector" id="inspector"></section></div>`;
   bind();
   inspect();
 }
@@ -305,7 +312,7 @@ function bind() {
       (b.onclick = () => {
         sortDir = sortKey === b.dataset.sort ? -sortDir : 1;
         sortKey = b.dataset.sort;
-        page = 0;
+        shown = STEP;
         guard(load);
       }),
   );
@@ -313,7 +320,7 @@ function bind() {
     (e) =>
       (e.onchange = () => {
         metrics[e.dataset.metric] = e.value;
-        page = 0;
+        shown = STEP;
         guard(load);
       }),
   );
@@ -326,7 +333,7 @@ function bind() {
       sizeUnits[key] = toMiB ? "MiB" : "GiB";
       metrics[key] =
         value === "" ? "" : String(Number(value) * (toMiB ? 1024 : 1 / 1024));
-      page = 0;
+      shown = STEP;
       render();
       guard(load);
     };
@@ -336,7 +343,7 @@ function bind() {
     Object.keys(filters).forEach((k) => (filters[k] = ""));
     query = "";
     hashes = [];
-    page = 0;
+    shown = STEP;
     guard(load);
   };
   $("more-actions").onclick = moreActions;
@@ -345,7 +352,7 @@ function bind() {
   $("query").oninput = (e) => {
     query = e.target.value;
     hashes = [];
-    page = 0;
+    shown = STEP;
     clearTimeout(queryTimer);
     queryTimer = setTimeout(() => guard(load), 200);
   };
@@ -353,7 +360,7 @@ function bind() {
     (s) =>
       (s.onchange = () => {
         filters[s.dataset.filter] = s.value;
-        page = 0;
+        shown = STEP;
         guard(load);
       }),
   );
@@ -364,30 +371,36 @@ function bind() {
         render();
       }),
   );
+  // One row ticked or unticked by hand makes the selection a plain list again.
   document.querySelectorAll("[data-select]").forEach(
     (c) =>
       (c.onchange = () => {
+        allMatching = false;
         c.checked
           ? selected.add(c.dataset.select)
           : selected.delete(c.dataset.select);
         render();
       }),
   );
-  $("select-page") &&
-    ($("select-page").onchange = (e) => {
-      matching().forEach((r) =>
-        e.target.checked ? selected.add(r.id) : selected.delete(r.id),
-      );
-      render();
-    });
-  $("prev").onclick = () => {
-    page--;
-    guard(load);
-  };
-  $("next").onclick = () => {
-    page++;
-    guard(load);
-  };
+  const head = $("select-page");
+  if (head) {
+    head.indeterminate = !head.checked && selected.size > 0;
+    head.onchange = () =>
+      guard(async () => {
+        if (head.checked) await selectAll();
+        else {
+          selected.clear();
+          allMatching = false;
+        }
+        render();
+      });
+  }
+  const scroller = document.querySelector(".table-scroll");
+  if (scroller)
+    scroller.onscroll = () => {
+      if (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 400)
+        guard(loadMore);
+    };
   $("retry") &&
     ($("retry").onclick = () => {
       guard(load);
@@ -464,16 +477,28 @@ async function confirmAction(
         });
         d.close();
         selected.clear();
+        allMatching = false;
         await load();
-        notify(
-          result.rows
-            .map(
-              (r) =>
-                `${chosen.find((c) => c.raw.client_id === r.client_id && c.raw.hash === r.hash)?.name || r.hash}: ${{ failed: t("Échec", "Failed"), missing: t("Torrent absent", "Torrent no longer present"), verifying: t("Ignoré : vérification en cours", "Skipped: verification in progress"), sent: t("Envoyé", "Sent") }[r.outcome] || r.outcome}${r.detail ? " · " + r.detail : ""}`,
-            )
-            .join(" · "),
-          "ok",
-        );
+        const names = new Map(chosen.map((c) => [`${c.raw.client_id}:${c.raw.hash}`, c.name])),
+          outcomes = { failed: t("Échec", "Failed"), missing: t("Torrent absent", "Torrent no longer present"), verifying: t("Ignoré : vérification en cours", "Skipped: verification in progress"), sent: t("Envoyé", "Sent") },
+          line = (r) => `${names.get(`${r.client_id}:${r.hash}`) || r.hash}: ${outcomes[r.outcome] || r.outcome}${r.detail ? " · " + r.detail : ""}`;
+        // A few torrents are named one by one; thousands are counted, naming only the ones not sent.
+        if (result.rows.length <= 10) notify(result.rows.map(line).join(" · "), "ok");
+        else {
+          const tally = {};
+          for (const r of result.rows) tally[r.outcome] = (tally[r.outcome] || 0) + 1;
+          const unsent = result.rows.filter((r) => r.outcome !== "sent");
+          notify(
+            [
+              Object.entries(tally).map(([o, n]) => `${outcomes[o] || o}${t(" :", ":")} ${count(n)}`).join(" · "),
+              ...unsent.slice(0, 5).map(line),
+              unsent.length > 5 ? t(`… et ${count(unsent.length - 5)} autres`, `… and ${count(unsent.length - 5)} more`) : "",
+            ]
+              .filter(Boolean)
+              .join(" · "),
+            unsent.length ? "bad" : "ok",
+          );
+        }
       } catch (error) {
         d.close();
         throw error;

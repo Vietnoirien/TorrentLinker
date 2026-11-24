@@ -155,34 +155,33 @@ def manage(
         for result in refused:
             progress(result)
         return refused
-    results = []
-    for hash in dict.fromkeys(hashes):
-        name = hash
-        try:
-            with reseed._LOCK:
-                torrent = client.torrent(hash, with_files=False)
-                if torrent is None:
-                    result = ActionResult(hash, name, "missing")
-                elif reseed.VERIFYING in torrent.tags or (
-                    "torrentlinker:link-checking" in torrent.tags and action != "remove"
-                ):
-                    result = ActionResult(hash, torrent.name, "verifying")
-                elif "torrentlinker:links" in torrent.tags and action in {"delete", "want_files"}:
-                    result = ActionResult(
-                        hash,
-                        torrent.name,
-                        "failed",
-                        "This torrent uses links to original files. "
-                        "Remove it without deleting data.",
-                    )
-                elif (
-                    "torrentlinker:links" in torrent.tags
-                    and action == "resume"
-                    and (torrent.progress < 1 or torrent.state in reseed.CHECKING_STATES)
-                ):
-                    result = ActionResult(hash, torrent.name, "verifying")
-                else:
+    unique = list(dict.fromkeys(hashes))
+    # A large selection is checked from one listing and, where the client can, sent in one
+    # request: a lookup and a request per torrent take minutes on thousands of torrents.
+    many = len(unique) > 1
+    batch = getattr(client, "act_many", None) if many and not action.endswith("_files") else None
+    results: dict[str, ActionResult] = {}
+
+    def settle(result: ActionResult) -> None:
+        results[result.hash] = result
+        progress(result)
+
+    with reseed._LOCK:
+        listed = {t.hash: t for t in client.torrents(with_files=False)} if many else {}
+        ready: list[Torrent] = []
+        for hash in unique:
+            name = hash
+            try:
+                torrent = listed.get(hash) if many else client.torrent(hash, with_files=False)
+                if torrent is not None:
                     name = torrent.name
+                if torrent is None:
+                    settle(ActionResult(hash, name, "missing"))
+                elif (reason := withheld(torrent, action)) is not None:
+                    settle(reason)
+                elif batch is not None:
+                    ready.append(torrent)
+                else:
                     if action.endswith("_files"):
                         client.set_file_priority(
                             hash, list(file_indexes), 0 if action == "skip_files" else 1
@@ -191,9 +190,38 @@ def manage(
                         client.remove(hash, delete_files=True)
                     else:
                         getattr(client, action)(hash)
-                    result = ActionResult(hash, name, "sent")
-        except Exception as error:
-            result = ActionResult(hash, name, "failed", safe_error(error))
-        results.append(result)
-        progress(result)
-    return results
+                    settle(ActionResult(hash, name, "sent"))
+            except Exception as error:
+                settle(ActionResult(hash, name, "failed", safe_error(error)))
+        if ready and batch is not None:
+            try:
+                batch([t.hash for t in ready], action)
+                outcome, detail = "sent", ""
+            except Exception as error:
+                outcome, detail = "failed", safe_error(error)
+            for t in ready:
+                settle(ActionResult(t.hash, t.name, outcome, detail))
+    return [results[hash] for hash in unique]
+
+
+def withheld(torrent: Torrent, action: str) -> ActionResult | None:
+    """Why this torrent must not take this action now, or None."""
+    hash = torrent.hash
+    if reseed.VERIFYING in torrent.tags or (
+        "torrentlinker:link-checking" in torrent.tags and action != "remove"
+    ):
+        return ActionResult(hash, torrent.name, "verifying")
+    if "torrentlinker:links" in torrent.tags and action in {"delete", "want_files"}:
+        return ActionResult(
+            hash,
+            torrent.name,
+            "failed",
+            "This torrent uses links to original files. Remove it without deleting data.",
+        )
+    if (
+        "torrentlinker:links" in torrent.tags
+        and action == "resume"
+        and (torrent.progress < 1 or torrent.state in reseed.CHECKING_STATES)
+    ):
+        return ActionResult(hash, torrent.name, "verifying")
+    return None

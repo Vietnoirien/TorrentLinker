@@ -87,6 +87,58 @@ function applyWidths() {
     th.append(grip);
   });
 }
+// What the filters and the order ask the client for.
+function listBody() {
+  const keys = { client: "client_name", down: "download", up: "upload" };
+  const body = {
+    client_id: client,
+    q: query,
+    ...(hashes.length ? { hashes } : {}),
+    sort: keys[sortKey] || sortKey,
+    descending: sortDir < 0,
+    ...filters,
+  };
+  for (const [local, remote] of Object.entries({
+    scope: "scope",
+    sizeMin: "size_min",
+    sizeMax: "size_max",
+    noteMin: "note_min",
+    zenMin: "zen_min",
+    weightMin: "weight_min",
+    seedMax: "seed_max",
+    daysMin: "days_min",
+  })) {
+    if (metrics[local] !== "")
+      body[remote] =
+        local === "scope"
+          ? metrics[local]
+          : Number(metrics[local]) *
+            (local.startsWith("size")
+              ? 1024 ** (sizeUnits[local] === "MiB" ? 2 : 3)
+              : 1);
+  }
+  return body;
+}
+const toRow = (raw) => ({
+  raw,
+  id: raw.key,
+  name: raw.name,
+  client: raw.client_name,
+  category: raw.categories.map((c) => c.join(" / ")).join(", "),
+  tracker: raw.trackers.join(", "),
+  tag: raw.tags.join(", "),
+  state: raw.status,
+  progress: Math.round(raw.progress * 100),
+  size: raw.size / 1024 ** 3,
+  ratio: raw.ratio,
+  c411: raw.c411,
+  note: raw.note,
+  zen: raw.zen,
+  weight: raw.weight,
+  seeds: raw.total_seeds,
+  peers: raw.total_peers,
+  seedtime: raw.seedtime,
+});
 async function load() {
   if (busy) {
     pendingReload = true;
@@ -95,60 +147,14 @@ async function load() {
   busy = true;
   const current = generation;
   try {
-    const keys = { client: "client_name", down: "download", up: "upload" };
-    const body = {
-      client_id: client,
-      q: query,
-      ...(hashes.length ? { hashes } : {}),
-      sort: keys[sortKey] || sortKey,
-      descending: sortDir < 0,
-      offset: page * 100,
-      ...filters,
-    };
-    for (const [local, remote] of Object.entries({
-      scope: "scope",
-      sizeMin: "size_min",
-      sizeMax: "size_max",
-      noteMin: "note_min",
-      zenMin: "zen_min",
-      weightMin: "weight_min",
-      seedMax: "seed_max",
-      daysMin: "days_min",
-    })) {
-      if (metrics[local] !== "")
-        body[remote] =
-          local === "scope"
-            ? metrics[local]
-            : Number(metrics[local]) *
-              (local.startsWith("size")
-                ? 1024 ** (sizeUnits[local] === "MiB" ? 2 : 3)
-                : 1);
-    }
+    const body = { ...listBody(), offset: 0, limit: shown };
     const result = await request("list", body);
     if (current !== generation) return;
     snapshot = result;
-    page = Math.floor(result.offset / 100);
-    data = result.rows.map((raw) => ({
-      raw,
-      id: raw.key,
-      name: raw.name,
-      client: raw.client_name,
-      category: raw.categories.map((c) => c.join(" / ")).join(", "),
-      tracker: raw.trackers.join(", "),
-      tag: raw.tags.join(", "),
-      state: raw.status,
-      progress: Math.round(raw.progress * 100),
-      size: raw.size / 1024 ** 3,
-      ratio: raw.ratio,
-      c411: raw.c411,
-      note: raw.note,
-      zen: raw.zen,
-      weight: raw.weight,
-      seeds: raw.total_seeds,
-      peers: raw.total_peers,
-      seedtime: raw.seedtime,
-    }));
+    data = result.rows.map(toRow);
     data.forEach((r) => rowCache.set(r.id, r));
+    // A ticked head box means every match: when the filters change, so does the selection.
+    if (allMatching && allSignature !== JSON.stringify(listBody())) await selectAll();
     if (!focus || !rowCache.has(focus)) focus = data[0]?.id || "";
     scenario = "normal";
     lastError = "";
@@ -174,6 +180,25 @@ async function load() {
     }
   }
 }
+// Every torrent the filters match, across the whole list, becomes the selection.
+async function selectAll() {
+  const body = listBody(),
+    result = await request("list", { ...body, offset: 0, limit: 1e9 });
+  selected.clear();
+  for (const raw of result.rows) {
+    const row = toRow(raw);
+    rowCache.set(row.id, row);
+    selected.add(row.id);
+  }
+  allMatching = true;
+  allSignature = JSON.stringify(body);
+}
+// The table loads the next rows as it is scrolled near its end.
+async function loadMore() {
+  if (busy || shown >= snapshot.total) return;
+  shown += STEP;
+  await load();
+}
 window.addEventListener("DOMContentLoaded", () => {
   render();
   window.addEventListener("torrents-environment", (e) =>
@@ -195,7 +220,8 @@ window.addEventListener("DOMContentLoaded", () => {
         rowCache.clear();
         data = [];
         focus = "";
-        page = 0;
+        shown = STEP;
+        allMatching = false;
         $("dialog").close();
         const preferences = await request("preferences");
         if (preferences.columns)
@@ -210,7 +236,8 @@ window.addEventListener("DOMContentLoaded", () => {
         hashes = next.command.hashes || [];
         if (typeof next.command.tracker === "string") filters.tracker = next.command.tracker;
         focus = "";
-        page = 0;
+        shown = STEP;
+        allMatching = false;
       }
       if (
         next.active &&

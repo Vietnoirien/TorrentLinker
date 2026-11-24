@@ -1,0 +1,25 @@
+/* Only what the proposal adds. Everything else is the panel's own view.css. */
+
+.demo-bar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 8px 16px;
+  background: var(--raised, var(--panel));
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+}
+.demo-hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Marks what the proposal adds, so it can be told apart from the current screen. */
+.proposal {
+  outline: 2px dashed color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: -2px;
+}
