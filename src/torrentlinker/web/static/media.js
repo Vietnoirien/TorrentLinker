@@ -261,7 +261,7 @@ async function mediaLoad(id, position = null, paused = false, preview = null, re
     // A prepared paused player must load external cues before reporting its selectable tracks.
     track.track.mode = "hidden";
   }
-  player.onloadedmetadata = () => { const seek = position === null ? row.position || 0 : position; if (!converted && seek > 0 && Number.isFinite(player.duration)) player.currentTime = Math.min(seek, player.duration); };
+  player.onloadedmetadata = () => { if (!preview && row.kind === "video" && mediaQuality === "original" && !player.videoWidth) mediaCodecError(); const seek = position === null ? row.position || 0 : position; if (!converted && seek > 0 && Number.isFinite(player.duration)) player.currentTime = Math.min(seek, player.duration); };
   if (!paused) await mediaTryPlay(player);
   if (!mediaRequestCurrent(request)) { if (preview) await mediaClosePreviewHandle(preview, request.client); return false; }
   mediaQueueRender(); return true;

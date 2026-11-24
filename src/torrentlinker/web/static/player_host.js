@@ -76,7 +76,7 @@ function mediaPlaybackSnapshot() {
     playing: snapshot.playing,
     position: snapshot.position,
     buffered: Array.from({length:player.buffered.length},(_,i)=>[player.buffered.start(i)+Number(player.dataset.streamOffset||0),player.buffered.end(i)+Number(player.dataset.streamOffset||0)]),
-    quality: player.dataset.streamQuality || "original",
+    quality: player.dataset.streamQuality && player.dataset.streamQuality !== "source" ? player.dataset.streamQuality : "original",
     qualities: media.preview ? ["original"] : (mediaPlaybackFacts.get(snapshot.media_id)?.qualities || ["original"]),
     audio_choices: media.preview ? [] : (mediaPlaybackFacts.get(snapshot.media_id)?.audio || []),
     audio_choice: mediaAudioChoice,
@@ -167,7 +167,7 @@ async function mediaPlayerControl(body) {
     return values[key];
   };
   if(action === "quality") { await mediaChangeQuality({quality:values.quality}); mediaQualityRemember(values.quality); }
-  else if(action === "audio") await mediaChangeQuality({quality:mediaQuality==="original"?mediaQualityBelow(mediaPlaybackFacts.get(mediaPlayer().dataset.mediaId)):mediaQuality,audio:values.audio});
+  else if(action === "audio") await mediaChangeQuality({quality:mediaQuality==="original"?"source":mediaQuality,audio:values.audio});
   else if(action === "rate") {
     if(![.5,.75,1,1.25,1.5,1.75,2].includes(values.rate))throw Error("Invalid playback speed.");
     player.defaultPlaybackRate=values.rate;player.playbackRate=values.rate;

@@ -382,7 +382,7 @@ def media_routes(app, agent, assistant):
         identifier: str,
         request: Request,
         client_id: str = "",
-        quality: Literal["360", "480", "720", "1080"] = "720",
+        quality: Literal["source", "360", "480", "720", "1080"] = "720",
         start: float = Query(0, ge=0, le=86400),
         audio: int = Query(0, ge=0, le=99),
         playback_id: str = Query(..., pattern=r"^[a-zA-Z0-9_-]{8,80}$"),
@@ -393,14 +393,14 @@ def media_routes(app, agent, assistant):
 
         chosen = item(request, client_id, identifier)
         cap = limit(request)
-        if cap is not None and int(quality) > cap:
+        if cap is not None and quality != "source" and int(quality) > cap:
             raise too_tall()
         path = await asyncio.to_thread(media.resolve, chosen, identifier)
         facts = await asyncio.to_thread(inspect, path)
         found = actor(request)
         key = (found.account, found.viewer, chosen, identifier, playback_id)
         try:
-            job = conversions.open(key, path, PlaybackChoice(quality, start, audio), facts)
+            job = conversions.open(key, path, PlaybackChoice(quality, start, audio, cap), facts)
         except ValueError as error:
             raise HTTPException(409, str(error)) from None
 

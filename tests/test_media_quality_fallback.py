@@ -19,8 +19,10 @@ def run(expression: str, remembered: str = ""):
       getItem: k => store[k] || null, setItem: (k, v) => {{ store[k] = v; }},
     }};
     require("vm").runInThisContext(require("fs").readFileSync({json.dumps(str(SCRIPT))}, "utf8"));
-    const all = {{qualities: ["original", "360", "480", "720", "1080"]}};
-    const limited = {{qualities: ["360", "480", "720"]}};
+    const all = {{
+      available: true, height: 1080, qualities: ["original", "360", "480", "720", "1080"],
+    }};
+    const limited = {{available: true, height: 1080, qualities: ["360", "480", "720"]}};
     const none = {{qualities: []}};
     console.log(JSON.stringify({expression}));
     """
@@ -37,10 +39,17 @@ def test_a_film_starts_at_the_remembered_quality_else_the_best_allowed():
     assert run("mediaQualityStart(none)") == "original"  # nothing allowed: the server answers
 
 
-def test_a_failing_source_falls_back_one_quality_lower_and_never_while_switching():
-    assert run('mediaQualityFallback(all, "original", false)') == "1080"
-    assert run('mediaQualityFallback(all, "1080", false)') == "720"
-    assert run('mediaQualityFallback(limited, "720", false)') == "480"
+def test_an_original_that_cannot_play_is_transcoded_at_its_own_quality_first():
+    assert run('mediaQualityFallback(all, "original", false)') == "source"
+    assert (
+        run('mediaQualityFallback(limited, "original", false)') == "source"
+    )  # lowered by the server
+    assert run('mediaQualityFallback(all, "source", false)') == "720"  # below the film's 1080
+    assert run('mediaQualityFallback(all, "720", false)') == "480"
     assert run('mediaQualityFallback(limited, "360", false)') == ""  # nothing lower: say so
     assert run('mediaQualityFallback(all, "original", true)') == ""  # a switch reports itself
     assert run("mediaQualityFallback(undefined, 'original', false)") == ""  # music: no facts
+    assert (
+        run('mediaQualityFallback({available: false, qualities: ["original"]}, "original", false)')
+        == ""
+    )

@@ -19,6 +19,7 @@ from typing import Any
 
 from torrentlinker.media_tracks import language
 
+SOURCE = "source"
 PRESETS = {
     "360": (640, 360, 500, 64),
     "480": (854, 480, 900, 96),
@@ -112,13 +113,14 @@ def within(facts: dict[str, Any], limit: int | None) -> dict[str, Any]:
 
 @dataclass(frozen=True)
 class PlaybackChoice:
-    quality: str
+    quality: str  # a preset, or "source": the film's own resolution
     start: float = 0
     audio: int = 0
+    limit: int | None = None  # a Member's tallest playback, in pixels of height
 
     def command(self, path: Path, facts: dict[str, Any]) -> list[str]:
         if (
-            self.quality not in PRESETS
+            (self.quality not in PRESETS and self.quality != SOURCE)
             or not math.isfinite(self.start)
             or not 0 <= self.start < facts.get("duration", 0)
             or type(self.audio) is not int
@@ -128,11 +130,14 @@ class PlaybackChoice:
         executable = shutil.which("ffmpeg")
         if not executable or not facts.get("available"):
             raise ValueError("Install FFmpeg on the machine running TorrentLinker.")
-        width, height, video, audio = PRESETS[self.quality]
-        filters = (
-            f"scale=w=min({width}\\,iw):h=min({height}\\,ih):"
-            "force_original_aspect_ratio=decrease:force_divisible_by=2"
-        )
+        if self.quality == SOURCE:
+            filters, video, audio = self.source(facts)
+        else:
+            width, height, video, audio = PRESETS[self.quality]
+            filters = (
+                f"scale=w=min({width}\\,iw):h=min({height}\\,ih):"
+                "force_original_aspect_ratio=decrease:force_divisible_by=2"
+            )
         if facts.get("hdr"):
             filters += (
                 ",zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,"
@@ -192,6 +197,19 @@ class PlaybackChoice:
             "mp4",
             "pipe:1",
         ]
+
+    def source(self, facts: dict[str, Any]) -> tuple[str, int, int]:
+        """The film at its own resolution (lowered only to a Member's limit), with the bitrate
+        the 1080p preset gives per pixel."""
+        width, height = int(facts.get("width") or 0), int(facts.get("height") or 0)
+        if self.limit is not None and height > self.limit:
+            width, height = round(width * self.limit / height), self.limit
+            filters = f"scale=w=-2:h={height}:force_original_aspect_ratio=decrease"
+        else:
+            filters = "scale=trunc(iw/2)*2:trunc(ih/2)*2"
+        reference = PRESETS["1080"]
+        video = round(reference[2] * width * height / (reference[0] * reference[1]))
+        return filters, min(16000, max(500, video)), reference[3]
 
 
 class Conversion:

@@ -15,15 +15,18 @@ function mediaQualityStart(facts) {
   const allowed = facts?.qualities || ["original"];
   return allowed.includes(mediaQualityChosen) ? mediaQualityChosen : allowed.includes("original") ? "original" : allowed[allowed.length - 1] || "original";
 }
-// The best transcoded quality strictly below `than` (below everything for the original).
+// The best transcoded quality strictly below `than`: below the film's own height for "source",
+// below everything for the original.
 function mediaQualityBelow(facts, than = "original") {
-  const ceiling = than === "original" ? Infinity : Number(than);
+  const ceiling = than === "original" ? Infinity : than === "source" ? Number(facts?.height) || Infinity : Number(than);
   return (facts?.qualities || []).filter(q => q !== "original" && Number(q) < ceiling).pop() || "";
 }
 // What to try when the current source cannot play: nothing while a switch is under way (it reports
-// its own failure), else the best compatible quality below the current one.
+// its own failure).
+// The original comes first as a transcode at its own resolution: only a Member's limit lowers it.
 function mediaQualityFallback(facts, current, switching) {
-  return switching ? "" : mediaQualityBelow(facts, current);
+  if (switching) return "";
+  return current === "original" && facts?.available ? "source" : mediaQualityBelow(facts, current);
 }
 function mediaFilmPosition(player) { return (player.currentTime || 0) + Number(player.dataset.streamOffset || 0); }
 function mediaFilmDuration(player) {
@@ -64,7 +67,8 @@ function mediaStreamLoad(player, id, start) {
   const stream = {abort:new AbortController(), cancel:`${base}/${playbackId}?${new URLSearchParams({client_id:client})}`, objectURL:null};
   mediaStreams.set(player,stream);
   player.dataset.streamOffset=String(start); player.dataset.streamQuality=mediaQuality;
-  const mime='video/mp4; codecs="avc1.640028,mp4a.40.2"';
+  // A film taller than 1080p needs the level of its own size.
+  const mime=`video/mp4; codecs="avc1.${(mediaPlaybackFacts.get(id)?.height||0)>1080?"640033":"640028"},mp4a.40.2"`;
   if (!window.MediaSource || !MediaSource.isTypeSupported(mime)) {
     player.src=url; player.load(); return;
   }
@@ -93,7 +97,7 @@ async function mediaChangeQuality(values={}) {
   if(mediaSwitching)throw Error(say("Playback is changing. Please wait.","Le lecteur change de source. Patientez."));
   const player=mediaPlayer(), id=player.dataset.mediaId, facts=mediaPlaybackFacts.get(id);
   const quality=values.quality ?? mediaQuality;
-  if(!id || media.preview || !(facts?.qualities||["original"]).includes(quality))throw Error(say("Quality unavailable.","Qualité indisponible."));
+  if(!id || media.preview || !(quality==="source"?facts?.available:(facts?.qualities||["original"]).includes(quality)))throw Error(say("Quality unavailable.","Qualité indisponible."));
   if(values.audio!==undefined && !facts.audio.some(track=>track.id===values.audio))throw Error("Audio track unavailable.");
   const paused=player.paused, rate=player.playbackRate, source=player.dataset.sourceToken;
   const start=Math.max(0, Math.min((facts?.duration || mediaFilmDuration(player))-0.1,values.position ?? mediaFilmPosition(player)));

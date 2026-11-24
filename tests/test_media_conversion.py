@@ -3,6 +3,7 @@
 import os
 import shutil
 import subprocess
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -163,3 +164,42 @@ def test_http_conversion_capacity_cancellation_and_disconnect(tmp_path, monkeypa
         server.should_exit = True
         thread.join(timeout=15)
         listener.close()
+
+
+def source_facts(width=3840, height=2160):
+    return {
+        "available": True,
+        "duration": 600.0,
+        "audio": [],
+        "width": width,
+        "height": height,
+        "hdr": False,
+    }
+
+
+def command_of(quality, facts, limit=None):
+    from torrentlinker.media_conversion import PlaybackChoice
+
+    return PlaybackChoice(quality, 0, 0, limit).command(Path("/films/a.mkv"), facts)
+
+
+def test_the_source_quality_keeps_the_films_own_resolution(monkeypatch):
+    monkeypatch.setattr("shutil.which", lambda name: f"/usr/bin/{name}")
+    command = command_of("source", source_facts(1280, 720))
+    filters = command[command.index("-vf") + 1]
+    assert "scale=trunc(iw/2)*2:trunc(ih/2)*2" in filters and "min(" not in filters
+    assert command[command.index("-b:v") + 1] == "1778k"  # the 1080p rate, by pixels
+    # A 4K film keeps its size too, at a rate that follows it.
+    command = command_of("source", source_facts())
+    assert "min(" not in command[command.index("-vf") + 1]
+    assert command[command.index("-b:v") + 1] == "16000k"
+
+
+def test_the_source_quality_is_lowered_only_to_a_members_limit(monkeypatch):
+    monkeypatch.setattr("shutil.which", lambda name: f"/usr/bin/{name}")
+    command = command_of("source", source_facts(1920, 1080), limit=720)
+    assert "scale=w=-2:h=720:" in command[command.index("-vf") + 1]
+    assert command[command.index("-b:v") + 1] == "1778k"
+    # A limit above the film leaves it alone.
+    command = command_of("source", source_facts(1280, 720), limit=1080)
+    assert "scale=trunc(iw/2)*2" in command[command.index("-vf") + 1]
