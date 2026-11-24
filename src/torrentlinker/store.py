@@ -13,6 +13,7 @@ import uuid
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 
+from torrentlinker.sqlite_support import concurrent
 from torrentlinker.trackers import DEFAULT_TRACKER, tracker
 
 SCHEMA = """
@@ -313,7 +314,7 @@ class Store:
         self.client_id = "default"
         self.tracker = DEFAULT_TRACKER
         self.torrent_dir = path.parent / "torrents"
-        self._db = sqlite3.connect(path, check_same_thread=False)
+        self._db = concurrent(sqlite3.connect(path, check_same_thread=False))
         self._lock = threading.Lock()
         with self._lock, self._db:
             self._db.executescript(SCHEMA)

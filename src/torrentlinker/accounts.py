@@ -18,6 +18,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from torrentlinker import age_ratings
+from torrentlinker.sqlite_support import concurrent
 
 OWNER = "owner"  # the fixed account of the Owner; never restricted, edited or deleted
 SESSION_IDLE = 30 * 86400  # a Member's session ends after 30 days of disuse
@@ -88,7 +89,9 @@ class Caps:
 class Accounts:
     def __init__(self, directory: Path):
         self.lock = threading.RLock()
-        self.db = sqlite3.connect(directory / "accounts.sqlite", check_same_thread=False)
+        self.db = concurrent(
+            sqlite3.connect(directory / "accounts.sqlite", check_same_thread=False)
+        )
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA foreign_keys=ON")
         with self.db:

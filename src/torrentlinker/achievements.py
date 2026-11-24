@@ -14,6 +14,8 @@ import time
 from pathlib import Path
 from uuid import uuid4
 
+from torrentlinker.sqlite_support import concurrent
+
 SEEDING_STATES = frozenset({"uploading", "stalledUP", "forcedUP"})
 DEFINITION_VERSION = 1
 FIRSTS = {
@@ -59,7 +61,7 @@ class Ledger:
         path.chmod(0o600)
         self.clock = clock
         self.lock = threading.RLock()
-        self.db = sqlite3.connect(path, check_same_thread=False, timeout=10)
+        self.db = concurrent(sqlite3.connect(path, check_same_thread=False, timeout=10))
         self.db.row_factory = sqlite3.Row
         if self.db.execute("PRAGMA user_version").fetchone()[0] > 1:
             self.db.close()

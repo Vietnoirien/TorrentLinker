@@ -24,6 +24,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from torrentlinker import net
 from torrentlinker.feed_genres import FeedGenres, GenreCache, category_kind
 from torrentlinker.indexer import Candidate, Indexer, SearchQuery
+from torrentlinker.sqlite_support import concurrent
 
 GENRE_LOOKUPS = 40  # releases whose genre one preview or refresh reads from their Tracker
 
@@ -318,7 +319,7 @@ class FeedService:
         # is read when a feed is fetched and never kept on the service.
         self.tracker_indexer, self.passkey, self.http = tracker_indexer, passkey, http
         self.lock = threading.RLock()
-        self.db = sqlite3.connect(path, check_same_thread=False)
+        self.db = concurrent(sqlite3.connect(path, check_same_thread=False))
         self.db.row_factory = sqlite3.Row
         # Where a release's genres come from (set by the owner of the service); none, none known.
         self.genres: FeedGenres | None = None

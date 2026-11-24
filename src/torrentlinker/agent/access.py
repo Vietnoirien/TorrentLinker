@@ -13,6 +13,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from torrentlinker.sqlite_support import concurrent
+
 
 class Grant(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -30,7 +32,7 @@ class Grant(BaseModel):
 class Access:
     def __init__(self, directory: Path):
         self.lock = threading.RLock()
-        self.db = sqlite3.connect(directory / "agents.sqlite", check_same_thread=False)
+        self.db = concurrent(sqlite3.connect(directory / "agents.sqlite", check_same_thread=False))
         self.db.row_factory = sqlite3.Row
         with self.db:
             self.db.executescript("""

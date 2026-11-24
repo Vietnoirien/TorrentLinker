@@ -28,6 +28,7 @@ from torrentlinker.community_schedule import (
     site_day,
     validate_automation,
 )
+from torrentlinker.sqlite_support import concurrent
 
 KINDS = {"comment": "comment_post", "vote": "trust_vote", "chat": "shout_message"}
 EDITABLE = {"draft", "queued", "paused", "refused", "cancelled"}
@@ -117,7 +118,7 @@ class CommunityActions:
 
     @contextmanager
     def _db(self) -> Iterator[sqlite3.Connection]:
-        db = sqlite3.connect(self.path, timeout=10)
+        db = concurrent(sqlite3.connect(self.path, timeout=10))
         db.row_factory = sqlite3.Row
         try:
             db.execute("BEGIN IMMEDIATE")

@@ -10,6 +10,7 @@ from typing import Any
 from uuid import uuid4
 
 from torrentlinker.assistant.providers import PRESETS, Models, Provider
+from torrentlinker.sqlite_support import concurrent
 
 
 def _mcp_result(answer):
@@ -54,7 +55,9 @@ class Assistant:
         self.shutdown = threading.Event()
         self.scheduler = None
         self.lock = threading.RLock()
-        self.db = sqlite3.connect(directory / "assistant.sqlite", check_same_thread=False)
+        self.db = concurrent(
+            sqlite3.connect(directory / "assistant.sqlite", check_same_thread=False)
+        )
         self.db.row_factory = sqlite3.Row
         self.agent.presentations.research_for_actor = self.presentation_research
         with self.db:

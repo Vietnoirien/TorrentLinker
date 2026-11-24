@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from torrentlinker.job_lanes import job_lane
+from torrentlinker.sqlite_support import concurrent
 
 
 class JobStop(threading.Event):
@@ -29,7 +30,7 @@ class Jobs:
     def __init__(self, directory: Path, error_message: Callable[[Exception], str] | None = None):
         self.error_message = error_message or (lambda error: type(error).__name__)
         self.lock = threading.RLock()
-        self.db = sqlite3.connect(directory / "jobs.sqlite", check_same_thread=False)
+        self.db = concurrent(sqlite3.connect(directory / "jobs.sqlite", check_same_thread=False))
         self.db.row_factory = sqlite3.Row
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="torrentlinker-batch")
         self.interactive_executor = ThreadPoolExecutor(
