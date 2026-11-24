@@ -1473,11 +1473,25 @@ class MediaLibrary(TrackerRows, AgeRatings):
         return sorted(cards.values(), key=lambda card: order[card["series"], card["oav"]])
 
     def home_rows(
-        self, client_id, *, kind="video", limit=20, genres=8, scope="home", actor=OWNER_ACTOR
+        self,
+        client_id,
+        *,
+        kind="video",
+        limit=20,
+        genres=8,
+        scope="home",
+        actor=OWNER_ACTOR,
+        include="all",
     ):
         """Video browsing as rows. The home: what to continue, what is new, the main genres,
         series, the best rated and what is not watched yet. The Films and Series views: what
-        is new and the main genres of that kind. Each row says how to see all of it."""
+        is new and the main genres of that kind. Each row says how to see all of it.
+
+        `include` splits the answer where it costs. The rows about what is on c411 are read
+        from the tracker and take about as long as every library row together, so a page can
+        ask for `library` first, show it, and ask for `tracker` after: the library appears
+        without waiting on the tracker. `all` answers both, as one request.
+        """
         rows = []
 
         def add(key, title, **filters):
@@ -1532,6 +1546,18 @@ class MediaLibrary(TrackerRows, AgeRatings):
             return {"rows": rows}
         base = scope if scope in {"films", "series"} else "films"
         apart = {} if scope == "home" else {"anime": False}
+        if include == "tracker":
+            # Only what c411 has: the library rows were answered by the request before this.
+            tracker = (
+                self.tracker_rows(client_id, self.setup(client_id))
+                if scope in {"home", "films"} and kind == "video"
+                else {}
+            )
+            if not actor.owner:
+                tracker.pop("upgrades", None)
+                if not self.sees_tracker(actor):
+                    tracker.pop("tracker", None)
+            return {"rows": [tracker[key] for key in ("tracker", "upgrades") if key in tracker]}
         if scope == "home":
             add("continue", "", view="continue")
             add("recent", "", view="recent")
@@ -1541,7 +1567,7 @@ class MediaLibrary(TrackerRows, AgeRatings):
         # better versions of library films last.
         tracker = (
             self.tracker_rows(client_id, self.setup(client_id))
-            if scope in {"home", "films"} and kind == "video"
+            if include != "library" and scope in {"home", "films"} and kind == "video"
             else {}
         )
         if not actor.owner:

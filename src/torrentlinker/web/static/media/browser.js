@@ -52,13 +52,16 @@ async function loadMedia(append = false) {
   if (media.view === "anime") Object.assign(query, {view: "recent", anime: true}, media.animeFilters);
   else if (["films", "series"].includes(media.view)) query.anime = false;
   for (const key of ["genre", "year", "language", "availability"]) if ($(`media-${key}`).value) query[key] = $(`media-${key}`).value;
+  const mediaHomeScope = () => ({films: "films", series: "series", anime: "anime", adult: "adult"}[media.view] || "home");
   const queryKey=JSON.stringify({client:mediaClient(),grid:media.gridMode,...query,offset:0});
   const keepCount=!append&&media.queryKey===queryKey?media.rows.length:0;
   const home = !append && mediaHomeActive();
   const [result, continuing, rows] = await Promise.all([
     api(`media?${mediaQuery(query)}`),
     media.kind === "video" ? api(`media?${mediaQuery({...query, view: "continue", offset: 0, limit: 8})}`) : Promise.resolve({rows: []}),
-    home ? api(`media/home?${mediaQuery({scope: {films: "films", series: "series", anime: "anime", adult: "adult"}[media.view] || "home"})}`) : Promise.resolve({rows: []}),
+    // Only the library's own shelves are waited for. What c411 has takes about as long as
+    // all of them together, so it is asked for after and appended when it lands.
+    home ? api(`media/home?${mediaQuery({scope: mediaHomeScope(), include: "library"})}`) : Promise.resolve({rows: []}),
   ]);
   if (version !== media.request) return;
   while(result.has_more&&result.rows.length<keepCount){
@@ -69,7 +72,10 @@ async function loadMedia(append = false) {
   media.queryKey=queryKey;
   if (!append) { media.editRatings = !!result.edit_ratings; media.unrated = result.unrated || 0; if (typeof mediaRatingsNav === "function") mediaRatingsNav(); }
   media.continueRows = continuing.rows;
-  if (!append) media.homeRows = rows.rows.filter(row => row.key !== "continue");
+  if (!append) {
+    media.homeRows = rows.rows.filter(row => row.key !== "continue");
+    if (home) mediaTrackerShelves(version);
+  }
   for (const row of [...result.rows, ...continuing.rows, ...media.homeRows.flatMap(r => r.rows)]) mediaItems.set(row.id, row);
   media.rows = append ? [...media.rows, ...result.rows] : result.rows;
   media.next = result.has_more ? result.next_offset : null;
@@ -298,6 +304,25 @@ function mediaRenderContinue() {
   }
 }
 // The video home shows rows (genres, series…); each row's "See all" opens the grid with its filters.
+/* What c411 has, asked for once the library's own shelves are on screen and appended when it
+   arrives. They land after the library rather than in the middle of it: the order changes,
+   and in exchange the library no longer waits on the tracker. A stale answer is dropped, as
+   anywhere else here, by the request version. */
+async function mediaTrackerShelves(version) {
+  try {
+    const extra = await api(`media/home?${mediaQuery({scope: {films: "films", series: "series", anime: "anime", adult: "adult"}[media.view] || "home", include: "tracker"})}`);
+    if (version !== media.request || !extra.rows?.length) return;
+    for (const row of extra.rows.flatMap(r => r.rows)) mediaItems.set(row.id, row);
+    media.homeRows = [...media.homeRows, ...extra.rows];
+    const scroller = document.querySelector(".media-scroll"), savedScroll = window.scrollY, savedInner = scroller?.scrollTop;
+    mediaRender();
+    window.scrollTo(0, savedScroll);
+    if (scroller) scroller.scrollTop = savedInner;
+  } catch {
+    /* The library is shown; what the tracker has is not worth an error over. */
+  }
+}
+
 function mediaHomeActive() {
   return media.kind === "video" && ["recent", "films", "series", "anime", "adult"].includes(media.view) && !media.gridMode && (media.layout === "cinematic" || mediaHorizon("home")) && !$("media-search").value.trim()
     && ["genre", "year", "language", "availability"].every(key => !$(`media-${key}`).value);

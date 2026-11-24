@@ -282,6 +282,7 @@ def media_routes(app, agent, assistant):
         client_id: str = "",
         limit: int = Query(20, ge=1, le=50),
         scope: str = Query("home", pattern="^(home|films|series|anime|adult)$"),
+        include: str = Query("all", pattern="^(all|library|tracker)$"),
     ):
         return media.home_rows(
             target(request, client_id),
@@ -289,6 +290,7 @@ def media_routes(app, agent, assistant):
             limit=limit,
             scope=scope,
             actor=actor(request),
+            include=include,
         )
 
     @app.post("/api/media/tracker/{infohash}/download")

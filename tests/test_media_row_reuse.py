@@ -182,3 +182,20 @@ def test_stored_png_posters_are_re_encoded_after_an_update(tmp_path):
     ).fetchone()[0]
     assert f"asset:{digest}.webp" in body and ".png" not in body
     assert media.convert_png_masters() == 0, "nothing left to do on the next start"
+
+
+def test_the_home_can_be_asked_for_the_library_without_the_tracker(tmp_path):
+    """Reading what c411 has takes about as long as every library shelf together, so a page
+    asks for the library first and for the tracker after."""
+    media = library(tmp_path, 6, lambda: 100.0)
+    asked = []
+    media.tracker_rows = lambda client_id, setup: asked.append(client_id) or {}
+
+    media.home_rows("default", kind="video", limit=5, scope="home", include="library")
+    assert asked == [], "the library shelves must not wait on the tracker"
+
+    media.home_rows("default", kind="video", limit=5, scope="home", include="tracker")
+    assert asked == ["default"], "asked for on its own, once"
+
+    media.home_rows("default", kind="video", limit=5, scope="home")
+    assert asked == ["default", "default"], "one request for both still works"
