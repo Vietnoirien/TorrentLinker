@@ -221,8 +221,19 @@ window.addEventListener("DOMContentLoaded", () => {
     }),
   );
   connection.then(() => window.torrentsReady());
-  setInterval(() => {
-    if (environment.active && !document.hidden && !$("dialog").open)
-      guard(load);
-  }, 5000);
+  // A refresh redraws the page, which closes an open list: it waits while a list has focus.
+  // The 5 s count from the end of the last answer, so a slow client never chains them.
+  const refresh = () =>
+    setTimeout(async () => {
+      if (
+        environment.active &&
+        !document.hidden &&
+        !busy &&
+        !$("dialog").open &&
+        document.activeElement?.tagName !== "SELECT"
+      )
+        await guard(load);
+      refresh();
+    }, 5000);
+  refresh();
 });

@@ -353,3 +353,93 @@ def test_tracker_preview_apply_and_dialog_cleanup(tmp_path):
     finally:
         server.should_exit = True
         thread.join(10)
+
+
+def test_a_slow_list_neither_chains_refreshes_nor_closes_an_open_filter(tmp_path):
+    import uvicorn
+    from playwright.sync_api import expect, sync_playwright
+
+    from tests.fake_qbit import FakeQbit
+    from torrentlinker.domain import Torrent
+    from torrentlinker.web.app import create_app
+
+    class Client(FakeQbit):
+        def check(self):
+            return "fake"
+
+        def folder_settings(self):
+            return []
+
+    fake = Client(
+        by_hash={
+            f"{i:040x}": Torrent(f"{i:040x}", f"Book {i:04}", Path("/data"), state="uploading")
+            for i in range(20)
+        }
+    )
+    app = create_app(
+        tmp_path / "config", password="test-password-long", connector=lambda *args: fake
+    )
+    workspace = app.state.agent_service.torrents_workspace
+    answer = workspace.request
+    slow = {"seconds": 0.0}
+    lists: list[tuple[float, float]] = []
+
+    # The live client answered a page in 5–6 s, longer than the 5 s refresh.
+    def request(action, body=None):
+        if action != "list":
+            return answer(action, body)
+        started = time.monotonic()
+        time.sleep(slow["seconds"])
+        try:
+            return answer(action, body)
+        finally:
+            lists.append((started, time.monotonic()))
+
+    workspace.request = request
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    for _ in range(100):
+        if server.started:
+            break
+        time.sleep(0.02)
+    try:
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page(viewport={"width": 1500, "height": 950})
+            page.goto(f"http://127.0.0.1:{port}")
+            page.locator("#login-password").fill("test-password-long")
+            page.locator("#login-form button").click()
+            expect(page.locator("#workspace")).to_be_visible()
+            saved = page.request.post(
+                f"http://127.0.0.1:{port}/api/setup/client",
+                data={"client": "qbittorrent", "host": "http://fake"},
+                headers={"X-TorrentLinker": "1"},
+            )
+            assert saved.ok, saved.text()
+            page.reload()
+            shell_navigate(page, "torrents")
+            panel = page.frame_locator("#torrents-frame")
+            expect(panel.locator("tbody tr")).to_have_count(20)
+
+            slow["seconds"] = 6.0
+            lists.clear()
+            page.wait_for_timeout(26000)
+            assert len(lists) >= 2, lists
+            gaps = [later[0] - earlier[1] for earlier, later in zip(lists, lists[1:])]
+            assert min(gaps) >= 4, gaps
+
+            slow["seconds"] = 0.0
+            page.wait_for_timeout(7000)
+            state = panel.locator("[data-filter=state]")
+            state.focus()
+            state.evaluate("(e)=>e.dataset.kept='yes'")
+            page.wait_for_timeout(6000)
+            expect(panel.locator("[data-filter=state][data-kept=yes]")).to_have_count(1)
+            browser.close()
+    finally:
+        server.should_exit = True
+        thread.join(10)
