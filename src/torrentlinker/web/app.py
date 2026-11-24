@@ -566,11 +566,13 @@ def create_app(
         if route.startswith(("/api/", "/documentation/")):
             if route.startswith("/api/"):
                 length = request.headers.get("content-length", "0")
+                # A Torrents action names every selected torrent: 11,000 are about 770 kB.
                 limit = (
                     12_000_000
                     if route
                     in {
                         "/api/jobs",
+                        "/api/torrents/workspace",
                         "/api/zen/plan/review",
                         "/api/prerolls/studio-save",
                         "/api/prerolls/studio-preview",

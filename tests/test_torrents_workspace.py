@@ -281,3 +281,35 @@ def test_a_category_takes_in_its_sub_categories(operations):
     assert names("Ebook") == ["Audiobook", "Book", "Manga"]
     assert names("Ebook / BDs") == ["Manga"]
     assert names("Ebook / Audio") == ["Audiobook"]
+
+
+def test_the_web_route_takes_an_action_on_eleven_thousand_torrents(tmp_path):
+    from fastapi.testclient import TestClient
+
+    from tests.test_web_jobs import login
+    from torrentlinker.web.app import create_app
+
+    class Client(FakeQbit):
+        def check(self):
+            return "fake"
+
+        def folder_settings(self):
+            return []
+
+    hashes = [f"{i:040x}" for i in range(11_000)]
+    client = Client(by_hash={h: Torrent(h, f"Book {h[-5:]}", Path("/data")) for h in hashes})
+    app = create_app(tmp_path, password="test-password-long", connector=lambda *args: client)
+    with TestClient(app) as browser:
+        login(browser)
+        saved = browser.post(
+            "/api/setup/client", json={"client": "qbittorrent", "host": "http://fake"}
+        )
+        assert saved.status_code == 200, saved.text
+        items = [{"client_id": "default", "hash": h} for h in hashes]
+        # 11,000 torrents are about 770 kB of request, above the general 256 kB cap.
+        review = browser.post(
+            "/api/torrents/workspace",
+            json={"action": "review", "body": {"action": "pause", "items": items}},
+        )
+        assert review.status_code == 200, review.text
+        assert len(review.json()["rows"]) == 11_000
