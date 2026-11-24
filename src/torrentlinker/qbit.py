@@ -59,6 +59,7 @@ class Qbit(Protocol):
 
     def set_file_priority(self, hash: str, indexes: list[int], priority: int) -> None: ...
     def recheck(self, hash: str) -> None: ...
+    def set_location(self, hash: str, save_path: str) -> None: ...
     def piece_states(self, hash: str) -> list[int]:
         """Per piece: 0 missing, 1 downloading, 2 verified."""
         ...
@@ -448,6 +449,9 @@ class QbitApi:
 
     def recheck(self, hash: str) -> None:
         self._client.torrents_recheck(torrent_hashes=hash)
+
+    def set_location(self, hash: str, save_path: str) -> None:
+        self._client.torrents_set_location(torrent_hashes=hash, location=save_path)
 
     def media_preview_state(self, hash: str) -> dict[str, Any]:
         """Read live sequential mode and verified pieces. Never changes download priorities."""

@@ -198,6 +198,12 @@ class MappedQbit:
     def recheck(self, hash: str) -> None:
         self._inner.recheck(hash)
 
+    def set_location(self, hash: str, save_path: str) -> None:
+        relocate = getattr(self._inner, "set_location", None)
+        if relocate is None:
+            raise ValueError("This Torrent Client cannot update an existing location.")
+        relocate(hash, self._mapper.to_qbit(save_path))
+
     def piece_states(self, hash: str) -> list[int]:
         return self._inner.piece_states(hash)
 

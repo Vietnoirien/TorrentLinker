@@ -92,6 +92,10 @@ class FakeQbit:
         self.rechecked.append(hash)
         self._set(hash, state=CHECKING)
 
+    def set_location(self, hash: str, save_path: str) -> None:
+        self.calls.append(f"location {save_path}")
+        self._set(hash, save_path=Path(save_path))
+
     def pause(self, hash: str) -> None:
         self._set(hash, state="stoppedUP")
 

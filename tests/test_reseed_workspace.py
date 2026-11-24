@@ -318,6 +318,67 @@ def test_complete_torrent_at_prepared_location_is_reused(tmp_path):
     assert not client.removed and not client.rechecked
 
 
+def test_missing_torrent_location_is_recovered_from_verified_library_file(tmp_path):
+    board, client, original, links, meta = workspace(tmp_path, filename="Release.mkv")
+    board.setup.settings.profile().reseed_layout = "client"
+    moved = original.parent / "Moved"
+    moved.mkdir()
+    source = moved / original.name
+    original.rename(source)
+    before = source.read_bytes(), source.stat().st_ino
+    indexer = board.setup.indexer()
+    candidate = remembered_candidates(board.setup.store, indexer, original)[0]
+    remember_candidates(board.setup.store, indexer, moved, [candidate])
+    folder = board.library.entries[0].folder
+    board.library.entries = [LibraryEntry(folder, scan_item(moved), ItemState.ORPHAN)]
+    old = original.parent / "Old"
+    client.add(meta.data, str(old), ["user-tag"])
+    client._set(meta.infohash, state="missingFiles")
+
+    result = board.run(
+        [str(moved)], "all", str(links), JobStop(), lambda _: None, key=meta.infohash
+    )
+
+    assert result["seeded"] == 1, result["errors"]
+    torrent = client.torrent(meta.infohash)
+    assert torrent.save_path == moved and torrent.progress == 1
+    assert {"user-tag", "torrentlinker:board", "c411"} <= torrent.tags
+    assert (source.read_bytes(), source.stat().st_ino) == before
+    assert not client.removed and not old.exists()
+
+
+def test_missing_location_does_not_move_a_torrent_with_files_at_its_old_path(tmp_path):
+    board, client, original, links, meta = workspace(tmp_path, filename="Release.mkv")
+    board.setup.settings.profile().reseed_layout = "client"
+    moved = original.parent / "Moved"
+    moved.mkdir()
+    original.rename(moved / original.name)
+    indexer = board.setup.indexer()
+    remember_candidates(
+        board.setup.store,
+        indexer,
+        moved,
+        remembered_candidates(board.setup.store, indexer, original),
+    )
+    folder = board.library.entries[0].folder
+    board.library.entries = [LibraryEntry(folder, scan_item(moved), ItemState.ORPHAN)]
+    old = original.parent / "Old"
+    old.mkdir()
+    old_file = old / original.name
+    old_file.write_bytes(b"another file")
+    client.add(meta.data, str(old), ["user-tag"])
+    client._set(meta.infohash, state="missingFiles")
+
+    result = board.run(
+        [str(moved)], "all", str(links), JobStop(), lambda _: None, key=meta.infohash
+    )
+
+    assert result["errors"] and result["seeded"] == 0
+    assert client.torrent(meta.infohash).save_path == old
+    assert old_file.read_bytes() == b"another file"
+    assert not any(call.startswith("location ") for call in client.calls)
+
+
 def test_linked_torrents_cannot_download_or_delete_through_management(tmp_path):
     from torrentlinker.torrent_management import manage
 

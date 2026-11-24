@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import logging
+import os
 import threading
 import time
 from collections import deque
@@ -12,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from torrentlinker.disk_rename import verify_local_data
+from torrentlinker.domain import TorrentClient
 from torrentlinker.qbit import AlreadyInClient
 from torrentlinker.reseed import CHECKING_STATES, TAG, start_board_reseed
 from torrentlinker.reseed_layout import (
@@ -21,6 +23,7 @@ from torrentlinker.reseed_layout import (
     validate_client_files,
     validate_layout,
 )
+from torrentlinker.reseed_links import relative_path, source_identity
 from torrentlinker.review import candidate_key, check_candidate, remembered_candidates
 from torrentlinker.trackers import TRACKERS, tracker_of_url
 
@@ -594,6 +597,72 @@ class ReseedWorkspace:
         validate_client_files(record, torrent.files)
         return torrent
 
+    def _recover_missing_location(self, item, checked, record, existing, client, stop, save):
+        """Point an existing qBittorrent entry at proven local data only when its old files
+        are absent. Its hash, tags and history survive; no Library file is moved."""
+        if (
+            self.setup.settings.client != TorrentClient.QBITTORRENT
+            or record.get("layout") != "client"
+            or existing.files != checked.meta.files
+            or existing.progress not in {0, 1}
+        ):
+            return False
+        roots = set()
+        files = []
+        for expected, local in checked.match.pairs.items():
+            source = item.save_path / relative_path(local)
+            target = relative_path(expected)
+            base = source
+            for _ in target.parts:
+                base = base.parent
+            if not source.is_file() or source.is_symlink() or not (base / target).samefile(source):
+                return False
+            roots.add(base)
+            files.append(
+                {
+                    "name": expected,
+                    "local": expected,
+                    "source": str(source),
+                    "identity": source_identity(source),
+                }
+            )
+        if len(roots) != 1:
+            return False
+        destination = roots.pop()
+        if self.setup.path_under_root(str(destination)) != destination or destination.is_symlink():
+            return False
+        if existing.save_path != destination:
+            if existing.state != "missingFiles" or existing.progress != 0:
+                return False
+            if existing.save_path.is_symlink() or (
+                existing.save_path.is_dir() and any(existing.save_path.iterdir())
+            ):
+                return False
+            if any(
+                os.path.lexists(existing.save_path / relative_path(name))
+                for name in existing.files
+            ):
+                return False
+        proposed = {**record, "destination": str(destination), "files": files}
+        validate_layout(proposed)
+        validate_client_files(proposed, existing.files)
+        checkpoint(stop)
+        if existing.save_path != destination:
+            client.set_location(record["hash"], str(destination))
+            for _ in range(50):
+                current = client.torrent(record["hash"])
+                if current is not None and current.save_path == destination:
+                    break
+                checkpoint(stop)
+                stop.wait(0.1)
+            else:
+                raise ValueError("The Torrent Client did not accept the verified file location.")
+        client.add_tags(record["hash"], [TAG, BOARD_TAG])
+        record.update(destination=str(destination), files=files)
+        save()
+        client.recheck(record["hash"])
+        return True
+
     def _verify(self, path, record, stop, progress, save):
         if record.get("stage") != "verify":
             raise ValueError("Prepare the Reseed layout before verification.")
@@ -618,6 +687,13 @@ class ReseedWorkspace:
         checkpoint(stop)
         client = self.library.client()
         existing = client.torrent(record["hash"])
+        recovered = bool(
+            existing is not None
+            and existing.save_path != Path(record["destination"])
+            and self._recover_missing_location(
+                item, checked, record, existing, client, stop, save
+            )
+        )
         if (
             existing is not None
             and self._tag(record) not in existing.tags
@@ -640,7 +716,7 @@ class ReseedWorkspace:
             record["achievement_verified_at"] = time.time()
             progress("client-hash", fraction=1)
             return
-        resume_check = record.get("status") == "checking"
+        resume_check = recovered or record.get("status") == "checking"
         if existing is None:
             resume_check = False
             record["status"] = "adding"

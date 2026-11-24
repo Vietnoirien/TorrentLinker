@@ -96,6 +96,24 @@ def test_qbittorrent_behind_a_mapping_still_reports_items_as_seeded(tmp_path) ->
     assert qbit.torrents()[0].save_path == Path(tmp_path)
 
 
+def test_relocating_an_existing_torrent_uses_the_client_path(tmp_path) -> None:
+    from tests.fake_qbit import FakeQbit
+    from tests.torrents import make_torrent
+    from torrentlinker.paths import MappedQbit
+
+    local = tmp_path / "Library"
+    local.mkdir()
+    file = local / "Movie.mkv"
+    file.write_bytes(b"data")
+    fake = FakeQbit()
+    hash = fake.add(make_torrent(file), "/old", [])
+    mapped = MappedQbit(fake, PathMapper([PathMapping(str(local), "/data/films")]))
+
+    mapped.set_location(hash, str(local))
+
+    assert fake.torrent(hash).save_path == Path("/data/films")
+
+
 def test_reseed_behind_a_mapping_gives_qbittorrent_its_own_path(tmp_path) -> None:  # type: ignore[no-untyped-def]
     from tests.fake_qbit import FakeQbit
     from tests.torrents import make_torrent
