@@ -859,6 +859,32 @@ input[type="checkbox"] {
   font-weight: 500;
   font-size: 0.92em;
 }
+/* A count only one Tracker published, marked so it is not read as covering both. */
+.chip .pill-count.c411-count {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+/* Where a control bites on each Tracker: one dot per Tracker, in its own colour. */
+.scope-mark {
+  display: inline-flex;
+  gap: 1px;
+  margin-left: 6px;
+  cursor: help;
+}
+.scope-dot {
+  font-size: 10px;
+  line-height: 1;
+}
+.scope-dot[data-tracker="c411"] {
+  color: #3b82f6;
+}
+.scope-dot[data-tracker="tr4ker"] {
+  color: #f97316;
+}
+.scope-dot.scope-none {
+  opacity: 0.45;
+}
 
 .release-score-selector {
   display: flex;

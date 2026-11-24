@@ -12,7 +12,7 @@ import re
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from typing import Any, Protocol
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, urlencode, urlsplit
 
 from torrentlinker.indexer import Candidate, SearchQuery, publication_time
 from torrentlinker.torrent_details import (
@@ -33,6 +33,11 @@ BROKEN_NATIVE: dict[str, frozenset[str] | None] = {
     "search_in": None,
 }
 NATIVE_SORTS = ("recent", "completed")  # the sorts tr4ker's own listing answers
+# How long a Search waits for the companion. The browser extension polls for work in bursts:
+# it stays awake about 10 s, then sleeps until its next alarm (30-60 s). A read submitted in
+# that gap cannot be answered until the extension wakes, so Search gives up well before
+# `read_json`'s own minute and says so, instead of holding c411's rows behind it.
+SEARCH_TIMEOUT = 12.0
 LOCAL_SORTS = ("seeders", "size", "title", "leechers")  # sorted here, on the fetched rows
 MAX_LIMIT = 100
 SLUG = re.compile(r"[A-Za-z0-9_-]{1,200}")
@@ -204,12 +209,14 @@ def search(
     freeleech: bool = False,
     sort: str = "recent",
     torznab_category: int | None = None,
+    timeout: float = SEARCH_TIMEOUT,
 ) -> NativePage:
     """tr4ker rows for merged Search: native through the companion, else Torznab.
 
     A sort tr4ker cannot do is applied here to the fetched rows; the native request then asks
     for `recent`. A native failure is raised as it is, never retried or hidden behind Torznab:
-    only an absent companion (not paired, tab closed) selects the fallback."""
+    only an absent companion (not paired, tab closed) selects the fallback. `timeout` bounds
+    the wait on the companion, which answers in bursts (SEARCH_TIMEOUT)."""
     local = sort if sort in LOCAL_SORTS else ""
     if session is not None and session.can_read:
         path = native_path(
@@ -221,7 +228,7 @@ def search(
             freeleech=freeleech,
             sort="completed" if sort == "completed" else "recent",
         )
-        found = parse_listing(session.read_json(path))
+        found = parse_listing(session.read_json(path, timeout=timeout))
         rows = sort_rows(found.rows, local) if local else found.rows
         notes = [f"Sorted by {local} here: tr4ker cannot sort by it."] if local else []
         return NativePage(rows, found.page, found.limit, found.total, found.capped, notes=notes)
@@ -352,7 +359,22 @@ def detail_document(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def slug_of(value: str) -> str:
+    """The slug behind a tr4ker key. Native Search keys a row `tr4ker:<slug>`, while the RSS
+    feed has no slug of its own and keys its items by guid, the `/torrent/<slug>` page URL.
+    Both reach the detail view, so both are accepted here; anything else gives "".
+    """
+    value = value.strip()
+    if "/" in value or ":" in value:
+        parts = urlsplit(value)
+        if f"{parts.scheme}://{parts.netloc}" != ORIGIN or not parts.path.startswith("/torrent/"):
+            return ""
+        value = parts.path.rstrip("/").rsplit("/", 1)[-1]
+    return value if SLUG.fullmatch(value) else ""
+
+
 def read_detail(session: Reader, slug: str) -> dict[str, Any]:
-    if not SLUG.fullmatch(slug):
+    slug = slug_of(slug)
+    if not slug:
         raise ValueError("Select a tr4ker torrent with a valid slug.")
     return detail_document(session.read_json(f"/api/torrents/{slug}"))

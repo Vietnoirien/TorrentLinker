@@ -96,6 +96,9 @@ PREFETCH_AHEAD = 100  # torrents asked for ahead of the one being sent
 MAX_KEYS = 5  # c411's limit per account
 # A request the user waits for gives up, rather than wait longer than this for c411.
 FOREGROUND_PATIENCE = 30.0  # seconds
+# c411's category tree and facet lists change when c411 adds a category, not between two
+# page loads, so Search reads them at most this often.
+SEARCH_OPTIONS_TTL = 900.0  # fifteen minutes
 log = logging.getLogger(__name__)
 
 
@@ -295,6 +298,11 @@ class Indexer:
             for n, k in enumerate(keys, 1)
         ]
         self._caps_lock = threading.Lock()
+        # c411's search tree and a root's facets, which change when c411 adds a category.
+        # Every cold Search panel asks for both, and the limiter spaces requests half a
+        # second apart, so without this the page waits on two requests before it can paint.
+        self._options_lock = threading.Lock()
+        self._options: dict[str, tuple[float, Any]] = {}
         self._modes: dict[SearchMode, set[str]] | None = None
         self._thread = threading.local()  # .background: this thread's requests can wait
 
@@ -565,13 +573,36 @@ class Indexer:
                 self._adult_cache[path] = (self._clock(), data)
             return data
 
+    def _cached_options(self, key: str, read: Callable[[], Any]) -> Any:
+        """`read()`, kept for SEARCH_OPTIONS_TTL. Adult content changes the tree, so it is part
+        of the key; a failed read is never cached."""
+        key = f"{key}:{int(self.adult_content())}"
+        with self._options_lock:
+            found = self._options.get(key)
+            if found is not None and self._clock() - found[0] < SEARCH_OPTIONS_TTL:
+                return found[1]
+        value = read()  # outside the lock: it may wait on the request budget
+        with self._options_lock:
+            self._options[key] = (self._clock(), value)
+            return value
+
+    def forget_search_options(self) -> None:
+        """Drop the cached tree and facets, for when Settings changes what Search may see."""
+        with self._options_lock:
+            self._options.clear()
+
     def search_categories(self) -> dict[str, Any]:
         """c411's native search tree; its IDs differ from Torznab categories.
 
         With adult content on, XXX (root 8, which the key cannot see) comes from the signed-in
-        session, or else as a Torznab-only entry with its subcategories."""
+        session, or else as a Torznab-only entry with its subcategories.
+
+        Kept for SEARCH_OPTIONS_TTL: every cold Search panel reads it."""
         if not self.is_c411:
             raise ValueError("Native search categories are only available on c411.org")
+        return self._cached_options("categories", self._read_search_categories)
+
+    def _read_search_categories(self) -> dict[str, Any]:
         payload = self._request(
             lambda key: (
                 "https://c411.org/api/categories",
@@ -596,9 +627,17 @@ class Indexer:
         return {**payload, "data": [*data, root or ADULT_TORZNAB_ROOT]}
 
     def search_filter_options(self, category: int) -> dict[str, Any]:
-        """Search facets for a root category, distinct from required Upload options."""
+        """Search facets for a root category, distinct from required Upload options.
+
+        Kept for SEARCH_OPTIONS_TTL, like the tree: the panel reads one root's facets every
+        time it opens."""
         if not self.is_c411:
             raise ValueError("Native search filters are only available on c411.org")
+        return self._cached_options(
+            f"facets:{int(category)}", lambda: self._read_filter_options(category)
+        )
+
+    def _read_filter_options(self, category: int) -> dict[str, Any]:
         if category == ADULT_NATIVE_ROOT:
             if not self.adult_content():
                 return {"data": []}

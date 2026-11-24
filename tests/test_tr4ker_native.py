@@ -1,6 +1,7 @@
 """tr4ker native Search and detail (issue 177): synthetic rows, a fake companion session."""
 
 import json
+import threading
 from types import SimpleNamespace
 
 import pytest
@@ -226,29 +227,73 @@ def test_search_offers_tr4ker_once_it_is_added_or_its_companion_is_paired():
     assert Operations.searchable_trackers(stub(None, True)) == ["c411", "tr4ker"]
 
 
-def test_operations_adds_tr4ker_rows_and_reports_a_failure():
-    stub = SimpleNamespace(
+def operations_stub(session):
+    from concurrent.futures import ThreadPoolExecutor
+
+    return SimpleNamespace(
         candidates={},
+        tr4ker_pool=ThreadPoolExecutor(max_workers=1),
         setup=SimpleNamespace(
-            tr4ker_session=lambda: Session(listing(row(1), row(2))),
+            tr4ker_session=lambda: session,
             tr4ker_torznab=lambda: None,
             settings=SimpleNamespace(hides=lambda categories: False),
         ),
     )
+
+
+def test_operations_adds_tr4ker_rows_and_reports_a_failure():
+    stub = operations_stub(Session(listing(row(1), row(2))))
     request = JobRequest(kind="search", query="film", trackers=["c411", "tr4ker"])
     result = [{"hash": "c" * 40, "title": "Film"}]
-    info = Operations.add_tr4ker_rows(stub, request, result, 5.0)
+    info = Operations.add_tr4ker_rows(stub, Operations.start_tr4ker(stub, request), result, 5.0)
     assert [r["tracker"] for r in result] == ["c411", "tr4ker", "tr4ker"]
     assert result[1]["hash"] == "tr4ker:film-1-2020-1080p" and set(stub.candidates) == {
         "tr4ker:film-1-2020-1080p",
         "tr4ker:film-2-2020-1080p",
     }
     assert info["backend"] == "tr4ker-native" and info["total_capped"] is True
-    stub.setup.tr4ker_session = lambda: Session(error=SessionFetchError("refused", 500))
+    stub = operations_stub(Session(error=SessionFetchError("refused", 500)))
     result = [{"hash": "c" * 40}]
-    assert "refused" in Operations.add_tr4ker_rows(stub, request, result, 5.0)["error"]
+    failed = Operations.add_tr4ker_rows(stub, Operations.start_tr4ker(stub, request), result, 5.0)
+    assert "refused" in failed["error"]
     assert len(result) == 1  # c411's rows are kept
     assert JobRequest(kind="search").trackers == ["c411"]  # c411 alone is the default
+
+
+def test_tr4ker_is_fetched_while_c411_is_searched():
+    """The companion read starts before c411's search, so the page waits for the slower half
+    rather than for both in turn."""
+    started = threading.Event()
+    release = threading.Event()
+
+    class Slow(Session):
+        def read_json(self, path, timeout=60.0):
+            started.set()
+            release.wait(5)
+            return super().read_json(path, timeout)
+
+    stub = operations_stub(Slow(listing(row(1))))
+    request = JobRequest(kind="search", query="film", trackers=["c411", "tr4ker"])
+    pending = Operations.start_tr4ker(stub, request)
+    assert started.wait(5), "the tr4ker read must already be running"  # c411 would run now
+    release.set()
+    result = [{"hash": "c" * 40}]
+    assert Operations.add_tr4ker_rows(stub, pending, result, 5.0)["backend"] == "tr4ker-native"
+    assert len(result) == 2
+
+
+def test_search_does_not_wait_a_whole_minute_for_the_companion():
+    """The companion polls in bursts and can be asleep for 30-60 s. Search gives up after
+    SEARCH_TIMEOUT instead of holding c411's rows behind `read_json`'s own minute."""
+    seen = []
+
+    class Recording(Session):
+        def read_json(self, path, timeout=60.0):
+            seen.append(timeout)
+            return super().read_json(path, timeout)
+
+    tr4ker_native.search(Recording(listing(row(1))), None, "film")
+    assert seen == [tr4ker_native.SEARCH_TIMEOUT] and tr4ker_native.SEARCH_TIMEOUT <= 15
 
 
 def test_account_read_queue(tmp_path):
@@ -308,3 +353,83 @@ def test_read_json_returns_what_the_tab_sent(tmp_path):
     assert account.reads == {}
     with pytest.raises(SessionFetchError):
         account.read_json("/api/me")
+
+
+def test_an_rss_guid_url_reaches_the_same_detail_as_a_slug():
+    """The RSS feed keys its items by the torrent page URL, so the detail view sees
+    `tr4ker:https://tr4ker.net/torrent/<slug>` and must still find the slug."""
+    from torrentlinker.details_workspace import DetailsWorkspace
+
+    session = Session(DETAIL)
+    workspace = DetailsWorkspace(SimpleNamespace(), tr4ker=session)
+    document = workspace.load("tr4ker:https://tr4ker.net/torrent/film-1-2020-1080p")
+    assert session.paths == ["/api/torrents/film-1-2020-1080p"]
+    assert document["tr4ker"]["slug"] == "film-1-2020-1080p"
+    assert tr4ker_native.slug_of("https://elsewhere.example/torrent/film-1") == ""
+    assert tr4ker_native.slug_of("https://tr4ker.net/wiki/film-1") == ""
+
+
+def test_a_category_reaches_tr4ker_as_its_own_slug():
+    """c411's roots and tr4ker's do not line up, so a pill resolves to one of three answers
+    and Search sends `cat=` only where a single slug covers the choice."""
+    from torrentlinker.tracker_categories import covers, tr4ker_category
+
+    assert tr4ker_category(2) == ("server", "livres", ("livres",))  # Ebook
+    assert tr4ker_category(-7) == ("server", "series", ("series",))  # Série TV
+    assert tr4ker_category(None) == ("server", "", ())  # every category
+    # Films & Vidéos is films + series on tr4ker: no single slug, so its rows are kept here.
+    assert tr4ker_category(1) == ("page", "", ("films", "series"))
+    assert tr4ker_category(7) == ("none", "", ())  # GPS: tr4ker has nothing
+    assert tr4ker_category(-999) == ("page", "", ())  # unmapped: never a wrong slug
+
+    assert covers(1, "films") and covers(1, "series") and not covers(1, "livres")
+    assert covers(2, "anything")  # tr4ker already narrowed it
+    assert not covers(7, "films")
+
+
+def test_search_sends_the_slug_and_keeps_what_the_slug_could_not_narrow():
+    stub = operations_stub(Session(listing(row(1))))
+    request = JobRequest(kind="search", query="film", category=2, trackers=["c411", "tr4ker"])
+    Operations.start_tr4ker(stub, request).result()
+    assert "cat=livres" in stub.setup.tr4ker_session().paths[0]
+
+    # Films & Vidéos sends no slug, and a tr4ker row outside films/series is dropped here.
+    books = row(2)
+    books["parent_cat_slug"] = "livres"
+    film = row(1)
+    film["parent_cat_slug"] = "films"
+    stub = operations_stub(Session(listing(film, books)))
+    request = JobRequest(kind="search", query="", category=1, trackers=["c411", "tr4ker"])
+    pending = Operations.start_tr4ker(stub, request)
+    assert "cat=" not in stub.setup.tr4ker_session().paths[0]
+    result = []
+    info = Operations.add_tr4ker_rows(stub, pending, result, 5.0, 1)
+    assert len(result) == 1 and info["category_scope"] == "page" and info["fetched"] == 2
+
+
+def test_search_options_are_read_once_not_on_every_cold_panel():
+    """Every cold Search panel asks for the tree and one root's facets. The limiter spaces
+    requests half a second apart, so reading them again each time is pure page latency."""
+    from torrentlinker.indexer import Indexer
+
+    calls = []
+    now = [0.0]
+    indexer = Indexer("https://c411.org/api/torznab", "k" * 32, clock=lambda: now[0])
+    indexer._read_search_categories = lambda: calls.append("tree") or {"data": []}  # type: ignore[method-assign]
+    indexer._read_filter_options = lambda category: calls.append(category) or {"data": []}  # type: ignore[method-assign]
+
+    for _ in range(3):
+        indexer.search_categories()
+        indexer.search_filter_options(1)
+    assert calls == ["tree", 1], "a warm panel must not ask c411 again"
+
+    indexer.search_filter_options(2)  # another root is its own entry
+    assert calls == ["tree", 1, 2]
+
+    now[0] += 901.0  # past the TTL: c411 may have added a category
+    indexer.search_categories()
+    assert calls == ["tree", 1, 2, "tree"]
+
+    indexer.forget_search_options()  # Settings changed what Search may see
+    indexer.search_categories()
+    assert calls == ["tree", 1, 2, "tree", "tree"]

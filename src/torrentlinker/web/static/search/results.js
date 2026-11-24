@@ -30,6 +30,7 @@ const SS = {
   posters: true,
   available: ["c411"],
   trackers: ["c411"],
+  tr4kerScopes: {},
   tr4ker: {},
 };
 const TRACKER_COLORS = { c411: "#3b82f6", tr4ker: "#f97316" };
@@ -415,6 +416,35 @@ function renderTrackerNotes() {
     : "";
 }
 
+/* Where a control bites on each Tracker: ● its whole catalogue, ◐ only the page fetched,
+   ○ not at all. Without it the pills showed c411's count as if it covered both. */
+const SCOPE_MARKS = { server: "●", page: "◐", none: "○" };
+const SCOPE_WORDS = () => ({
+  server: say("filters the whole tracker", "filtre tout le tracker"),
+  page: say(
+    "no equivalent: these rows are filtered here, within the page fetched",
+    "sans équivalent : ces lignes sont filtrées ici, dans la page reçue",
+  ),
+  none: say(
+    "this tracker has no such category",
+    "ce tracker n’a pas cette catégorie",
+  ),
+});
+function scopeMark(scopes) {
+  const host = element("span", undefined, "scope-mark");
+  const words = SCOPE_WORDS();
+  const lines = [];
+  for (const [name, scope] of Object.entries(scopes)) {
+    const dot = element("span", SCOPE_MARKS[scope], `scope-dot scope-${scope}`);
+    dot.dataset.tracker = name;
+    host.append(dot);
+    lines.push(`${name} ${SCOPE_MARKS[scope]} ${words[scope]}`);
+  }
+  host.title = lines.join("\n");
+  host.setAttribute("aria-label", lines.join(". "));
+  return host;
+}
+
 function renderPills() {
   const roots = searchRoots();
   const host = $("search-pills");
@@ -433,7 +463,26 @@ function renderPills() {
     const dot = element("span", undefined, "dot");
     dot.style.background = color;
     b.append(dot, element("span", name));
-    if (shown) b.append(element("span", searchNumber(count), "pill-count"));
+    if (shown) {
+      // c411 publishes a count per category; tr4ker's own listing total is capped and has no
+      // per-category figure, so the number is c411's alone and says so.
+      const value = element("span", searchNumber(count), "pill-count");
+      if (merged()) {
+        value.classList.add("c411-count");
+        value.title = say(
+          "c411 only: tr4ker publishes no count per category.",
+          "c411 seulement : tr4ker ne publie pas de total par catégorie.",
+        );
+      }
+      b.append(value);
+    }
+    if (merged())
+      b.append(
+        scopeMark({
+          c411: "server",
+          tr4ker: id === "" ? "server" : (SS.tr4kerScopes[id] ?? "page"),
+        }),
+      );
     return b;
   };
   host.replaceChildren(
@@ -944,13 +993,23 @@ function runSearch(page = 1) {
               `${searchNumber(r.total)} torrents`,
             );
       if (SS.totalSize) summary += (summary ? " · " : "") + bytes(SS.totalSize);
-      if (merged())
+      if (merged()) {
+        const kept = (t) => SS.rows.filter((x) => x.tracker === t).length;
         summary =
           say(`${SS.rows.length} results`, `${SS.rows.length} résultats`) +
           Object.keys(TRACKER_COLORS)
             .filter((t) => SS.trackers.includes(t))
-            .map((t) => ` · ${t} ${SS.rows.filter((x) => x.tracker === t).length}`)
+            .map((t) => ` · ${t} ${kept(t)}`)
             .join("");
+        // tr4ker could not narrow this category itself, so say how many of the rows it did
+        // return were kept here rather than let the figure look like a whole-tracker count.
+        const info = SS.tr4ker || {};
+        if (info.category_scope === "page" && info.fetched > kept("tr4ker"))
+          summary += say(
+            ` of ${info.fetched} fetched`,
+            ` sur ${info.fetched} reçus`,
+          );
+      }
       $("search-summary").textContent = summary;
       $("search-status").textContent = r.window_limited
         ? say(
@@ -1025,6 +1084,7 @@ function loadSearchOptions(then) {
       SS.native = r.backend === "c411-native";
       SS.categories = r.categories || {};
       SS.colors = r.root_colors || {};
+      SS.tr4kerScopes = r.tr4ker_scopes || {};
       SS.adultNote = r.adult_filters === "extension";
       const labels = VIDEO_LABELS();
       const defs = [];
@@ -1161,8 +1221,10 @@ async function loadSearchPage() {
     searchRetranslate();
     if (!SS.loading) {
       const loading = (async () => {
-        await loadSearchOptions();
-        await runSearch(1);
+        // The first search does not depend on the options: on a cold panel the category is
+        // every category and no facet is chosen, so both go out at once instead of the page
+        // waiting for the tree, then the facets, then the rows.
+        await Promise.all([loadSearchOptions(), runSearch(1)]);
       })();
       SS.loading = loading;
       try {

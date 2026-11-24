@@ -6,6 +6,7 @@ import threading
 import time
 from collections import Counter
 from collections.abc import Callable
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Literal
@@ -264,6 +265,8 @@ class Operations:
         self.feed_observed_at: float = 0
         self.connection_error = ""
         self.zen: dict[str, Any] = {}
+        # One worker for tr4ker's half of a merged Search, so it overlaps c411's.
+        self.tr4ker_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="tr4ker")
 
     def validate(self, request: JobRequest) -> None:
         if request.kind == "send-plan":
@@ -527,27 +530,58 @@ class Operations:
             "total_size": page.total_size,
         }
 
-    def add_tr4ker_rows(self, request, result, seen_at) -> dict[str, Any]:
-        """Append tr4ker's rows to a Search page, each badged. A tr4ker failure is reported in
-        the page's metadata and never hides c411's rows; it is not retried."""
+    def start_tr4ker(self, request) -> Future[Any]:
+        """Begin tr4ker's half of a merged Search on its own thread.
+
+        The two Trackers answer through different paths: c411 over HTTP in well under a
+        second, tr4ker through the browser companion, which polls for work in bursts and can
+        take tens of seconds to pick a read up. Run back to back, the page waited for their
+        sum; started here, before c411's own search, they overlap and the page waits for the
+        slower one alone. The caller passes the Future to `add_tr4ker_rows`."""
         from torrentlinker import tr4ker_native
+        from torrentlinker.tracker_categories import tr4ker_category
+
+        # The chosen category, as tr4ker can be asked for it. Where one slug covers it, tr4ker
+        # narrows its own catalogue; where none does, it answers unnarrowed and
+        # `add_tr4ker_rows` keeps the rows that belong (tracker_categories).
+        _, slug, _ = tr4ker_category(request.category)
+        return self.tr4ker_pool.submit(
+            tr4ker_native.search,
+            self.setup.tr4ker_session(),
+            self.setup.tr4ker_torznab(),
+            request.query,
+            category=slug,
+            page=request.page,
+            limit=50,
+            sort=request.merged_sort,
+        )
+
+    def add_tr4ker_rows(
+        self, pending: Future[Any], result, seen_at, category=None
+    ) -> dict[str, Any]:
+        """Append the rows of a started tr4ker search to a Search page, each badged. A tr4ker
+        failure is reported in the page's metadata and never hides c411's rows; it is not
+        retried. The wait is bounded by `tr4ker_native.SEARCH_TIMEOUT` inside the read.
+
+        When no single tr4ker slug covered the chosen category, its page came back unnarrowed
+        and the rows outside that category are dropped here; `category_scope` says which
+        happened so the page can tell the user where the category bit."""
         from torrentlinker.merged_search import tr4ker_row
+        from torrentlinker.tracker_categories import covers, tr4ker_category
 
         for row in result:
             row["tracker"] = "c411"
         try:
-            page = tr4ker_native.search(
-                self.setup.tr4ker_session(),
-                self.setup.tr4ker_torznab(),
-                request.query,
-                page=request.page,
-                limit=50,
-                sort=request.merged_sort,
-            )
+            page = pending.result()
         except Exception as error:  # noqa: BLE001 - shown to the user, never swallowed silently
             return {"error": str(error) or type(error).__name__}
+        scope, slug, _ = tr4ker_category(category)
+        fetched = 0
         for candidate in page.rows:
             if self.setup.settings.hides(candidate.categories):
+                continue
+            fetched += 1
+            if not covers(category, str(candidate.metadata.get("category_slug") or "")):
                 continue
             key = candidate.infohash or f"tr4ker:{candidate.metadata['slug']}"
             self.candidates[key] = candidate
@@ -557,10 +591,14 @@ class Operations:
             "total": page.total,
             "total_capped": page.capped,
             "notes": page.notes,
+            "category_scope": scope,
+            "category_slug": slug,
+            "fetched": fetched,
         }
 
     def search_options(self, category=None):
         from torrentlinker.indexer_search import search_options
+        from torrentlinker.tracker_categories import tr4ker_category
 
         settings = self.setup.settings
         visible = settings.visible_categories(settings.indexer_categories)
@@ -570,7 +608,15 @@ class Operations:
             {str(k): asdict(settings.indexer_categories[k]) for k in visible},
             adult=settings.adult_content,
         )
-        return {**options, "trackers": self.searchable_trackers()}
+        return {
+            **options,
+            "trackers": self.searchable_trackers(),
+            # Where each category bites on tr4ker, so the pills can say so instead of showing
+            # c411's count as if it covered both Trackers (tracker_categories).
+            "tr4ker_scopes": {
+                key: tr4ker_category(int(key))[0] for key in options.get("categories", {})
+            },
+        }
 
     def searchable_trackers(self) -> list[str]:
         """The Trackers Search can read: tr4ker once it is added or its companion is paired."""
@@ -949,6 +995,9 @@ class Operations:
             return library.reseed_all(stop, progress)
         if request.kind == "search":
             indexer = self.setup.indexer()
+            # tr4ker first: its companion read is the slow half, so it runs while c411 is
+            # searched rather than after it (`start_tr4ker`).
+            pending_tr4ker = self.start_tr4ker(request) if "tr4ker" in request.trackers else None
             seeded = set()
             if request.search_exclude_seeded:
                 seeded = {
@@ -1073,8 +1122,10 @@ class Operations:
                     )
                 )
             tr4ker_info: dict[str, Any] = {}
-            if "tr4ker" in request.trackers:
-                tr4ker_info = self.add_tr4ker_rows(request, result, metadata["observed_at"])
+            if pending_tr4ker is not None:
+                tr4ker_info = self.add_tr4ker_rows(
+                    pending_tr4ker, result, metadata["observed_at"], request.category
+                )
             from torrentlinker.release_score.estimate import estimate as release_estimate
             from torrentlinker.release_score.service import mark_best, score
 
