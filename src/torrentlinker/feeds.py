@@ -687,8 +687,24 @@ class FeedService:
                 ),
                 (feed_id, feed_id, unread, saved, dismissed),
             ).fetchall()
+            # A subscription's preferences decide what belongs in its inbox, not only what may
+            # be downloaded from it: a feed set to 4-8 GiB showed 506 of its 633 items outside
+            # that range, because the range only ever set `eligible`. An item a preference
+            # blocks is left out of that subscription's inbox; one its preferences cannot
+            # judge is kept, since that is what `unknown` is for and only you can settle it.
+            # The rows stay in the database, so widening a range shows them again at once.
+            wanted = {
+                row["id"]: Preferences.model_validate(row.get("preferences") or {})
+                for row in self.subscriptions()
+            }
             result = {}
             for row in rows:
+                prefs = wanted.get(row["feed"])
+                if (
+                    prefs is not None
+                    and evaluate(candidate(json.loads(row["payload"])), prefs)["excluded"]
+                ):
+                    continue
                 hash = row["infohash"]
                 if hash not in result:
                     result[hash] = {

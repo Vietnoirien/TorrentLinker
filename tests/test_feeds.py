@@ -1,6 +1,6 @@
 import pytest
 
-from torrentlinker.feeds import FeedService, Subscription
+from torrentlinker.feeds import FeedService, Preferences, Subscription
 from torrentlinker.indexer import Candidate
 
 
@@ -460,3 +460,32 @@ def test_category_scoped_rules_preserve_legacy_and_do_not_reject_other_categorie
     assert (
         FeedService(tmp_path / "scoped.sqlite", lambda: source).get(saved.id).preferences == prefs
     )
+
+
+def test_a_subscription_shows_only_what_its_preferences_allow(tmp_path):
+    """A size range set on a subscription decided only what could be downloaded from it: one
+    set to 4-8 GiB still listed 506 of its 633 items outside that range. A filter filters."""
+    source = Source()
+    source.rows = [
+        Candidate("Too small", 1_000_000_000, "u", infohash="a" * 40),
+        Candidate("Just right", 6_000_000_000, "u", infohash="b" * 40),
+        Candidate("Too big", 20_000_000_000, "u", infohash="c" * 40),
+        Candidate("No size at all", 0, "u", infohash="d" * 40),
+    ]
+    service = FeedService(tmp_path / "feeds.sqlite", lambda: source)
+    feed = service.save(
+        Subscription(
+            name="4K",
+            categories=[2030],
+            preferences=Preferences(min_size=4 * 1024**3, max_size=8 * 1024**3),
+        )
+    )
+    service.refresh(feed.id, now=100)
+
+    shown = {row["title"] for row in service.inbox(feed_id=feed.id)}
+    # The one in range, and the one whose size cannot be judged: only you can settle that.
+    assert shown == {"Just right", "No size at all"}, shown
+
+    # The rows are still there, so widening the range shows them again without another poll.
+    service.save(Subscription(id=feed.id, name="4K", categories=[2030], preferences=Preferences()))
+    assert len(service.inbox(feed_id=feed.id)) == 4
