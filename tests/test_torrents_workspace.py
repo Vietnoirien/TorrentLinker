@@ -263,3 +263,21 @@ def test_an_action_takes_every_torrent_the_filters_match(operations):
     result = service.request("apply", {"action": "pause", "items": items, "token": review["token"]})
     assert [r["outcome"] for r in result["rows"]] == ["sent"] * 1503
     assert looked_up == []
+
+
+def test_a_category_takes_in_its_sub_categories(operations):
+    service = workspace(operations)
+    client = operations.setup._client
+    for h, name, category in [
+        ("1" * 40, "Book", "Ebook"),
+        ("2" * 40, "Audiobook", "Ebook/Audio"),
+        ("3" * 40, "Manga", "Ebook/BDs/Manga"),
+        ("4" * 40, "Lookalike", "Ebooks"),
+    ]:
+        client.by_hash[h] = Torrent(h, name, Path("/data"), state="uploading", category=category)
+    names = lambda category: sorted(  # noqa: E731
+        r["name"] for r in service.request("list", {"category": category})["rows"]
+    )
+    assert names("Ebook") == ["Audiobook", "Book", "Manga"]
+    assert names("Ebook / BDs") == ["Manga"]
+    assert names("Ebook / Audio") == ["Audiobook"]

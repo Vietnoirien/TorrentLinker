@@ -580,7 +580,11 @@ class TorrentWorkspace:
                 return False
             if query.tracker and query.tracker not in [tracker_group(h) for h in row["trackers"]]:
                 return False
-            if query.category and query.category not in [" / ".join(c) for c in row["categories"]]:
+            # A category takes in its sub-categories: "Ebook" matches "Ebook / Audio".
+            if query.category and not any(
+                path == query.category or path.startswith(query.category + " / ")
+                for path in (" / ".join(c) for c in row["categories"])
+            ):
                 return False
             if query.tag and query.tag not in row["tags"]:
                 return False
