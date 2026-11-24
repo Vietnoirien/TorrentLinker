@@ -27,6 +27,11 @@ from torrentlinker.media_tracker import TrackerRows
 VIDEO = {".mp4", ".m4v", ".mkv", ".webm", ".avi", ".mov", ".mpeg", ".mpg", ".ts", ".wmv"}
 AUDIO = {".mp3", ".flac", ".m4a", ".aac", ".ogg", ".opus", ".wav", ".aiff", ".wma", ".wv"}
 POSTER_BUDGET = 90.0  # seconds a scan may spend downloading posters; the rest wait for the next one
+# How long one listing's rows stand for the next. A Media page asks for a dozen listings
+# of the same library within a second, and the player writes a position every second, so
+# the window is short on purpose: what a page shows is read again, only which rows match
+# a filter may be this far behind.
+ROWS_HELD = 2.0  # seconds
 PARTIAL = (".part", ".partial", ".!qb", ".!ut", ".crdownload", ".tmp")
 
 
@@ -124,8 +129,9 @@ class UnfinishedMedia(ValueError):
 
 
 class MediaLibrary(TrackerRows, AgeRatings):
-    def __init__(self, agent):
+    def __init__(self, agent, clock=time.monotonic):
         self.agent = agent
+        self.clock = clock
         self.lock = threading.RLock()
         self.db = sqlite3.connect(agent.setup.path.parent / "media.sqlite", check_same_thread=False)
         self.db.row_factory = sqlite3.Row
@@ -135,6 +141,10 @@ class MediaLibrary(TrackerRows, AgeRatings):
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA synchronous=NORMAL")
         self.scanning: set[str] = set()
+        # The rows one listing builds, for the next listing of the same library to reuse.
+        # A Media page asks for a dozen listings of the same items (home_rows), and each
+        # one used to build a row for every record before filtering down to a screenful.
+        self._rows: dict[tuple, tuple[float, list[dict]]] = {}
         self.previews: dict[str, dict[str, Any]] = {}
         self.observations: dict[str, tuple[object, set[str]]] = {}
         with self.db:
@@ -1159,7 +1169,7 @@ class MediaLibrary(TrackerRows, AgeRatings):
             and sees(record)
         ]
         who = {"account": actor.account, "viewer": actor.viewer}
-        rows = [self.row(r, check=bool(availability), **who) for r in records]
+        rows = self._built_rows(records, bool(availability), who, registered, adult)
         rows = [r for r in rows if (not kind or r["kind"] == kind)]
         filters = {
             name: sorted({str(r.get(name) or "") for r in rows if r.get(name)})
@@ -1250,6 +1260,42 @@ class MediaLibrary(TrackerRows, AgeRatings):
             "has_more": offset + limit < total,
             "next_offset": offset + limit if offset + limit < total else None,
         }
+
+    def _built_rows(self, records, check, who, registered, adult):
+        """A row for each of these records, built once and kept for a moment.
+
+        One Media page asks for a dozen listings of the same library, differing only in the
+        kind, view or genre they then filter by, so every one of them rebuilt a row for every
+        record. They are kept against what they were built from — which records, the folders
+        Settings registers, who is asking, whether availability was checked — and only for
+        ROWS_HELD, because the player writes a position every second and the whole library
+        would otherwise be rebuilt between one listing and the next.
+
+        A short window is safe here: every row this listing actually shows is read again
+        below (`checked`), so a stale position or watched mark never reaches the page. Only
+        which rows match a filter, and how many there are, may be a second behind.
+
+        The rows are never changed after this: each step copies what it keeps
+        (`{**row, ...}`) and filters into a new list, so handing out the same objects is safe.
+        """
+        key = (
+            tuple(record["id"] for record in records),
+            self.db.total_changes,
+            frozenset(registered),
+            check,
+            adult,
+            who["account"],
+            who["viewer"],
+        )
+        now = self.clock()
+        found = self._rows.get(key)
+        if found is None or now - found[0] > ROWS_HELD:
+            built = [self.row(record, check=check, **who) for record in records]
+            # A handful is plenty: a page reuses one key, and a changed library makes another.
+            while len(self._rows) >= 8:
+                self._rows.pop(next(iter(self._rows)))
+            found = self._rows[key] = (now, built)
+        return list(found[1])
 
     @staticmethod
     def _series_cards(rows):
