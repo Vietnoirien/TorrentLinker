@@ -195,7 +195,21 @@ class TorznabIndexer:
         url = candidate.download_url
         if "apikey=" not in url:
             url += ("&" if "?" in url else "?") + urlencode({"apikey": self.api_key})
-        data = self._send(url, None).content
+        try:
+            response = self._send(url, None)
+        except httpx.UnsupportedProtocol as exc:
+            if "magnet://" not in str(exc):
+                raise
+            raise ValueError(
+                f"{self.tracker or self.name or 'The Indexer'} provided only a magnet link. "
+                "A .torrent file is required to verify local files."
+            ) from None
+        if response.url.scheme == "magnet":
+            raise ValueError(
+                f"{self.tracker or self.name or 'The Indexer'} provided only a magnet link. "
+                "A .torrent file is required to verify local files."
+            )
+        data = response.content
         if not data.startswith(b"d"):
             raise ValueError(f"{self.name or 'The Indexer'} did not return a .torrent file")
         self.keep_torrent(candidate, data)

@@ -75,6 +75,21 @@ def tr4ker(handler, clock=None) -> TorznabIndexer:
     )
 
 
+def test_magnet_only_download_requires_torrent_metainfo_without_exposing_link():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/download"):
+            return httpx.Response(302, headers={"Location": "magnet://?xt=urn:btih:secret"})
+        return httpx.Response(200, text=feed(item()))
+
+    found = tr4ker(handler)
+    found._http = httpx.Client(transport=httpx.MockTransport(handler), follow_redirects=True)
+    candidate = found.search(SearchQuery(q="Film.2020"))[0]
+    with pytest.raises(ValueError, match="provided only a magnet link") as error:
+        found.fetch_torrent(candidate)
+    assert "secret" not in str(error.value)
+    assert KEY not in str(error.value)
+
+
 def test_caps_advertise_five_modes_and_each_one_is_searched_with_its_own_parameters():
     caps = parse_caps(CAPS)
     assert set(caps.modes) == {
