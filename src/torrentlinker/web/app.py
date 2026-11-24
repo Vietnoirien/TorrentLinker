@@ -78,6 +78,9 @@ from torrentlinker.web.zen_preferences import ZenPreferences
 # markup is never cached, so a new build is picked up on the next load; this only bounds how
 # long that build's assets may lag behind it.
 STATIC_MAX_AGE = 600
+# A request that takes at least this long is logged by route and duration. Long enough
+# that ordinary work stays quiet, short enough to catch a page that feels slow.
+SLOW_REQUEST = 2.0  # seconds
 
 logger = logging.getLogger(__name__)
 
@@ -383,6 +386,23 @@ def create_app(
         if monitor_verifications:
             monitor.start()
         threading.Thread(target=history_loop, daemon=True, name="profile-history").start()
+
+        def artwork_loop() -> None:
+            """Re-encode the posters still stored as PNG, once, after an update.
+
+            Posters became WebP and readers take either suffix, so this catches up what is
+            already stored instead of leaving it to be run by hand. It is safe to interrupt
+            and it waits a little first, so an update is not spent on it before the
+            application answers.
+            """
+            if shutdown.wait(30):
+                return
+            try:
+                agent_service.media.convert_png_masters(shutdown)
+            except Exception:  # noqa: BLE001 - a store that cannot be converted still reads
+                logger.warning("Stored posters could not be re-encoded; they still read.")
+
+        threading.Thread(target=artwork_loop, daemon=True, name="artwork-webp").start()
         if monitor_verifications:
             threading.Thread(target=catalogue_loop, daemon=True, name="catalogue-refresh").start()
             threading.Thread(
@@ -573,11 +593,18 @@ def create_app(
                         status_code=403,
                     )
                 request.state.actor = actor
+        started = time.monotonic()
         try:
             response = await call_next(request)
         except Exception as error:
             # Do not let ASGI log a raw HTTP exception containing private URLs.
             response = JSONResponse(crash_response(request, error), status_code=502)
+        # Uvicorn's own access log stays off, because a Torznab URL carries the API key. This
+        # names the route and how long it took and nothing else — no query, no body — so a
+        # page that waits says which request it waited for.
+        elapsed = time.monotonic() - started
+        if elapsed >= SLOW_REQUEST:
+            logger.warning("%s %s answered in %.1f s", request.method, route, elapsed)
         renewed = getattr(request.state, "renew_session", None)
         if renewed and route != "/api/logout":
             # A Member's session lasts 30 days of disuse, a Shared Screen 90: each use

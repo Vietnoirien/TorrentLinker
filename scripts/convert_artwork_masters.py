@@ -19,62 +19,12 @@ application also writes.
 from __future__ import annotations
 
 import argparse
-import re
 import sqlite3
 from pathlib import Path
-from uuid import uuid4
 
-MASTER = re.compile(r"^([a-f0-9]{64})\.png$")
-
-
-def masters(folder: Path) -> list[Path]:
-    """The PNG masters, which sit beside the `variants` folder, not inside it."""
-    return sorted(path for path in folder.glob("*.png") if MASTER.match(path.name))
-
-
-def references(db: sqlite3.Connection, key: str) -> int:
-    """How many stored records name this master."""
-    found = 0
-    for table in ("media_items", "media_options"):
-        for (body,) in db.execute(f"SELECT body FROM {table}"):  # noqa: S608 - fixed names
-            found += (body or "").count(key)
-    return found
-
-
-def repoint(db: sqlite3.Connection, old: str, new: str) -> int:
-    """Name `new` wherever a record named `old`. Returns the rows changed."""
-    changed = 0
-    for table, identity in (("media_items", ("client", "id")), ("media_options", ("key",))):
-        columns = ", ".join(identity)
-        rows = db.execute(
-            f"SELECT {columns}, body FROM {table} WHERE body LIKE ?",  # noqa: S608 - fixed names
-            (f"%{old}%",),
-        ).fetchall()
-        for row in rows:
-            body = row[-1].replace(old, new)
-            where = " AND ".join(f"{name}=?" for name in identity)
-            db.execute(
-                f"UPDATE {table} SET body=? WHERE {where}",  # noqa: S608 - fixed names
-                (body, *row[:-1]),
-            )
-            changed += 1
-    return changed
-
-
-def convert(path: Path) -> Path:
-    """Write the WebP beside the PNG, whole, and return it."""
-    from PIL import Image
-
-    target = path.with_suffix(".webp")
-    partial = path.with_name(f".{uuid4().hex}.tmp")
-    try:
-        with Image.open(path) as picture:
-            picture.load()
-            picture.convert("RGB").save(partial, format="WEBP", quality=90, method=4)
-        partial.replace(target)
-    finally:
-        partial.unlink(missing_ok=True)
-    return target
+from torrentlinker.media_artwork import png_masters as masters
+from torrentlinker.media_artwork import repoint
+from torrentlinker.media_artwork import to_webp as convert
 
 
 def main() -> int:

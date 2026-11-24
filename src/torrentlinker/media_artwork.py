@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import threading
 from pathlib import Path
 from typing import Any
@@ -68,3 +69,57 @@ def variant(path: Path, folder: Path, size: str) -> Path:
             finally:
                 partial.unlink(missing_ok=True)
     return target
+
+
+MASTER_PNG = re.compile(r"^([a-f0-9]{64})\.png$")
+
+
+def png_masters(folder: Path) -> list[Path]:
+    """The masters still stored as PNG. They sit beside `variants`, never inside it."""
+    if not folder.is_dir():
+        return []
+    return sorted(path for path in folder.glob("*.png") if MASTER_PNG.match(path.name))
+
+
+def to_webp(path: Path) -> Path:
+    """Write `path` beside itself as WebP and return it; the PNG is left for the caller.
+
+    A poster is a photograph, and PNG stored it losslessly at about ten times the size. The
+    name is kept: it is the hash of the bytes as downloaded, so only the suffix changes and
+    the `-grid`/`-hero` copies named from the stem stay valid.
+    """
+    from PIL import Image
+
+    target = path.with_suffix(".webp")
+    partial = path.with_name(f".{uuid4().hex}.tmp")
+    try:
+        with Image.open(path) as picture:
+            picture.load()
+            picture.convert("RGB").save(partial, format="WEBP", quality=90, method=4)
+        partial.replace(target)
+    finally:
+        partial.unlink(missing_ok=True)
+    return target
+
+
+def repoint(db: Any, old: str, new: str) -> int:
+    """Name `new` wherever a stored record names `old`. Returns the rows changed.
+
+    The caller holds the transaction: a master is deleted only once every reference to it has
+    moved, so an interrupted pass leaves records pointing at a file that is still there.
+    """
+    changed = 0
+    for table, identity in (("media_items", ("client", "id")), ("media_options", ("key",))):
+        columns = ", ".join(identity)
+        rows = db.execute(
+            f"SELECT {columns}, body FROM {table} WHERE body LIKE ?",  # noqa: S608 - fixed names
+            (f"%{old}%",),
+        ).fetchall()
+        for row in rows:
+            where = " AND ".join(f"{name}=?" for name in identity)
+            db.execute(
+                f"UPDATE {table} SET body=? WHERE {where}",  # noqa: S608 - fixed names
+                (row[-1].replace(old, new), *row[:-1]),
+            )
+            changed += 1
+    return changed

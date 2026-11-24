@@ -149,3 +149,36 @@ def test_a_listing_does_not_copy_the_settings_once_per_item(tmp_path):
     now[0] += SETUP_HELD + 0.1
     media.listing("default", kind="video", view="all", limit=5)
     assert len(copies) == 2, "past the window Settings is read again"
+
+
+def test_stored_png_posters_are_re_encoded_after_an_update(tmp_path):
+    """Posters became WebP and readers take either suffix, so what is already stored is
+    converted in the background rather than left for someone to run a script."""
+    from io import BytesIO
+
+    from PIL import Image
+
+    media = library(tmp_path, 1, lambda: 100.0)
+    picture = BytesIO()
+    Image.new("RGB", (500, 750), (90, 120, 160)).save(picture, format="PNG")
+    folder = tmp_path / "media-artwork"
+    folder.mkdir()
+    import hashlib
+
+    digest = hashlib.sha256(picture.getvalue()).hexdigest()
+    (folder / f"{digest}.png").write_bytes(picture.getvalue())
+    with media.db:
+        media.db.execute(
+            "INSERT INTO media_options VALUES (?,?)",
+            ("tracker-new:default:x", f'{{"artwork": "asset:{digest}.png"}}'),
+        )
+    media.agent = types.SimpleNamespace(setup=types.SimpleNamespace(path=tmp_path / "s.json"))
+
+    assert media.convert_png_masters() == 1
+    assert not (folder / f"{digest}.png").exists(), "the PNG goes once its replacement is in"
+    assert (folder / f"{digest}.webp").is_file()
+    body = media.db.execute(
+        "SELECT body FROM media_options WHERE key='tracker-new:default:x'"
+    ).fetchone()[0]
+    assert f"asset:{digest}.webp" in body and ".png" not in body
+    assert media.convert_png_masters() == 0, "nothing left to do on the next start"

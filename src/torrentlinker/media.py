@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import math
 import os
 import re
@@ -24,6 +25,7 @@ from torrentlinker.domain import ContentKind
 from torrentlinker.media_ratings import AgeRatings
 from torrentlinker.media_tracker import TrackerRows
 
+log = logging.getLogger(__name__)
 VIDEO = {".mp4", ".m4v", ".mkv", ".webm", ".avi", ".mov", ".mpeg", ".mpg", ".ts", ".wmv"}
 AUDIO = {".mp3", ".flac", ".m4a", ".aac", ".ogg", ".opus", ".wav", ".aiff", ".wma", ".wv"}
 POSTER_BUDGET = 90.0  # seconds a scan may spend downloading posters; the rest wait for the next one
@@ -191,6 +193,34 @@ class MediaLibrary(TrackerRows, AgeRatings):
         "album": "$.album",
         "content_id": "$.content_id",
     }
+
+    def convert_png_masters(self, stop=None, limit: int | None = None) -> int:
+        """Re-encode the posters still stored as PNG, a few at a time. Returns how many moved.
+
+        Posters became WebP, and readers take either suffix, so the ones already stored are
+        converted here rather than left for someone to run a script. It is safe to interrupt:
+        each master is replaced and its references repointed in one transaction before the
+        PNG goes, so stopping leaves every record pointing at a file that exists.
+        """
+        from torrentlinker import media_artwork
+
+        folder = self.agent.setup.path.parent / "media-artwork"
+        moved = 0
+        for path in media_artwork.png_masters(folder)[:limit]:
+            if stop is not None and stop.is_set():
+                break
+            try:
+                media_artwork.to_webp(path)
+            except Exception:  # noqa: BLE001 - one unreadable master stops nothing
+                log.warning("A stored poster could not be re-encoded; leaving it as it is.")
+                continue
+            with self.lock, self.db:
+                media_artwork.repoint(self.db, path.name, path.with_suffix(".webp").name)
+            path.unlink(missing_ok=True)
+            moved += 1
+        if moved:
+            log.info("Re-encoded %d stored posters as WebP.", moved)
+        return moved
 
     def index_items(self):
         """Give media_items its generated columns and their indexes, once.

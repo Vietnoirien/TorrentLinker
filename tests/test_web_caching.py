@@ -109,3 +109,19 @@ def test_middleware_compresses_only_text_like_whole_responses():
         assert browser.get("/json").json() == {"a": big}
         for path in ("/binary", "/video", "/partial", "/small"):
             assert "content-encoding" not in browser.get(path).headers, path
+
+
+def test_a_slow_request_is_logged_by_route_and_never_by_url(tmp_path, caplog, monkeypatch):
+    """Uvicorn's access log stays off because a Torznab URL carries the API key. A page that
+    waits still has to say which request it waited for, so the route alone is logged."""
+    import logging
+
+    from torrentlinker.web import app as web_app
+
+    monkeypatch.setattr(web_app, "SLOW_REQUEST", 0.0)
+    app = create_app(tmp_path, password="test-password-long", monitor_verifications=False)
+    with TestClient(app) as browser, caplog.at_level(logging.WARNING, "torrentlinker.web.app"):
+        browser.get("/static/app.js?apikey=secret-should-never-be-logged")
+    logged = [record.getMessage() for record in caplog.records]
+    assert any("/static/app.js answered in" in line for line in logged), logged
+    assert not any("secret-should-never-be-logged" in line for line in logged)
