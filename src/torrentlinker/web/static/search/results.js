@@ -264,7 +264,14 @@ function renderFacets() {
   if (SS.adultNote) {
     // XXX through Torznab: c411's own filters need the signed-in companion.
     host.append(
-      element("p", say("Connect the extension for XXX filters", "Connectez l'extension pour les filtres XXX"), "muted"),
+      element(
+        "p",
+        say(
+          "Connect the extension for XXX filters",
+          "Connectez l'extension pour les filtres XXX",
+        ),
+        "muted",
+      ),
     );
     return;
   }
@@ -386,9 +393,7 @@ function renderTrackers() {
 function renderTrackerNotes() {
   const info = SS.tr4ker || {};
   const note = $("search-backend-note");
-  const names = Object.fromEntries(
-    SORTS().map(([key, label]) => [key, label]),
-  );
+  const names = Object.fromEntries(SORTS().map(([key, label]) => [key, label]));
   if (!merged() || info.error) note.hidden = true;
   else if (info.backend === "torznab") {
     note.hidden = false;
@@ -406,7 +411,10 @@ function renderTrackerNotes() {
   const error = $("search-error-note");
   error.hidden = !(merged() && info.error);
   error.textContent = info.error
-    ? say(`tr4ker did not answer: ${info.error}`, `tr4ker n'a pas répondu : ${info.error}`)
+    ? say(
+        `tr4ker did not answer: ${info.error}`,
+        `tr4ker n'a pas répondu : ${info.error}`,
+      )
     : "";
   $("search-unavailable").textContent = merged()
     ? say(
@@ -740,7 +748,11 @@ function richRow(row) {
   }
   if (row.tracker === "tr4ker")
     zen.append(
-      element("small", say("No Zen on tr4ker", "Pas de Zen sur tr4ker"), "muted"),
+      element(
+        "small",
+        say("No Zen on tr4ker", "Pas de Zen sur tr4ker"),
+        "muted",
+      ),
     );
   el.append(
     check,
@@ -960,6 +972,15 @@ function runSearch(page = 1) {
       ),
     );
   $("search-status").textContent = say("Searching…", "Recherche…");
+  // c411's rows, reported before tr4ker's companion answers: painted as they are, with a
+  // line saying the other Tracker is still coming, so the page is never empty while waiting.
+  const meanwhile = (partial) => {
+    paintSearch(partial);
+    $("search-status").textContent = say(
+      "c411's results are shown; tr4ker is still answering…",
+      "Les résultats c411 sont affichés ; tr4ker répond encore…",
+    );
+  };
   return job(
     {
       kind: "search",
@@ -971,60 +992,64 @@ function runSearch(page = 1) {
       trackers: SS.trackers,
       merged_sort: MERGED_SORTS[SS.sort.key] || "recent",
     },
-    (r) => {
-      SS.searched = true;
-      SS.tr4ker = r.tr4ker || {};
-      SS.page = r.page;
-      SS.pages = Math.max(1, r.pages);
-      SS.total = r.total;
-      SS.totalSize = r.total_size;
-      SS.rows = r.rows;
-      SS.listing = r.listing || {};
-      SS.known = r.known || {};
-      if (r.root_counts && Object.keys(r.root_counts).length)
-        SS.rootCounts = r.root_counts;
-      SS.palliativeCount = r.palliative_count ?? SS.palliativeCount;
-      state.searchSelected.clear();
-      let summary =
-        r.total === null || r.total === undefined
-          ? ""
-          : say(
-              `${searchNumber(r.total)} torrents`,
-              `${searchNumber(r.total)} torrents`,
-            );
-      if (SS.totalSize) summary += (summary ? " · " : "") + bytes(SS.totalSize);
-      if (merged()) {
-        const kept = (t) => SS.rows.filter((x) => x.tracker === t).length;
-        summary =
-          say(`${SS.rows.length} results`, `${SS.rows.length} résultats`) +
-          Object.keys(TRACKER_COLORS)
-            .filter((t) => SS.trackers.includes(t))
-            .map((t) => ` · ${t} ${kept(t)}`)
-            .join("");
-        // tr4ker could not narrow this category itself, so say how many of the rows it did
-        // return were kept here rather than let the figure look like a whole-tracker count.
-        const info = SS.tr4ker || {};
-        if (info.category_scope === "page" && info.fetched > kept("tr4ker"))
-          summary += say(
-            ` of ${info.fetched} fetched`,
-            ` sur ${info.fetched} reçus`,
-          );
-      }
-      $("search-summary").textContent = summary;
-      $("search-status").textContent = r.window_limited
-        ? say(
-            `c411 limits this search to ${r.per_page * r.pages} accessible results. Narrow your filters.`,
-            `c411 limite cette recherche à ${r.per_page * r.pages} résultats accessibles. Affinez vos filtres.`,
-          )
-        : "";
-      renderPills();
-      syncToggles();
-      renderSort();
-      renderTrackerNotes();
-      renderResults();
-      refreshQueueCount();
-    },
+    (r) => paintSearch(r),
+    meanwhile,
   );
+}
+
+/* What a Search answer paints, whether it is the whole thing or c411's half of it. */
+function paintSearch(r) {
+  SS.searched = true;
+  SS.tr4ker = r.tr4ker || {};
+  SS.page = r.page;
+  SS.pages = Math.max(1, r.pages);
+  SS.total = r.total;
+  SS.totalSize = r.total_size;
+  SS.rows = r.rows;
+  SS.listing = r.listing || {};
+  SS.known = r.known || {};
+  if (r.root_counts && Object.keys(r.root_counts).length)
+    SS.rootCounts = r.root_counts;
+  SS.palliativeCount = r.palliative_count ?? SS.palliativeCount;
+  state.searchSelected.clear();
+  let summary =
+    r.total === null || r.total === undefined
+      ? ""
+      : say(
+          `${searchNumber(r.total)} torrents`,
+          `${searchNumber(r.total)} torrents`,
+        );
+  if (SS.totalSize) summary += (summary ? " · " : "") + bytes(SS.totalSize);
+  if (merged()) {
+    const kept = (t) => SS.rows.filter((x) => x.tracker === t).length;
+    summary =
+      say(`${SS.rows.length} results`, `${SS.rows.length} résultats`) +
+      Object.keys(TRACKER_COLORS)
+        .filter((t) => SS.trackers.includes(t))
+        .map((t) => ` · ${t} ${kept(t)}`)
+        .join("");
+    // tr4ker could not narrow this category itself, so say how many of the rows it did
+    // return were kept here rather than let the figure look like a whole-tracker count.
+    const info = SS.tr4ker || {};
+    if (info.category_scope === "page" && info.fetched > kept("tr4ker"))
+      summary += say(
+        ` of ${info.fetched} fetched`,
+        ` sur ${info.fetched} reçus`,
+      );
+  }
+  $("search-summary").textContent = summary;
+  $("search-status").textContent = r.window_limited
+    ? say(
+        `c411 limits this search to ${r.per_page * r.pages} accessible results. Narrow your filters.`,
+        `c411 limite cette recherche à ${r.per_page * r.pages} résultats accessibles. Affinez vos filtres.`,
+      )
+    : "";
+  renderPills();
+  syncToggles();
+  renderSort();
+  renderTrackerNotes();
+  renderResults();
+  refreshQueueCount();
 }
 
 /* Queueing stays on the Search page; the row shows a Queued mark and the header count rises. */

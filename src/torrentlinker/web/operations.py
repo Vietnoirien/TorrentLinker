@@ -596,6 +596,27 @@ class Operations:
             "fetched": fetched,
         }
 
+    def score_rows(self, rows, page, indexer, release_estimate, score) -> None:
+        """Give each row its ReleaseScore, from the listing facts c411 returned for it.
+
+        Run once for c411's rows when they are reported early and again over both Trackers'
+        rows at the end, so a row painted before tr4ker answers already carries its score.
+        """
+        for row in rows:
+            listing = (
+                asdict(page.details[row["hash"]])
+                if indexer.is_c411 and row["hash"] in page.details
+                else {}
+            )
+            self.score_listings[row["hash"]] = listing
+            row["release_score"] = score(
+                release_estimate(row["title"], row["size"], listing),
+                self.setup.settings.release_score,
+            )
+        # Only retain bounded listing facts for local re-scoring of recent pages.
+        while len(self.score_listings) > 2000:
+            self.score_listings.pop(next(iter(self.score_listings)))
+
     def search_options(self, category=None):
         from torrentlinker.indexer_search import search_options
         from torrentlinker.tracker_categories import tr4ker_category
@@ -1046,6 +1067,9 @@ class Operations:
                 page = native_search(indexer, params, request.page)
                 found, total_pages = page.rows, page.total_pages
             else:
+                # Another Indexer answers no listing page: everything below that reads one is
+                # guarded by `is_c411`, and naming it unbound would fail before that guard.
+                page = None
                 found = indexer.search(
                     SearchQuery(
                         q=request.query,
@@ -1121,28 +1145,35 @@ class Operations:
                         time.time(),
                     )
                 )
-            tr4ker_info: dict[str, Any] = {}
-            if pending_tr4ker is not None:
-                tr4ker_info = self.add_tr4ker_rows(
-                    pending_tr4ker, result, metadata["observed_at"], request.category
-                )
+            from torrentlinker.queue_selection import snapshot
             from torrentlinker.release_score.estimate import estimate as release_estimate
             from torrentlinker.release_score.service import mark_best, score
 
-            for row in result:
-                listing = (
-                    asdict(page.details[row["hash"]])
-                    if indexer.is_c411 and row["hash"] in page.details
-                    else {}
+            tr4ker_info: dict[str, Any] = {}
+            if pending_tr4ker is not None:
+                # c411's rows are ready and tr4ker's are still coming, through a browser
+                # companion that answers in bursts. Reported here, the page paints them now
+                # and fills tr4ker's in when they land, instead of showing nothing until the
+                # slower half returns. The final result carries both, sorted together.
+                self.score_rows(result, page, indexer, release_estimate, score)
+                mark_best(result)
+                progress(
+                    {
+                        "partial": "c411",
+                        **{k: v for k, v in metadata.items() if k != "search"},
+                        **snapshot(result, "catalogue", metadata["search"]),
+                        **(
+                            self.search_listing(indexer, page if indexer.is_c411 else None, result)
+                            if request.search_listing
+                            else {}
+                        ),
+                    }
                 )
-                self.score_listings[row["hash"]] = listing
-                row["release_score"] = score(
-                    release_estimate(row["title"], row["size"], listing),
-                    self.setup.settings.release_score,
+                tr4ker_info = self.add_tr4ker_rows(
+                    pending_tr4ker, result, metadata["observed_at"], request.category
                 )
-            # Only retain bounded listing facts for local re-scoring of recent pages.
-            while len(self.score_listings) > 2000:
-                self.score_listings.pop(next(iter(self.score_listings)))
+
+            self.score_rows(result, page, indexer, release_estimate, score)
             mark_best(result)
             if "tr4ker" in request.trackers:
                 from torrentlinker.merged_search import filter_tracker, sort_merged
@@ -1151,8 +1182,6 @@ class Operations:
                 metadata["trackers"] = request.trackers
                 metadata["tr4ker"] = tr4ker_info
             self.setup.store.save_catalogue(catalogue)
-            from torrentlinker.queue_selection import snapshot
-
             extras = (
                 self.search_listing(indexer, page if indexer.is_c411 else None, result)
                 if request.search_listing

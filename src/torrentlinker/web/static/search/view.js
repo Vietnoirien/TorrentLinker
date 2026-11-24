@@ -44,12 +44,24 @@ async function request(action, body = {}) {
     throw Error(say("The target client changed.", "Le client cible a changé."));
   return value;
 }
-async function job(body, done) {
+async function job(body, done, meanwhile) {
   const g = generation;
   const { job: id } = await request("job", body);
+  let reported = "";
   for (;;) {
     const result = await request("job-status", { job: id });
     if (g !== generation) return;
+    // A job may report what it already has while it waits for the rest. The Search job
+    // reports c411's rows before tr4ker's browser companion answers, so the page paints
+    // them now instead of staying empty until the slower Tracker returns.
+    if (meanwhile && result.progress?.partial) {
+      const seen =
+        JSON.stringify(result.progress.partial) + result.progress.rows?.length;
+      if (seen !== reported) {
+        reported = seen;
+        meanwhile(result.progress);
+      }
+    }
     if (!["queued", "running"].includes(result.status)) {
       if (result.status !== "completed")
         throw Error(result.error || result.status);
