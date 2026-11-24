@@ -20,6 +20,11 @@ function mediaQualityBelow(facts, than = "original") {
   const ceiling = than === "original" ? Infinity : Number(than);
   return (facts?.qualities || []).filter(q => q !== "original" && Number(q) < ceiling).pop() || "";
 }
+// What to try when the current source cannot play: nothing while a switch is under way (it reports
+// its own failure), else the best compatible quality below the current one.
+function mediaQualityFallback(facts, current, switching) {
+  return switching ? "" : mediaQualityBelow(facts, current);
+}
 function mediaFilmPosition(player) { return (player.currentTime || 0) + Number(player.dataset.streamOffset || 0); }
 function mediaFilmDuration(player) {
   return player.dataset.streamOffset ? Number(mediaItems.get(player.dataset.mediaId)?.duration || mediaPlaybackFacts.get(player.dataset.mediaId)?.duration || 0) : (Number.isFinite(player.duration) && player.duration > 0 ? player.duration : Number(mediaItems.get(player.dataset.mediaId)?.duration || mediaPlaybackFacts.get(player.dataset.mediaId)?.duration || 0));
@@ -36,8 +41,8 @@ function mediaStreamError(player, stream, error) {
   stream.abort.abort();
   api(stream.cancel, undefined, "DELETE").catch(() => {});
   // A start that fails retries one quality lower by itself; only the last failure is shown.
-  const lower = mediaQualityBelow(mediaPlaybackFacts.get(player.dataset.mediaId), mediaQuality);
-  if (lower && !mediaSwitching) { mediaChangeQuality({quality:lower}).catch(() => {}); return; }
+  const lower = mediaQualityFallback(mediaPlaybackFacts.get(player.dataset.mediaId), mediaQuality, mediaSwitching);
+  if (lower) { mediaChangeQuality({quality:lower}).catch(() => mediaCodecShow(error.message)); return; }
   $("media-codec-message").textContent = error.message || say("Compatible playback failed.", "La lecture compatible a échoué.");
   $("media-codec-error").hidden = false;
   mediaPlayerEnvironment();
