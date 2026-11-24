@@ -1594,7 +1594,7 @@ class MediaLibrary(TrackerRows, AgeRatings):
             picture.thumbnail((1200, 1200))
             folder = self.agent.setup.path.parent / "media-artwork"
             folder.mkdir(exist_ok=True)
-            key = hashlib.sha256(data).hexdigest() + ".png"
+            key = hashlib.sha256(data).hexdigest() + ".webp"
             destination = folder / key
             if destination.is_symlink():
                 raise ValueError("Artwork cache contains an unsafe path.")
@@ -1602,7 +1602,12 @@ class MediaLibrary(TrackerRows, AgeRatings):
                 # Written whole, then moved: two items with the same poster are cached at once.
                 partial = destination.with_name(f".{uuid4().hex}.tmp")
                 try:
-                    picture.convert("RGB").save(partial, format="PNG")
+                    # A poster is a photograph: it arrives from the tracker as a JPEG of
+                    # about 50 KB and PNG stored it losslessly at ten times that. WebP at 90
+                    # is indistinguishable at this size and matches what `variant` writes.
+                    # The decode above stays: it is what proves these remote bytes are an
+                    # image and bounds their dimensions before any of it is served back.
+                    picture.convert("RGB").save(partial, format="WEBP", quality=90, method=4)
                     os.replace(partial, destination)
                 finally:
                     partial.unlink(missing_ok=True)
@@ -1620,7 +1625,7 @@ class MediaLibrary(TrackerRows, AgeRatings):
         self.checked_path(client_id, row["path"], row["folder"])
         if image.startswith("asset:"):
             key = image[6:]
-            if not re.fullmatch(r"[a-f0-9]{64}\.png", key):
+            if not re.fullmatch(r"[a-f0-9]{64}\.(png|webp)", key):
                 raise ValueError("Artwork unavailable.")
             path = self.agent.setup.path.parent / "media-artwork" / key
             if path.is_symlink() or not path.is_file():

@@ -463,7 +463,8 @@ class TrackerRows:
                             (entry["cache_key"], json.dumps(entry)),
                         )
         image = entry["artwork"]
-        if not re.fullmatch(r"asset:[a-f0-9]{64}\.png", image):
+        # Either suffix: masters written before posters became WebP are still read.
+        if not re.fullmatch(r"asset:[a-f0-9]{64}\.(png|webp)", image):
             return None
         return self.agent.setup.path.parent / "media-artwork" / image[6:]  # type: ignore[attr-defined]
 

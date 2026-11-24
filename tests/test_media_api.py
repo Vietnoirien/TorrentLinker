@@ -193,8 +193,9 @@ def test_embedded_album_art_is_exposed_as_private_checked_artwork(tmp_path):
         assert item["artwork_url"]
         image = browser.get("/" + item["artwork_url"])
         assert image.status_code == 200
-        assert image.headers["content-type"] == "image/png"
-        assert image.content.startswith(b"\x89PNG")
+        # Stored as WebP: a poster is a photograph, and PNG kept it at ten times the size.
+        assert image.headers["content-type"] == "image/webp"
+        assert image.content.startswith(b"RIFF") and image.content[8:12] == b"WEBP"
 
 
 def test_incomplete_torrent_paths_are_mapped_before_playback_check(tmp_path):
