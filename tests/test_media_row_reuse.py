@@ -3,7 +3,7 @@
 import json
 import types
 
-from torrentlinker.media import ROWS_HELD, MediaLibrary
+from torrentlinker.media import ROWS_HELD, SETUP_HELD, MediaLibrary
 
 
 def library(tmp_path, count, clock):
@@ -110,3 +110,42 @@ def test_a_changed_library_is_not_served_from_the_kept_rows(tmp_path):
         )
     # Within the window, but a new record is a different set of rows.
     assert media.listing("default", kind="", view="all", limit=50)["total"] == 5
+
+
+def test_a_listing_does_not_copy_the_settings_once_per_item(tmp_path):
+    """`row` reads which Torrent Client this is, and `Settings.for_client` deep-copies the
+    whole settings object. Asking once per item cost a listing of 873 items 2.8 s of its
+    3.1 s, so the copy is kept for the page that needs it."""
+    now = [100.0]
+    media = library(tmp_path, 30, lambda: now[0])
+    copies = []
+
+    settings = types.SimpleNamespace(
+        library_folders=[
+            types.SimpleNamespace(path=types.SimpleNamespace(absolute=lambda: "/films"), kind=None)
+        ],
+        adult_content=False,
+        client="qbittorrent",
+        path_mappings=[],
+        default_client_id="default",
+    )
+    settings.profile = lambda client_id: None
+    media.agent = types.SimpleNamespace(
+        setup=types.SimpleNamespace(settings=settings),
+        for_client=lambda client_id: (
+            copies.append(client_id)
+            or types.SimpleNamespace(setup=types.SimpleNamespace(settings=settings))
+        ),
+    )
+    del media.setup  # use the real one again, not the fixture's stub
+    media._setups.clear()
+
+    media.listing("default", kind="", view="all", limit=5)
+    assert len(copies) == 1, f"the settings were copied {len(copies)} times for 30 items"
+
+    media.listing("default", kind="video", view="all", limit=5)
+    assert len(copies) == 1, "a second listing reuses the copy"
+
+    now[0] += SETUP_HELD + 0.1
+    media.listing("default", kind="video", view="all", limit=5)
+    assert len(copies) == 2, "past the window Settings is read again"

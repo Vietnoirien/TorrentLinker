@@ -32,6 +32,10 @@ POSTER_BUDGET = 90.0  # seconds a scan may spend downloading posters; the rest w
 # the window is short on purpose: what a page shows is read again, only which rows match
 # a filter may be this far behind.
 ROWS_HELD = 2.0  # seconds
+SETUP_HELD = 2.0  # seconds a client's Settings copy stands; see MediaLibrary.setup
+# `row` reads an item's progress and age rating itself unless they are handed to it; a
+# listing hands over what it read for the whole library in one query each.
+UNREAD = object()
 PARTIAL = (".part", ".partial", ".!qb", ".!ut", ".crdownload", ".tmp")
 
 
@@ -145,6 +149,7 @@ class MediaLibrary(TrackerRows, AgeRatings):
         # A Media page asks for a dozen listings of the same items (home_rows), and each
         # one used to build a row for every record before filtering down to a screenful.
         self._rows: dict[tuple, tuple[float, list[dict]]] = {}
+        self._setups: dict[str, tuple[float, Any]] = {}
         self.previews: dict[str, dict[str, Any]] = {}
         self.observations: dict[str, tuple[object, set[str]]] = {}
         with self.db:
@@ -211,9 +216,26 @@ class MediaLibrary(TrackerRows, AgeRatings):
                 raise
 
     def setup(self, client_id):
+        """This client's Setup, kept for a moment.
+
+        `Settings.for_client` deep-copies the whole settings object, and `row` asks for one
+        per item just to read which Torrent Client it is: a listing of 873 items spent 2.8 s
+        of its 3.1 s in `copy.deepcopy`. The copy is kept for SETUP_HELD, long enough for one
+        page's listings to share it and short enough that a Settings change is picked up.
+        """
         client_id = client_id or self.agent.setup.settings.default_client_id
+        now = self.clock()
+        found = self._setups.get(client_id)
+        if found is not None and now - found[0] <= SETUP_HELD:
+            return found[1]
         self.agent.setup.settings.profile(client_id)
-        return self.agent.for_client(client_id).setup
+        setup = self.agent.for_client(client_id).setup
+        self._setups[client_id] = (now, setup)
+        return setup
+
+    def forget_setups(self) -> None:
+        """Drop the kept copies, for when Settings changes under us."""
+        self._setups.clear()
 
     def checked_path(self, client_id: str, value: str, folder: str) -> Path:
         setup = self.setup(client_id)
@@ -1046,7 +1068,7 @@ class MediaLibrary(TrackerRows, AgeRatings):
                 continue
         return body
 
-    def row(self, record, *, check=True, account=OWNER, viewer=""):
+    def row(self, record, *, check=True, account=OWNER, viewer="", progress=UNREAD, rating=UNREAD):
         body = json.loads(record["body"])
         public = {
             k: v
@@ -1070,16 +1092,21 @@ class MediaLibrary(TrackerRows, AgeRatings):
         public["subtitles"] = [
             {"id": s["id"], "label": s["label"]} for s in body.get("subtitles", [])
         ]
-        with self.lock:
-            saved = self.db.execute(
-                "SELECT * FROM media_progress WHERE client=? AND item=? AND account=? AND viewer=?",
-                (record["client"], record["id"], account, viewer),
-            ).fetchone()
+        if progress is UNREAD:
+            with self.lock:
+                progress = self.db.execute(
+                    "SELECT * FROM media_progress "
+                    "WHERE client=? AND item=? AND account=? AND viewer=?",
+                    (record["client"], record["id"], account, viewer),
+                ).fetchone()
+        saved = progress
         public.update(
             id=record["id"],
             size=record["size"],
             added=record["added"],
-            age_rating=self.age_rating(record["client"], record["id"]),
+            age_rating=self.age_rating(record["client"], record["id"])
+            if rating is UNREAD
+            else self._public_rating(rating),
             anime=is_anime(body, record["path"]),
             oav=bool(body.get("oav")),
             position=saved["position"] if saved else 0,
@@ -1169,7 +1196,7 @@ class MediaLibrary(TrackerRows, AgeRatings):
             and sees(record)
         ]
         who = {"account": actor.account, "viewer": actor.viewer}
-        rows = self._built_rows(records, bool(availability), who, registered, adult)
+        rows = self._built_rows(records, client_id, bool(availability), who, registered, adult)
         rows = [r for r in rows if (not kind or r["kind"] == kind)]
         filters = {
             name: sorted({str(r.get(name) or "") for r in rows if r.get(name)})
@@ -1261,7 +1288,7 @@ class MediaLibrary(TrackerRows, AgeRatings):
             "next_offset": offset + limit if offset + limit < total else None,
         }
 
-    def _built_rows(self, records, check, who, registered, adult):
+    def _built_rows(self, records, client_id, check, who, registered, adult):
         """A row for each of these records, built once and kept for a moment.
 
         One Media page asks for a dozen listings of the same library, differing only in the
@@ -1290,7 +1317,33 @@ class MediaLibrary(TrackerRows, AgeRatings):
         now = self.clock()
         found = self._rows.get(key)
         if found is None or now - found[0] > ROWS_HELD:
-            built = [self.row(record, check=check, **who) for record in records]
+            # Two queries for the library instead of two per record: `row` would otherwise
+            # read each item's progress and age rating on its own, which is about 1700
+            # queries over a library of 873 and most of what building these rows cost.
+            with self.lock:
+                progress = {
+                    saved["item"]: saved
+                    for saved in self.db.execute(
+                        "SELECT * FROM media_progress WHERE client=? AND account=? AND viewer=?",
+                        (client_id, who["account"], who["viewer"]),
+                    )
+                }
+                ratings = {
+                    rated["item"]: rated
+                    for rated in self.db.execute(
+                        "SELECT * FROM media_ratings WHERE client=?", (client_id,)
+                    )
+                }
+            built = [
+                self.row(
+                    record,
+                    check=check,
+                    progress=progress.get(record["id"]),
+                    rating=ratings.get(record["id"]),
+                    **who,
+                )
+                for record in records
+            ]
             # A handful is plenty: a page reuses one key, and a changed library makes another.
             while len(self._rows) >= 8:
                 self._rows.pop(next(iter(self._rows)))
