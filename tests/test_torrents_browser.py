@@ -489,6 +489,10 @@ def test_the_head_box_selects_every_match_and_the_table_scrolls_on(tmp_path):
             browser = pw.chromium.launch()
             page = browser.new_page(viewport={"width": 1500, "height": 950})
             page.goto(f"http://127.0.0.1:{port}")
+            # A password manager keeps the Owner's password under this instance's own name, not
+            # as any login of the main domain.
+            expect(page.locator("#login-name")).to_have_value(f"owner@127.0.0.1:{port}")
+            expect(page.locator("#login-name")).to_be_hidden()
             page.locator("#login-password").fill("test-password-long")
             page.locator("#login-form button").click()
             expect(page.locator("#workspace")).to_be_visible()

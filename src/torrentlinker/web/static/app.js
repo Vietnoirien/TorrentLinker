@@ -837,7 +837,8 @@ $("login-form").onsubmit = async (e) => {
   $("login-error").textContent = "";
   try {
     const screen = $("login-shared").checked ? $("login-screen-name").value.trim() : "";
-    await api("login", { login: $("login-name").value.trim(), password: $("login-password").value, screen });
+    const login = $("login-name").hidden ? "" : $("login-name").value.trim();
+    await api("login", { login, password: $("login-password").value, screen });
     $("login-password").value = "";
     await enter();
   } catch (error) {
@@ -851,6 +852,9 @@ $("login-form").onsubmit = async (e) => {
           : error.message;
   }
 };
+// The Owner's hidden sign-in name, for password managers only (the server is sent none). With
+// no name, a manager takes the form for any login of the main domain and offers to replace it.
+const ownerSignIn = () => `owner@${location.host}`;
 // A Member signs in with a name; the Owner with the startup password and no name.
 function loginMode(owner = localStorage.getItem("tl-sign-in") === "owner") {
   const enabled = document.documentElement.dataset.members === "true";
@@ -860,7 +864,8 @@ function loginMode(owner = localStorage.getItem("tl-sign-in") === "owner") {
   if (!enabled) $("login-shared").checked = false;
   localStorage.setItem("tl-sign-in", owner ? "owner" : "member");
   $("login-name").hidden = $("login-name-label").hidden = owner;
-  if (owner) $("login-name").value = "";
+  if (owner) $("login-name").value = ownerSignIn();
+  else if ($("login-name").value === ownerSignIn()) $("login-name").value = "";
   const text = (node, en, fr) => Object.assign(node.dataset, { en, fr });
   text($("login-password-label"), ...(owner ? ["Server password", "Mot de passe du serveur"] : ["Password", "Mot de passe"]));
   text($("login-help"), ...(owner
