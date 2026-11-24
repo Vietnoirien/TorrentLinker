@@ -17,7 +17,7 @@ from torrentlinker.paths import PathMapper
 from torrentlinker.reconcile import classify
 from torrentlinker.reseed_links import prepare_links, validate_links
 from torrentlinker.reseed_workspace import ReseedWorkspace, candidate_review_error
-from torrentlinker.review import remember_candidates
+from torrentlinker.review import remember_candidates, remembered_candidates
 from torrentlinker.scan import scan_item
 from torrentlinker.torrent_meta import read_torrent
 from torrentlinker.web.jobs import JobStop
@@ -116,6 +116,30 @@ def test_resumed_run_scans_after_library_memory_is_lost(tmp_path):
     result = run(board, original, links)
 
     assert result["seeded"] == 1
+    assert client.torrent(meta.infohash) is not None
+
+
+def test_selected_candidate_ignores_an_unavailable_other_result(tmp_path, monkeypatch):
+    board, client, original, links, meta = workspace(tmp_path)
+    indexer = board.setup.indexer()
+    good = remembered_candidates(board.setup.store, indexer, original)[0]
+    stale = Candidate(
+        "Unrelated stale result", good.size, "https://c411.org/download/stale", infohash="f" * 40
+    )
+    remember_candidates(board.setup.store, indexer, original, [stale, good])
+    review = board.library.review
+
+    def with_stale_result(path, stop, *, key="", action=""):
+        if action == "check" and key == stale.infohash:
+            raise ValueError("Stale candidate returned 404")
+        return review(path, stop, key=key, action=action)
+
+    monkeypatch.setattr(board.library, "review", with_stale_result)
+    result = board.run(
+        [str(original)], "all", str(links), JobStop(), lambda _: None, key=meta.infohash
+    )
+
+    assert result["seeded"] == 1, result["errors"]
     assert client.torrent(meta.infohash) is not None
 
 

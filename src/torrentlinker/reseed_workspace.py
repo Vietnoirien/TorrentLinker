@@ -411,6 +411,8 @@ class ReseedWorkspace:
                                 candidates = self.library.review(path, stop)
                                 for candidate in candidates:
                                     checkpoint(stop)
+                                    if key and candidate["key"] != key:
+                                        continue
                                     candidates = self.library.review(
                                         path, stop, key=candidate["key"], action="check"
                                     )
