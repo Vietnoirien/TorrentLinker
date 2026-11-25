@@ -516,5 +516,13 @@ for (const player of [$("media-video"), $("media-audio")]) {
     });
 }
 for (const player of [$("media-video"), $("media-audio")]) { player.onerror = mediaCodecError; player.onwaiting = () => { if (media.preview && player.currentTime > 0) mediaStatus(say("The fixed partial preview has no more playable data here. Wait for more download progress, then refresh preview.", "L’aperçu partiel fixe ne contient plus de données lisibles à cet endroit. Attendez la progression du téléchargement, puis actualisez l’aperçu.")); }; player.onended = () => guard(async () => { if (media.preview) { mediaStatus(say("End of fixed partial preview. Wait for more data, then refresh preview.", "Fin de l’aperçu partiel fixe. Attendez davantage de données, puis actualisez l’aperçu.")); } else if (media.repeat === "one") { await mediaSeek(0); await mediaTryPlay(player); } else await mediaAdvance(1); await mediaHeartbeat(); }); }
+$("media-video").addEventListener("playing", () => {
+  const player = $("media-video"), source = player.dataset.sourceToken;
+  setTimeout(() => {
+    if (player.dataset.sourceToken !== source || mediaSwitching) return;
+    const next = mediaSilentSwitch(player, mediaPlaybackFacts.get(player.dataset.mediaId));
+    if (next) guard(() => mediaChangeQuality({quality: next}));
+  }, 2000);
+});
 setInterval(() => { guard(mediaHeartbeat); guard(mediaPollScan); }, 1000);
 setInterval(() => guard(mediaAutoScan), MEDIA_AUTO_REFRESH);

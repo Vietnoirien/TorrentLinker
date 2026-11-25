@@ -28,6 +28,7 @@ def run(expression: str, remembered: str = ""):
     const none = {{qualities: []}};
     const ac3 = {{...all, sound: true, audio: [{{id: 0, codec: "ac3"}}]}};
     const aac = {{...all, sound: true, audio: [{{id: 0, codec: "aac"}}]}};
+    const hevc = {{...ac3, video_codec: "hevc"}};
     console.log(JSON.stringify({expression}));
     """
     done = subprocess.run(["node", "-e", program], capture_output=True, text=True, check=True)
@@ -63,7 +64,28 @@ def test_a_sound_the_device_cannot_play_is_converted_alone():
     assert run("mediaQualityStart(ac3)") == "sound"  # the picture is kept as it is
     assert run("mediaQualityStart(aac)") == "original"
     assert run("mediaQualityStart(ac3)", "720") == "720"  # a chosen quality is kept
-    assert run("mediaQualityStart({...ac3, sound: false})") == "original"  # no copy: try it
+    # No copy possible: the whole film is converted rather than played without sound.
+    assert run("mediaQualityStart({...ac3, sound: false})") == "source"
     # An original that fails tries its picture as it is before a full conversion.
     assert run('mediaQualityFallback(aac, "original", false)') == "sound"
     assert run('mediaQualityFallback(aac, "sound", false)') == "source"
+
+
+def test_an_hevc_film_with_unplayable_sound_is_never_left_silent():
+    # Its picture is copied when the browser reads an HEVC stream, else the film is converted.
+    reads = "globalThis.MediaSource = {isTypeSupported: () => %s}, mediaQualityStart(hevc)"
+    assert run("(" + reads % "true" + ")") == "sound"
+    assert run("(" + reads % "false" + ")") == "source"
+
+
+def test_an_original_playing_without_sound_is_switched_by_itself():
+    silent = "{webkitAudioDecodedByteCount: 0, paused: false, dataset: {}}"
+    heard = "{webkitAudioDecodedByteCount: 4096, paused: false, dataset: {}}"
+    assert run(f"mediaSilentSwitch({silent}, aac)") == "sound"
+    assert run(f"mediaSilentSwitch({silent}, {{...all, audio: [{{codec: 'x'}}]}})") == "source"
+    assert run(f"mediaSilentSwitch({heard}, aac)") == ""
+    assert run(f"mediaSilentSwitch({silent}, {{...aac, audio: []}})") == ""  # a film with no sound
+    converted = "{webkitAudioDecodedByteCount: 0, paused: false, dataset: {streamOffset: '0'}}"
+    assert run(f"mediaSilentSwitch({converted}, aac)") == ""  # a conversion always has sound
+    firefox = "{mozHasAudio: false, paused: false, dataset: {}}"
+    assert run(f"mediaSilentSwitch({firefox}, aac)") == "sound"

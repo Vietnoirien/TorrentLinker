@@ -213,9 +213,13 @@ def test_the_sound_quality_copies_the_picture_and_converts_only_the_audio(monkey
     assert command[command.index("-c:v") + 1] == "copy"
     assert "-vf" not in command
     assert command[command.index("-c:a") + 1] == "aac"
+    # An HEVC picture is copied too, tagged the way a browser's stream reader expects.
+    hevc = source_facts(1920, 1080) | {"video_codec": "hevc", "sound": True}
+    command = command_of("sound", hevc)
+    assert command[command.index("-tag:v") + 1] == "hvc1"
     # Another picture codec cannot be copied into the stream the browser reads.
     with pytest.raises(ValueError):
-        command_of("sound", source_facts(1920, 1080) | {"video_codec": "hevc", "sound": False})
+        command_of("sound", source_facts(1920, 1080) | {"video_codec": "mpeg4", "sound": False})
     # A Member limited below the film's height gets no copy of its full picture.
     with pytest.raises(ValueError):
         command_of("sound", facts, limit=720)

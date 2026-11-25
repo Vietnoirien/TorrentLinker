@@ -21,7 +21,7 @@ from torrentlinker.media_tracks import language
 
 SOURCE = "source"
 # The picture copied as it is, only the sound converted: for a film whose AC-3, DTS or TrueHD
-# a device cannot play. Only H.264 can be copied into the stream the browser reads.
+# a device cannot play. Only H.264 and HEVC can be copied into the stream the browser reads.
 SOUND = "sound"
 PRESETS = {
     "360": (640, 360, 500, 64),
@@ -81,7 +81,7 @@ def inspect(path: Path) -> dict[str, Any]:
             "height": int(video.get("height", 0)),
             "hdr": video.get("color_transfer") in {"smpte2084", "arib-std-b67"},
             "video_codec": str(video.get("codec_name") or ""),
-            "sound": video.get("codec_name") == "h264",
+            "sound": video.get("codec_name") in {"h264", "hevc"},
         }
     except (OSError, subprocess.SubprocessError, ValueError, KeyError, StopIteration):
         raise ValueError("Cannot inspect this video for compatible playback.") from None
@@ -232,6 +232,8 @@ class PlaybackChoice:
             "-dn",
             "-c:v",
             "copy",
+            # A browser reads HEVC in MP4 only under this tag.
+            *(["-tag:v", "hvc1"] if facts.get("video_codec") == "hevc" else []),
             "-c:a",
             "aac",
             "-ac",

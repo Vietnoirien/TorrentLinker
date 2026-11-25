@@ -24,7 +24,18 @@ function mediaQualityStart(facts) {
   const chosen = allowed.includes(mediaQualityChosen) ? mediaQualityChosen : allowed.includes("original") ? "original" : allowed[allowed.length - 1] || "original";
   // A picture this device plays keeps it; only a sound it cannot play is converted.
   const sound = facts?.audio?.[mediaAudioChoice]?.codec;
-  return chosen === "original" && facts?.sound && sound && !mediaSoundPlayable(sound) ? "sound" : chosen;
+  if (chosen !== "original" || !sound || mediaSoundPlayable(sound)) return chosen;
+  // Its picture is copied when this browser reads it as a stream, else the whole film is converted.
+  if (facts.sound && (facts.video_codec !== "hevc" || mediaStreamReads(mediaStreamType(facts, "sound")))) return "sound";
+  return facts.available ? "source" : chosen;
+}
+// The stream type the browser is given: a copied HEVC picture, else the H.264 every conversion makes.
+function mediaStreamType(facts, quality) {
+  if (quality === "sound" && facts?.video_codec === "hevc") return 'video/mp4; codecs="hvc1.1.6.L150.90,mp4a.40.2"';
+  return `video/mp4; codecs="avc1.${(facts?.height || 0) > 1080 ? "640033" : "640028"},mp4a.40.2"`;
+}
+function mediaStreamReads(type) {
+  return typeof MediaSource !== "undefined" && MediaSource.isTypeSupported(type);
 }
 // The best transcoded quality strictly below `than`: below the film's own height for "source",
 // below everything for the original.
@@ -40,6 +51,14 @@ function mediaQualityFallback(facts, current, switching) {
   if (current === "original" && facts?.sound) return "sound";
   if (["original", "sound"].includes(current) && facts?.available) return "source";
   return mediaQualityBelow(facts, current);
+}
+// An original playing without sound (a codec the browser opens but cannot decode raises no
+// error) is switched to its picture with converted sound, or else converted whole.
+function mediaSilentSwitch(player, facts) {
+  if (player.paused || player.dataset.streamOffset || !facts?.audio?.length) return "";
+  const silent = player.webkitAudioDecodedByteCount === 0 || player.mozHasAudio === false;
+  if (!silent) return "";
+  return facts.sound ? "sound" : facts.available ? "source" : "";
 }
 function mediaFilmPosition(player) { return (player.currentTime || 0) + Number(player.dataset.streamOffset || 0); }
 function mediaFilmDuration(player) {
@@ -80,8 +99,7 @@ function mediaStreamLoad(player, id, start) {
   const stream = {abort:new AbortController(), cancel:`${base}/${playbackId}?${new URLSearchParams({client_id:client})}`, objectURL:null};
   mediaStreams.set(player,stream);
   player.dataset.streamOffset=String(start); player.dataset.streamQuality=mediaQuality;
-  // A film taller than 1080p needs the level of its own size.
-  const mime=`video/mp4; codecs="avc1.${(mediaPlaybackFacts.get(id)?.height||0)>1080?"640033":"640028"},mp4a.40.2"`;
+  const mime=mediaStreamType(mediaPlaybackFacts.get(id), mediaQuality);
   if (!window.MediaSource || !MediaSource.isTypeSupported(mime)) {
     player.src=url; player.load(); return;
   }
