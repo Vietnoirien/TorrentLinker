@@ -18,12 +18,16 @@ def run(expression: str, remembered: str = ""):
     globalThis.localStorage = {{
       getItem: k => store[k] || null, setItem: (k, v) => {{ store[k] = v; }},
     }};
+    // A browser without AC-3 or E-AC-3, as Chrome and Firefox on Linux.
+    globalThis.document = {{ createElement: () => ({{ canPlayType: () => "" }}) }};
     require("vm").runInThisContext(require("fs").readFileSync({json.dumps(str(SCRIPT))}, "utf8"));
     const all = {{
       available: true, height: 1080, qualities: ["original", "360", "480", "720", "1080"],
     }};
     const limited = {{available: true, height: 1080, qualities: ["360", "480", "720"]}};
     const none = {{qualities: []}};
+    const ac3 = {{...all, sound: true, audio: [{{id: 0, codec: "ac3"}}]}};
+    const aac = {{...all, sound: true, audio: [{{id: 0, codec: "aac"}}]}};
     console.log(JSON.stringify({expression}));
     """
     done = subprocess.run(["node", "-e", program], capture_output=True, text=True, check=True)
@@ -53,3 +57,13 @@ def test_an_original_that_cannot_play_is_transcoded_at_its_own_quality_first():
         run('mediaQualityFallback({available: false, qualities: ["original"]}, "original", false)')
         == ""
     )
+
+
+def test_a_sound_the_device_cannot_play_is_converted_alone():
+    assert run("mediaQualityStart(ac3)") == "sound"  # the picture is kept as it is
+    assert run("mediaQualityStart(aac)") == "original"
+    assert run("mediaQualityStart(ac3)", "720") == "720"  # a chosen quality is kept
+    assert run("mediaQualityStart({...ac3, sound: false})") == "original"  # no copy: try it
+    # An original that fails tries its picture as it is before a full conversion.
+    assert run('mediaQualityFallback(aac, "original", false)') == "sound"
+    assert run('mediaQualityFallback(aac, "sound", false)') == "source"

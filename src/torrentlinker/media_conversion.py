@@ -20,6 +20,9 @@ from typing import Any
 from torrentlinker.media_tracks import language
 
 SOURCE = "source"
+# The picture copied as it is, only the sound converted: for a film whose AC-3, DTS or TrueHD
+# a device cannot play. Only H.264 can be copied into the stream the browser reads.
+SOUND = "sound"
 PRESETS = {
     "360": (640, 360, 500, 64),
     "480": (854, 480, 900, 96),
@@ -64,6 +67,7 @@ def inspect(path: Path) -> dict[str, Any]:
             audio.append(
                 {
                     "id": len(audio),
+                    "codec": str(stream.get("codec_name") or ""),
                     "language": lang,
                     "label": str(tags.get("title") or lang or f"Audio {len(audio) + 1}")[:100],
                 }
@@ -76,6 +80,8 @@ def inspect(path: Path) -> dict[str, Any]:
             "width": int(video.get("width", 0)),
             "height": int(video.get("height", 0)),
             "hdr": video.get("color_transfer") in {"smpte2084", "arib-std-b67"},
+            "video_codec": str(video.get("codec_name") or ""),
+            "sound": video.get("codec_name") == "h264",
         }
     except (OSError, subprocess.SubprocessError, ValueError, KeyError, StopIteration):
         raise ValueError("Cannot inspect this video for compatible playback.") from None
@@ -108,7 +114,8 @@ def within(facts: dict[str, Any], limit: int | None) -> dict[str, Any]:
     fits = [q for q in facts["qualities"] if q != "original" and int(q) <= limit]
     if facts.get("available") and 0 < height <= limit:
         fits.insert(0, "original")
-    return {**facts, "qualities": fits}
+    sound = bool(facts.get("sound")) and 0 < height <= limit
+    return {**facts, "qualities": fits, "sound": sound}
 
 
 @dataclass(frozen=True)
@@ -120,7 +127,7 @@ class PlaybackChoice:
 
     def command(self, path: Path, facts: dict[str, Any]) -> list[str]:
         if (
-            (self.quality not in PRESETS and self.quality != SOURCE)
+            (self.quality not in PRESETS and self.quality not in (SOURCE, SOUND))
             or not math.isfinite(self.start)
             or not 0 <= self.start < facts.get("duration", 0)
             or type(self.audio) is not int
@@ -130,6 +137,8 @@ class PlaybackChoice:
         executable = shutil.which("ffmpeg")
         if not executable or not facts.get("available"):
             raise ValueError("Install FFmpeg on the machine running TorrentLinker.")
+        if self.quality == SOUND:
+            return self.sound(executable, path, facts)
         if self.quality == SOURCE:
             filters, video, audio = self.source(facts)
         else:
@@ -191,6 +200,44 @@ class PlaybackChoice:
             "2",
             "-b:a",
             f"{audio}k",
+            "-movflags",
+            "+frag_keyframe+empty_moov+default_base_moof",
+            "-f",
+            "mp4",
+            "pipe:1",
+        ]
+
+    def sound(self, executable: str, path: Path, facts: dict[str, Any]) -> list[str]:
+        """The picture copied untouched, the chosen sound converted to stereo AAC."""
+        height = int(facts.get("height") or 0)
+        if not facts.get("sound") or (self.limit is not None and height > self.limit):
+            raise ValueError("This film's picture cannot be kept as it is; choose a quality.")
+        return [
+            executable,
+            "-hide_banner",
+            "-nostdin",
+            "-v",
+            "error",
+            "-protocol_whitelist",
+            "file,pipe",
+            "-ss",
+            str(self.start),
+            "-i",
+            str(path),
+            "-map",
+            "0:v:0",
+            "-map",
+            f"0:a:{self.audio}?",
+            "-sn",
+            "-dn",
+            "-c:v",
+            "copy",
+            "-c:a",
+            "aac",
+            "-ac",
+            "2",
+            "-b:a",
+            f"{PRESETS['1080'][3]}k",
             "-movflags",
             "+frag_keyframe+empty_moov+default_base_moof",
             "-f",

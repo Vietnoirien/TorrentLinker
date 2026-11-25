@@ -203,3 +203,19 @@ def test_the_source_quality_is_lowered_only_to_a_members_limit(monkeypatch):
     # A limit above the film leaves it alone.
     command = command_of("source", source_facts(1280, 720), limit=1080)
     assert "scale=trunc(iw/2)*2" in command[command.index("-vf") + 1]
+
+
+def test_the_sound_quality_copies_the_picture_and_converts_only_the_audio(monkeypatch):
+    # A film whose picture plays but whose AC-3 or DTS sound does not keeps its picture.
+    monkeypatch.setattr("shutil.which", lambda name: f"/usr/bin/{name}")
+    facts = source_facts(1920, 1080) | {"video_codec": "h264", "sound": True}
+    command = command_of("sound", facts)
+    assert command[command.index("-c:v") + 1] == "copy"
+    assert "-vf" not in command
+    assert command[command.index("-c:a") + 1] == "aac"
+    # Another picture codec cannot be copied into the stream the browser reads.
+    with pytest.raises(ValueError):
+        command_of("sound", source_facts(1920, 1080) | {"video_codec": "hevc", "sound": False})
+    # A Member limited below the film's height gets no copy of its full picture.
+    with pytest.raises(ValueError):
+        command_of("sound", facts, limit=720)

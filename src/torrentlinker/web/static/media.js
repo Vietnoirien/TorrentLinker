@@ -237,7 +237,7 @@ async function mediaLoad(id, position = null, paused = false, preview = null, re
   }
   mediaAudioChoice=0;
   if(!preview && row.kind==="video")mediaQuality=mediaQualityStart(mediaPlaybackFacts.get(id));
-  const converted=!preview && row.kind==="video" && mediaQuality!=="original" && mediaPlaybackFacts.get(id)?.qualities.includes(mediaQuality);
+  const converted=!preview && row.kind==="video" && mediaQuality!=="original" && (mediaPlaybackFacts.get(id)?.qualities.includes(mediaQuality) || mediaQuality==="sound" && mediaPlaybackFacts.get(id)?.sound);
   if(converted)mediaStreamLoad(player,id,position ?? row.position ?? 0);
   else {player.src = preview ? mediaPreviewURL(preview.preview_id) : mediaURL(id); player.load();}
   $("media-player-shell").hidden = false;

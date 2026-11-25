@@ -11,9 +11,20 @@ function mediaQualityRemember(quality) {
   mediaQualityChosen = quality;
   try { localStorage.setItem(mediaQualityKey, quality); } catch { /* not remembered */ }
 }
+// Whether this device plays a sound codec as FFprobe names it. An unknown one is tried as it is:
+// a failure still falls back.
+function mediaSoundPlayable(codec) {
+  const probe = document.createElement("video");
+  const asked = {ac3: 'audio/mp4; codecs="ac-3"', eac3: 'audio/mp4; codecs="ec-3"'}[codec];
+  if (asked) return probe.canPlayType(asked) !== "";
+  return !["dts", "truehd", "mlp"].includes(codec) && !String(codec).startsWith("pcm_");
+}
 function mediaQualityStart(facts) {
   const allowed = facts?.qualities || ["original"];
-  return allowed.includes(mediaQualityChosen) ? mediaQualityChosen : allowed.includes("original") ? "original" : allowed[allowed.length - 1] || "original";
+  const chosen = allowed.includes(mediaQualityChosen) ? mediaQualityChosen : allowed.includes("original") ? "original" : allowed[allowed.length - 1] || "original";
+  // A picture this device plays keeps it; only a sound it cannot play is converted.
+  const sound = facts?.audio?.[mediaAudioChoice]?.codec;
+  return chosen === "original" && facts?.sound && sound && !mediaSoundPlayable(sound) ? "sound" : chosen;
 }
 // The best transcoded quality strictly below `than`: below the film's own height for "source",
 // below everything for the original.
@@ -26,7 +37,9 @@ function mediaQualityBelow(facts, than = "original") {
 // The original comes first as a transcode at its own resolution: only a Member's limit lowers it.
 function mediaQualityFallback(facts, current, switching) {
   if (switching) return "";
-  return current === "original" && facts?.available ? "source" : mediaQualityBelow(facts, current);
+  if (current === "original" && facts?.sound) return "sound";
+  if (["original", "sound"].includes(current) && facts?.available) return "source";
+  return mediaQualityBelow(facts, current);
 }
 function mediaFilmPosition(player) { return (player.currentTime || 0) + Number(player.dataset.streamOffset || 0); }
 function mediaFilmDuration(player) {
@@ -97,7 +110,7 @@ async function mediaChangeQuality(values={}) {
   if(mediaSwitching)throw Error(say("Playback is changing. Please wait.","Le lecteur change de source. Patientez."));
   const player=mediaPlayer(), id=player.dataset.mediaId, facts=mediaPlaybackFacts.get(id);
   const quality=values.quality ?? mediaQuality;
-  if(!id || media.preview || !(quality==="source"?facts?.available:(facts?.qualities||["original"]).includes(quality)))throw Error(say("Quality unavailable.","Qualité indisponible."));
+  if(!id || media.preview || !(quality==="source"?facts?.available:quality==="sound"?facts?.sound:(facts?.qualities||["original"]).includes(quality)))throw Error(say("Quality unavailable.","Qualité indisponible."));
   if(values.audio!==undefined && !facts.audio.some(track=>track.id===values.audio))throw Error("Audio track unavailable.");
   const paused=player.paused, rate=player.playbackRate, source=player.dataset.sourceToken;
   const start=Math.max(0, Math.min((facts?.duration || mediaFilmDuration(player))-0.1,values.position ?? mediaFilmPosition(player)));
