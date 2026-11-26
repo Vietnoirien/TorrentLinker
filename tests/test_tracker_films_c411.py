@@ -169,7 +169,8 @@ def test_a_release_named_by_the_original_title_takes_the_facts_c411_filed_in_fre
         films.db.execute("DELETE FROM film_c411 WHERE tkey=?", (film_key("Spirited Away", "2001"),))
         films.db.execute("DELETE FROM media_options WHERE key LIKE 'tracker-%'")
         films.db.execute(
-            "INSERT INTO film_c411 VALUES"
+            "INSERT INTO film_c411 (tkey, title, original_title, year, overview, genres,"
+            " runtime, poster, artwork, fetched) VALUES"
             " (?, 'Inconnu', 'Unknown', '1950', '', '[]', 0, '', NULL, 0)",
             (film_key("Inconnu", "1950"),),
         )
@@ -448,7 +449,8 @@ def test_library_films_and_the_index_share_film_facts_both_ways(films):
     tkey = film_key("The Revenant", "2015")
     with films.lock, films.db:
         films.db.execute(
-            "INSERT INTO film_c411 VALUES (?, 'The Revenant', 'The Revenant', '2015',"
+            "INSERT INTO film_c411 (tkey, title, original_title, year, overview, genres,"
+            " runtime, poster, artwork, fetched) VALUES (?, 'The Revenant', 'The Revenant', '2015',"
             " 'Un trappeur.', '[\"Aventure\"]', 156, ?, ?, 0)",
             (tkey, POSTER.format("revenant"), asset),
         )
@@ -516,6 +518,12 @@ def test_two_releases_of_a_film_listing_other_facts_do_not_rewrite_them_page_aft
         films.films_c411("default", setup, STOP(), lambda _: None, walk_pause=0)
     assert films._films_generation == revision
     assert facts_of(films, "Dune")["genres"] == ["Drame"]
+    # Stored, so a restart keeps the release that wrote them.
+    with films.lock:
+        source = films.db.execute(
+            "SELECT source FROM film_c411 WHERE tkey=?", (film_key("Dune", "2021"),)
+        ).fetchone()[0]
+    assert source == hashes(films)[first[0]]
 
 
 def test_the_desktop_router_serves_the_films_c411_filled(service):
