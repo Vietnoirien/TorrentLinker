@@ -10,8 +10,8 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
-from torrentlinker.accounts import Actor, Permission
-from torrentlinker.member_requests import CapReached, Release, Requests
+from torrentlinker.accounts import OWNER_ACTOR, Actor, Permission
+from torrentlinker.member_requests import CapReached, Requests
 from torrentlinker.request_approval import RequestApproval
 from torrentlinker.web.permissions import Audience, needs
 
@@ -19,7 +19,7 @@ NOT_FOUND = "This Request no longer exists."
 
 
 class TrackerRequest(BaseModel):
-    infohash: str = Field(pattern="^[0-9a-fA-F]{40}$")
+    film: str = Field(pattern=r"^[a-z]+-[0-9a-f]{1,16}$")
 
 
 class Wish(BaseModel):
@@ -68,26 +68,11 @@ def request_routes(app: FastAPI, requests: Requests, media) -> None:
     @app.post("/api/requests")
     @needs(Permission.REQUEST)
     def ask(body: TrackerRequest, request: Request):
-        """A Request for a tracker film the Member sees; the server reads its release."""
-        found = actor(request)
-        # A release is unrated: under an Age Rating limit it cannot be asked for by its hash.
-        if not media.sees_tracker(found) or found.age_limit is not None:
-            raise HTTPException(404, "This tracker release is no longer suggested.")
-        client = media.agent.setup.settings.default_client_id
+        """A Request for a Tracker Film the Member sees; the Approver chooses the release."""
         try:
-            entry = media.tracker_entry(client, body.infohash.lower())
-        except ValueError as error:
-            raise HTTPException(404, str(error)) from error
-        facts, best = entry.get("facts") or {}, entry["release"]
-        release = Release(
-            best["hash"],
-            best["name"],
-            int(best["size"]),
-            facts.get("title") or entry.get("title") or best["name"],
-            str(facts.get("year") or entry.get("year") or ""),
-        )
-        try:
-            return requests.ask(found.account, release)
+            return app.state.member_workspace.ask(actor(request), body.film)
+        except KeyError:
+            raise HTTPException(404, "This film is not on the tracker.") from None
         except CapReached as error:
             return refused(error)
         except ValueError as error:
@@ -118,15 +103,31 @@ def request_routes(app: FastAPI, requests: Requests, media) -> None:
     def review() -> dict:
         approval.refresh(requests)
         rows = requests.review()
+        client = approval.client_id
         for row in rows:
             row["score"] = None
+            row["releases"] = []
+            if row["film"]:
+                # The film's grouped releases, the pre-selected first: the Approver chooses.
+                try:
+                    film = media.tracker_film_detail(
+                        client, media.setup(client), OWNER_ACTOR, row["film"]
+                    )
+                except KeyError:
+                    film = None
+                if film:
+                    row["releases"] = film["releases"]
+                    row["preselected"] = film["tracker"]["hash"]
+                    row["below_threshold"] = film["below_threshold"]
+                    row["in_library"] = film["in_library"]
+                    row["film_id"] = film["id"]
             if row["infohash"]:
                 try:
-                    entry = media.tracker_entry(approval.client_id, row["infohash"])
+                    entry = media.tracker_entry(client, row["infohash"])
                     row["score"] = media._score(
                         media.agent.setup.settings.release_score,
                         row["release"],
-                        row["size"],
+                        row["chosen_size"] or row["size"],
                         entry.get("facts") or {},
                     ).get("score")
                 except ValueError:
@@ -141,9 +142,43 @@ def request_routes(app: FastAPI, requests: Requests, media) -> None:
     def releases(q: str = "") -> dict:
         return {"releases": approval.choices(q[:200])}
 
+    @app.get("/api/requests/releases/{infohash}/description")
+    @needs(Permission.APPROVE)
+    def description(infohash: str) -> dict:
+        """A release's torrent description as plain text, for the Approver to read before
+        choosing it. A Member never gets one."""
+        import html
+        import re
+
+        from torrentlinker.torrent_details import parse_details
+
+        if not re.fullmatch(r"[0-9a-fA-F]{40}", infohash):
+            raise HTTPException(404, "Unknown release.")
+        try:
+            raw = media.setup(approval.client_id).indexer().torrent_json(infohash.lower())
+            text = html.unescape(re.sub(r"<[^>]+>", " ", parse_details(raw).description))
+        except Exception:
+            return {"text": "", "unavailable": True}  # tr4ker's, or the Indexer not answering
+        return {"text": re.sub(r"\s+", " ", text).strip()[:4000], "unavailable": False}
+
+    def preselected(identifier: str) -> str:
+        """The film's best release now, for an acceptance that chose none."""
+        row = requests.get(identifier)
+        if not row["film"] or row["infohash"]:
+            return ""
+        client = approval.client_id
+        try:
+            found = media.tracker_film_detail(client, media.setup(client), OWNER_ACTOR, row["film"])
+        except KeyError:
+            raise ValueError("This film has no seeded release now. Refuse it or wait.") from None
+        return str(found["tracker"]["hash"])
+
     def answer(identifier: str, body: Answer, request: Request, action: str) -> dict:
         try:
-            release = approval.release(body.infohash.lower()) if body.infohash else None
+            infohash = body.infohash.lower()
+            if not infohash and action == "accept":
+                infohash = preselected(identifier)
+            release = approval.release(infohash) if infohash else None
             row = requests.answer(
                 identifier,
                 actor(request).account,
@@ -162,11 +197,11 @@ def request_routes(app: FastAPI, requests: Requests, media) -> None:
             except Exception:
                 # Provider errors can contain URLs, credentials or local paths. Keep those
                 # out of the Request seen by a Member, including the shared timeline.
-                requests.move(
+                requests.move_group(
                     identifier, "send_failed", "", "Sending failed. Check the client and retry."
                 )
             else:
-                requests.move(identifier, "sent", "")
+                requests.move_group(identifier, "sent", "")
         return requests.get(identifier)
 
     @app.post("/api/requests/{identifier}/accept")

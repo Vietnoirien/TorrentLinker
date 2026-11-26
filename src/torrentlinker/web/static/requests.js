@@ -60,7 +60,7 @@ function renderRequests() {
   if (!rows.some(r => r.id === requestReview.selected)) requestReview.selected = rows[0]?.id || "";
   for (const row of rows) {
     const button = requestNode("button", undefined, `card request-row${row.id === requestReview.selected ? " selected" : ""}`);
-    button.append(requestNode("strong", `${row.title} ${row.year}`), requestNode("span", `${row.requester} · ${requestBytes(row.size)} · ReleaseScore ${row.score ?? "?"} · ${requestState(row.state)}`), requestNode("small", row.release || say("Wish: choose a release", "Vœu : choisir une release")));
+    button.append(requestNode("strong", `${row.title} ${row.year}`), requestNode("span", `${row.requester} · ${requestBytes(row.chosen_size ?? row.size)} · ReleaseScore ${row.score ?? "?"} · ${requestState(row.state)}`), requestNode("small", row.release || (row.film ? say("Film: the release is yours to choose", "Film : la release est à choisir") : say("Wish: choose a release", "Vœu : choisir une release"))));
     button.onclick = () => {requestReview.selected = row.id; renderRequests();}; list.append(button);
   }
   if (!rows.length) list.append(requestNode("p", say("No Requests here.", "Aucune demande ici.")));
@@ -71,9 +71,9 @@ function renderRequests() {
 function requestInspector(panel, row) {
   panel.append(requestNode("h3", `${row.title} ${row.year}`), requestNode("p", `${row.requester} · ${requestState(row.state)}`));
   if (row.note) panel.append(requestNode("p", row.note));
-  if (row.infohash) {
+  if (row.infohash || row.film_id) {
     const cover = requestNode("img", undefined, "request-cover"); cover.alt = "";
-    cover.src = `api/requests/artwork/${row.infohash}`; cover.onerror = () => cover.remove();
+    cover.src = row.infohash ? `api/requests/artwork/${row.infohash}` : `api/media/items/film-${encodeURIComponent(row.film_id)}/artwork?size=grid`; cover.onerror = () => cover.remove();
     panel.append(cover);
   }
   const choices = requestNode("select"); choices.setAttribute("aria-label", say("Release", "Release"));
@@ -88,7 +88,24 @@ function requestInspector(panel, row) {
       ? say("Accepting exceeds this Member's weekly quota. The override will be recorded.", "Cette acceptation dépasse le quota hebdomadaire du membre. Le dépassement sera consigné.") : "";
   };
   warn(row.size || 0); panel.append(capWarning);
-  let releases = [];
+  let releases = row.releases || [];
+  const description = requestNode("p", "", "request-description");
+  // A film's grouped releases (all Trackers): the pre-selected one first and chosen, each readable.
+  if (row.film && row.state === "pending") {
+    choices.replaceChildren();
+    for (const release of releases) choices.append(new Option(`${release.name} · ${release.tracker} · ${requestBytes(release.size)} · ${release.seeders} ${say("seeders", "sources")} · ReleaseScore ${release.score ?? "?"}`, release.hash));
+    choices.value = row.preselected || "";
+    if (row.below_threshold) panel.append(requestNode("p", say("Below the threshold: no release reaches your ReleaseScore profile. The best is pre-selected.", "Sous le seuil : aucune release n’atteint votre profil ReleaseScore. La meilleure est pré-sélectionnée."), "field-error"));
+    if (row.in_library) panel.append(requestNode("p", say("This film is already in the Library.", "Ce film est déjà dans la bibliothèque.")));
+    panel.append(requestNode("p", `${say("Quoted to the Members", "Annoncé aux membres")} : ${requestBytes(row.quoted)}`));
+    const read = requestNode("button", say("Read the torrent description", "Lire la description du torrent"));
+    read.onclick = event => guard(async () => {
+      const found = await api(`requests/releases/${choices.value}/description`);
+      description.textContent = found.unavailable ? say("No description available for this release.", "Aucune description disponible pour cette release.") : found.text;
+    }, event.currentTarget);
+    choices.addEventListener("change", () => { description.textContent = ""; });
+    panel.append(read, description);
+  }
   find.onclick = (event) => guard(async () => {
     releases = (await api(`requests/releases?q=${encodeURIComponent(query.value)}`)).releases;
     choices.replaceChildren(new Option(say("Choose a release", "Choisir une release"), ""));
@@ -96,7 +113,7 @@ function requestInspector(panel, row) {
     choices.value = row.infohash;
   }, event.currentTarget);
   choices.onchange = () => {const selected = releases.find(r => r.hash === choices.value); margin.replaceChildren(requestMargin(selected?.size || 0, row.size || 0)); warn(selected?.size || 0);};
-  if (row.state === "pending") panel.append(query, find, choices);
+  if (row.state === "pending") panel.append(...(row.film ? [choices] : [query, find, choices]));
   panel.append(margin);
   const quota = row.quota;
   panel.append(requestNode("p", `${say("Weekly quota remaining", "Quota hebdomadaire restant")} : ${quota.requests_left ?? "∞"} · ${quota.bytes_left == null ? "∞" : requestBytes(quota.bytes_left)}`));

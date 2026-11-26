@@ -8,11 +8,11 @@ async function loadMemberWorkspace(view) {
     results.replaceChildren();
     for (const row of rows) {
       const card = requestNode("section", undefined, "card");
-      card.append(requestNode("strong", row.title || row.name), requestNode("p", `${requestBytes(row.size)} · ${kind === "search" ? `ReleaseScore ${row.score ?? "?"}` : requestState(row.state)}`));
+      card.append(requestNode("strong", row.title || row.name), requestNode("p", kind === "search" ? [row.year, row.genre].filter(Boolean).join(" · ") : `${requestBytes(row.size)} · ${requestState(row.state)}`));
       if (row.progress != null) { const progress = requestNode("progress"); progress.max = 1; progress.value = row.progress; progress.setAttribute("aria-label", say("Download progress", "Progression du téléchargement")); card.append(progress); }
       if (kind === "search" && state.actor?.permissions?.includes("request")) {
         const request = requestNode("button", say("Request", "Demander"));
-        request.onclick = async () => {request.disabled = true; try {await api("requests", {infohash: row.hash}); request.textContent = say("Requested", "Demandée");} catch (error) {request.disabled = false; toast(error.message, "bad");} };
+        request.onclick = async () => {request.disabled = true; try {await api("requests", {film: row.film}); request.textContent = say("Requested", "Demandée");} catch (error) {request.disabled = false; toast(error.message, "bad");} };
         card.append(request);
       }
       results.append(card);

@@ -6,6 +6,7 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
+from tests.film_support import seed_index
 from tests.test_members_signin import PASSWORD, member, sign_in
 from tests.test_web_jobs import login
 from torrentlinker.accounts import Actor, Permission
@@ -35,43 +36,7 @@ def server(tmp_path):
         tmp_path, members_enabled=True, password="test-password-long", monitor_verifications=False
     )
     media = app.state.agent_service.media
-    with media.lock, media.db:
-        for tmdb, (title, original, year, genres, rating, runtime) in FILMS.items():
-            media.db.execute(
-                "INSERT INTO film_meta (tmdb, title, original_title, year, overview, genres,"
-                " runtime, rating, poster) VALUES (?,?,?,?,?,?,?,?,?)",
-                (
-                    tmdb,
-                    title,
-                    original,
-                    year,
-                    f"Synopsis de {title}.",
-                    json.dumps(genres, ensure_ascii=False),
-                    runtime,
-                    rating,
-                    f"https://image.tmdb.org/t/p/w500/{tmdb}.jpg",
-                ),
-            )
-        for position, (site, infohash, name, size, seeders, tmdb) in enumerate(RELEASES):
-            media.db.execute(
-                "INSERT INTO film_release (tracker, infohash, name, size, seeders, category,"
-                " published, position, tkey, title, year, manual)"
-                " VALUES (?,?,?,?,?,2030,?,?,?,?,?,?)",
-                (
-                    site,
-                    infohash,
-                    name,
-                    size,
-                    seeders,
-                    1e9 + position,
-                    position,
-                    "" if not tmdb else f'["{name[:4]}", "{FILMS[tmdb][2]}"]',
-                    name.split(".")[0],
-                    FILMS[tmdb][2] if tmdb else "",
-                    tmdb,
-                ),
-            )
-    media._films_changed()
+    seed_index(media, FILMS, RELEASES)
     with TestClient(app) as browser:
         browser.headers["X-TorrentLinker"] = "1"
         yield app, browser

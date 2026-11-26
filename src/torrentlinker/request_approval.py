@@ -143,7 +143,8 @@ class RequestApproval:
     def refresh(self, requests) -> None:
         from torrentlinker.media_tracker import film_key
 
-        rows = [r for r in requests.review() if r["state"] in {"sent", "downloading"}]
+        requests.link_films(self.media.film_of_release)
+        rows = [r for r in requests.review(group=False) if r["state"] in {"sent", "downloading"}]
         if not rows:
             return
         try:

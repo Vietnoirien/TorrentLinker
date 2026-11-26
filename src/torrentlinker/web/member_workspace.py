@@ -3,7 +3,7 @@
 from fastapi import FastAPI, HTTPException, Query, Request
 
 from torrentlinker.accounts import Actor, Permission
-from torrentlinker.member_requests import ACCEPTED
+from torrentlinker.member_requests import ACCEPTED, FilmAsk
 from torrentlinker.web.permissions import needs
 
 
@@ -25,6 +25,16 @@ class MemberWorkspace:
             client, self.media.setup(client), actor, q=query[:200], limit=60
         )
         return page["rows"]
+
+    def ask(self, actor: Actor, film: str) -> dict:
+        """A Member's Request for a Tracker Film they see. KeyError when they do not see it."""
+        if not self.media.sees_tracker(actor):
+            raise KeyError(film)
+        client = self.approval.client_id
+        found = self.media.tracker_film_detail(client, self.media.setup(client), actor, film)
+        return self.requests.ask_film(
+            actor.account, FilmAsk(film, found["title"], found["year"], int(found["quote"]))
+        )
 
     def queue(self, actor: Actor) -> list[dict]:
         self.require(actor, Permission.QUEUE)

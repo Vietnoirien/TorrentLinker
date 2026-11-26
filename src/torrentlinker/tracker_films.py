@@ -842,6 +842,17 @@ class TrackerFilms(TrackerRows, AgeRatings):
             return None
         return self.agent.setup.path.parent / "media-artwork" / image[6:]  # type: ignore[attr-defined]
 
+    def film_of_release(self, infohash: str) -> str:
+        """The identifier of the film a release belongs to, "" when the index holds none."""
+        index = self._film_index()
+        cached = getattr(self, "_release_films", None)
+        if cached is None or cached[0] is not index:
+            cached = self._release_films = (
+                index,
+                {r["hash"]: film["id"] for film in index for r in film["releases"]},
+            )
+        return cached[1].get(infohash, "")
+
     def film_for(self, client_id, title: str, year: str) -> str:
         """The index's identifier of the film a title and year name, "" when it holds none."""
         wanted = film_key(title, year)

@@ -195,6 +195,7 @@ def test_restart_requires_retry_and_completed_media_becomes_available(tmp_path):
         setup=lambda _client: setup,
         agent=SimpleNamespace(setup=setup),
         _library_films=lambda _client: films,
+        film_of_release=lambda infohash: "",
     )
     approval = RequestApproval(media)
     approval.refresh(requests)

@@ -1,9 +1,16 @@
-"""Requests and Wishes: what a Member asks for instead of downloading (ADR-0022).
+"""Requests and Wishes: what a Member asks for instead of downloading (ADR-0022, ADR-0028).
 
-A Request names a tracker release; a Wish names only a film, for an Approver to find. Both
-start `pending`. A Request goes `accepted` → `sent` → `downloading` → `available`, or ends
-`refused`, `cancelled` or `expired`; `send_failed` when an accepted release could not reach
-the Torrent Client. A Wish resolved to a release becomes an accepted Request.
+A Member's Request names a Tracker Film, never a release: the Approver chooses the release
+when accepting (an Owner's own Request still names its release). A Wish names only a title,
+for an Approver to find. Both start `pending`. A Request goes `accepted` → `sent` →
+`downloading` → `available`, or ends `refused`, `cancelled` or `expired`; `send_failed` when
+an accepted release could not reach the Torrent Client. A Wish resolved to a release becomes
+an accepted Request.
+
+Members asking for the same film while it is pending share one Request: each keeps their own
+row (timeline, notification, cancel), linked by the film's identifier, and the Approver answers
+them together. The group is charged min(the size quoted at the first ask, the chosen size),
+split equally; `size` is a Member's share, `chosen_size` the real size for the Owner's margin.
 
 Caps are checked at sending: accepted this week plus pending stay under the weekly count and
 size, and pending under the pending cap. The week runs Monday 00:00 to Sunday 24:00, server
@@ -14,6 +21,7 @@ time. Refused, cancelled and expired ones give their slot and size back. They li
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from datetime import time as midnight
@@ -40,6 +48,16 @@ class CapReached(ValueError):
     def __init__(self, message: str, cap: str, reset: float | None):
         super().__init__(message)
         self.cap, self.reset = cap, reset
+
+
+@dataclass(frozen=True)
+class FilmAsk:
+    """The Tracker Film a Member asks for, with the size of the release pre-selected for it."""
+
+    film: str
+    title: str
+    year: str
+    size: int
 
 
 @dataclass(frozen=True)
@@ -84,6 +102,11 @@ class Requests:
                     "ALTER TABLE requests ADD COLUMN origin_kind TEXT NOT NULL DEFAULT 'request'"
                 )
                 self.db.execute("UPDATE requests SET origin_kind=kind")
+            columns = {row[1] for row in self.db.execute("PRAGMA table_info(requests)")}
+            for name, kind in (("film", "TEXT"), ("quoted", "INTEGER"), ("chosen_size", "INTEGER")):
+                if name not in columns:
+                    self.db.execute(f"ALTER TABLE requests ADD COLUMN {name} {kind}")
+            self.db.execute("CREATE INDEX IF NOT EXISTS requests_film ON requests(film, state)")
 
     def recover_sends(self) -> None:
         """A restart cannot prove whether a claimed send reached the client; require Retry."""
@@ -170,6 +193,79 @@ class Requests:
             )
         return self.get(identifier)
 
+    def ask_film(self, account: str, ask: FilmAsk, now: float | None = None) -> dict:
+        """A Member's Request for a Tracker Film, with no release. The quota is checked against
+        the pre-selected release's size, shared with the Members already asking for the film
+        (decisions 5, 13, 15 and 17). It joins a pending Request for the film, and expires
+        with it, not 14 days after the join."""
+        now = time.time() if now is None else now
+        self.expire(now)
+        with self.lock, self.db:
+            if self.db.execute(
+                f"SELECT 1 FROM requests WHERE account=? AND film=? "
+                f"AND state IN ({','.join('?' * len(OPEN))})",
+                (account, ask.film, *OPEN),
+            ).fetchone():
+                raise ValueError("You have already asked for this film.")
+            group = self.db.execute(
+                "SELECT created, quoted FROM requests WHERE film=? AND state='pending' "
+                "ORDER BY created",
+                (ask.film,),
+            ).fetchall()
+            base = group[0]["quoted"] if group else ask.size
+            self._check(account, -(-base // (len(group) + 1)), now)
+            identifier = self._add(
+                account, "request", ask.title, ask.year, "", now, film=ask.film, quoted=base
+            )
+            if group:
+                self.db.execute(
+                    "UPDATE requests SET created=? WHERE id=?", (group[0]["created"], identifier)
+                )
+            self._rebalance(ask.film)
+        return self.get(identifier)
+
+    def _rebalance(self, film: str) -> None:
+        """The pending Members of a film each carry an equal share of the quoted size."""
+        rows = self.db.execute(
+            "SELECT id, quoted FROM requests WHERE film=? AND state='pending' ORDER BY created, id",
+            (film,),
+        ).fetchall()
+        for row in rows:
+            self.db.execute(
+                "UPDATE requests SET size=? WHERE id=?",
+                (-(-row["quoted"] // len(rows)) if row["quoted"] is not None else 0, row["id"]),
+            )
+
+    def _group(self, row) -> list:
+        """The rows answered together with this one: the same film, state and release."""
+        if not row["film"]:
+            return [row]
+        return self.db.execute(
+            "SELECT * FROM requests WHERE film=? AND state=? AND infohash IS ? "
+            "ORDER BY created, id",
+            (row["film"], row["state"], row["infohash"]),
+        ).fetchall()
+
+    def link_films(self, resolve: Callable[[str], str]) -> None:
+        """Existing Requests keep working: where their release is in the film index, they get
+        their film (review item 5). Wishes and unknown releases stay as they are."""
+        with self.lock, self.db:
+            rows = self.db.execute(
+                f"SELECT id, infohash, size FROM requests WHERE film IS NULL AND infohash "
+                f"IS NOT NULL AND state IN ({','.join('?' * len(OPEN))}) LIMIT 200",
+                OPEN,
+            ).fetchall()
+            linked = set()
+            for row in rows:
+                if film := resolve(row["infohash"]):
+                    self.db.execute(
+                        "UPDATE requests SET film=?, quoted=?, chosen_size=? WHERE id=?",
+                        (film, row["size"], row["size"], row["id"]),
+                    )
+                    linked.add(film)
+            for film in linked:
+                self._rebalance(film)
+
     def wish(self, account: str, title: str, year: str = "", note: str = "") -> dict:
         """A Wish: a film without a release, for an Approver to find."""
         now = time.time()
@@ -199,7 +295,8 @@ class Requests:
         identifier = uuid4().hex
         self.db.execute(
             "INSERT INTO requests (id, account, kind, state, title, year, note, infohash, "
-            "release, size, created, updated) VALUES (?,?,?,'pending',?,?,?,?,?,?,?,?)",
+            "release, size, created, updated, film, quoted) "
+            "VALUES (?,?,?,'pending',?,?,?,?,?,?,?,?,?,?)",
             (
                 identifier,
                 account,
@@ -212,6 +309,8 @@ class Requests:
                 release.get("size"),
                 now,
                 now,
+                release.get("film"),
+                release.get("quoted"),
             ),
         )
         self.db.execute("UPDATE requests SET origin_kind=? WHERE id=?", (kind, identifier))
@@ -257,18 +356,33 @@ class Requests:
                 (identifier, now, state, actor, note),
             )
 
-    def review(self) -> list[dict]:
-        """Approvers see all Requests, their requester, quotas and event history."""
+    def review(self, group: bool = True) -> list[dict]:
+        """Approvers see all Requests, their requesters, quotas and event history. Members
+        asking for the same film in the same state are one entry, answered once."""
         self.expire()
         with self.lock:
             rows = self.db.execute(
                 "SELECT * FROM requests ORDER BY created DESC LIMIT 500"
             ).fetchall()
-            return [
-                {
+            entries: dict[tuple, dict] = {}
+            for row in rows:
+                key = (
+                    (row["film"], row["state"], row["infohash"])
+                    if group and row["film"]
+                    else (row["id"],)
+                )
+                if key in entries:
+                    entry = entries[key]
+                    entry["requesters"].append(self.accounts.display_name(row["account"]))
+                    entry["size"] = (entry["size"] or 0) + (row["size"] or 0)
+                    if row["created"] < entry["created"]:  # the first ask names the group
+                        entry["id"], entry["created"] = row["id"], row["created"]
+                    continue
+                entries[key] = {
                     **self._public(row),
                     "account": row["account"],
                     "requester": self.accounts.display_name(row["account"]),
+                    "requesters": [self.accounts.display_name(row["account"])],
                     "quota": self.quota(row["account"]),
                     "approval_limits": self.approval_limits(row["account"], row["id"]),
                     "events": [
@@ -280,8 +394,9 @@ class Requests:
                         )
                     ],
                 }
-                for row in rows
-            ]
+            for entry in entries.values():
+                entry["requester"] = ", ".join(entry["requesters"])
+            return list(entries.values())
 
     def approval_limits(self, account: str, identifier: str) -> dict:
         caps = self.accounts.caps(account) if account != OWNER else Caps()
@@ -311,7 +426,11 @@ class Requests:
         retry: bool = False,
         refuse: bool = False,
     ) -> dict:
-        """Atomically claim a pending answer or failed send before any external action."""
+        """Atomically claim a pending answer or failed send before any external action.
+
+        A film's Request is answered for every Member asking for it: a refusal frees every
+        slot; an acceptance charges each Member an equal share of min(the size quoted at the
+        first ask, the chosen release's size), so a bigger release costs them nothing more."""
         self.expire()
         with self.lock, self.db:
             row = self.db.execute("SELECT * FROM requests WHERE id=?", (identifier,)).fetchone()
@@ -320,49 +439,74 @@ class Requests:
             expected = "send_failed" if retry else "pending"
             if row["state"] != expected:
                 raise ValueError("This Request has already been answered or is being sent.")
+            group = self._group(row)
+            said = {member["id"]: note for member in group}
             if refuse:
-                self.move(identifier, "refused", actor, note)
+                for member in group:
+                    self.move(member["id"], "refused", actor, note)
             else:
                 if release is None:
                     if not row["infohash"]:
                         raise ValueError("Choose a release for this Wish first.")
                     release = Release(
-                        row["infohash"], row["release"], row["size"], row["title"], row["year"]
+                        row["infohash"],
+                        row["release"],
+                        row["chosen_size"] or row["size"],
+                        row["title"],
+                        row["year"],
                     )
-                # The pending Request already reserves its original count and size.
-                caps = self.accounts.caps(row["account"]) if row["account"] != OWNER else Caps()
+                quoted = row["quoted"]
+                charged = release.size if quoted is None else min(quoted, release.size)
+                share = -(-charged // len(group))
                 start, _ = week(time.time())
-                used = self.db.execute(
-                    "SELECT COUNT(*),COALESCE(SUM(size),0) FROM requests "
-                    "WHERE account=? AND accepted>=? AND id<>?",
-                    (row["account"], start, identifier),
-                ).fetchone()
-                over = (
-                    caps.requests_per_week is not None
-                    and used[0] + 1 > caps.requests_per_week
-                    or caps.bytes_per_week is not None
-                    and used[1] + release.size > caps.bytes_per_week
-                )
-                if over:
-                    note = (note + "\nAccepted beyond the Member's weekly quota.").strip()
+                for member in group:
+                    # The pending Request already reserves its original count and size.
+                    owner = member["account"] == OWNER
+                    caps = Caps() if owner else self.accounts.caps(member["account"])
+                    used = self.db.execute(
+                        "SELECT COUNT(*),COALESCE(SUM(size),0) FROM requests "
+                        "WHERE account=? AND accepted>=? AND id<>?",
+                        (member["account"], start, member["id"]),
+                    ).fetchone()
+                    over = (
+                        caps.requests_per_week is not None
+                        and used[0] + 1 > caps.requests_per_week
+                        or caps.bytes_per_week is not None
+                        and used[1] + share > caps.bytes_per_week
+                    )
+                    if over:
+                        said[member["id"]] = (
+                            note + "\nAccepted beyond the Member's weekly quota."
+                        ).strip()
+                    self.db.execute(
+                        "UPDATE requests SET kind='request',infohash=?,release=?,size=?,"
+                        "chosen_size=?,title=?,year=? WHERE id=?",
+                        (
+                            release.infohash,
+                            release.name,
+                            share,
+                            release.size,
+                            release.title,
+                            release.year,
+                            member["id"],
+                        ),
+                    )
+                    self.move(member["id"], "accepted", actor, said[member["id"]])
+            for member in group:
                 self.db.execute(
-                    "UPDATE requests SET kind='request',infohash=?,release=?,size=?,title=?,year=? "
-                    "WHERE id=?",
-                    (
-                        release.infohash,
-                        release.name,
-                        release.size,
-                        release.title,
-                        release.year,
-                        identifier,
-                    ),
+                    "UPDATE requests SET answered_by=?,answer=?,seen=0 WHERE id=?",
+                    (actor, said[member["id"]], member["id"]),
                 )
-                self.move(identifier, "accepted", actor, note)
-            self.db.execute(
-                "UPDATE requests SET answered_by=?,answer=?,seen=0 WHERE id=?",
-                (actor, note, identifier),
-            )
         return self.get(identifier)
+
+    def move_group(self, identifier: str, state: str, actor: str, note: str = "") -> None:
+        """Move the Request and every Member's row answered with it (same film and release)."""
+        with self.lock:
+            row = self.db.execute("SELECT * FROM requests WHERE id=?", (identifier,)).fetchone()
+            if row is None:
+                raise KeyError(identifier)
+            for member in self._group(row):
+                self.move(member["id"], state, actor, note)
 
     def cancel(self, account: str, identifier: str) -> dict:
         """The Member cancels their own Request or Wish while it is pending."""
@@ -374,7 +518,13 @@ class Requests:
                 raise KeyError(identifier)
             if row["state"] != "pending":
                 raise ValueError("Only a pending Request can be cancelled.")
-            self.move(identifier, "cancelled", account)
+            with self.db:
+                self.move(identifier, "cancelled", account)
+                found = self.db.execute(
+                    "SELECT film FROM requests WHERE id=?", (identifier,)
+                ).fetchone()
+                if found["film"]:
+                    self._rebalance(found["film"])  # the others' shares grow back
         return self.get(identifier)
 
     def cancel_pending(self, account: str) -> None:
@@ -384,7 +534,7 @@ class Requests:
                 "SELECT id FROM requests WHERE account=? AND state='pending'", (account,)
             ).fetchall()
             for row in rows:
-                self.move(row["id"], "cancelled", account)
+                self.cancel(account, row["id"])
 
     def expire(self, now: float | None = None) -> None:
         """Pending for 14 days: expired, and new to the Member."""
@@ -411,7 +561,18 @@ class Requests:
                 "SELECT * FROM requests WHERE account=? ORDER BY created DESC LIMIT 200",
                 (account,),
             ).fetchall()
-        return [self._public(r) for r in rows]
+            others = {
+                r["film"]: r[1]
+                for r in self.db.execute(
+                    "SELECT film, COUNT(*) FROM requests WHERE state='pending' AND film IS NOT NULL"
+                    " GROUP BY film"
+                )
+            }
+        # A Member never learns who else asked, only that the Request is shared.
+        return [
+            {**self._public(r), "shared_with": others.get(r["film"], 1) - 1 if r["film"] else 0}
+            for r in rows
+        ]
 
     def seen(self, account: str) -> None:
         with self.lock, self.db:
@@ -428,6 +589,9 @@ class Requests:
             "infohash": row["infohash"] or "",
             "release": row["release"] or "",
             "size": row["size"],
+            "film": row["film"] or "",
+            "quoted": row["quoted"],
+            "chosen_size": row["chosen_size"],
             "created": row["created"],
             "updated": row["updated"],
             "answered_by": (

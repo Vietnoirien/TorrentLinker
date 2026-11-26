@@ -81,7 +81,7 @@ class MemberAssistant:
 
     def tools(self, actor: Actor) -> list[dict]:
         definitions = []
-        if actor.holds(Permission.SEARCH):
+        if actor.holds(Permission.FILMS):
             definitions.append(
                 ("search_films", "Find tracker films visible to this Member.", "query")
             )
@@ -93,8 +93,9 @@ class MemberAssistant:
             definitions.append(
                 (
                     "request_film",
-                    "Request a known tracker film for an Approver. Never downloads directly.",
-                    "infohash",
+                    "Request a tracker film, by the id search_films gave, for an Approver. "
+                    "Never downloads directly.",
+                    "film",
                 )
             )
         return [
@@ -115,12 +116,18 @@ class MemberAssistant:
         actor = self.actor(account)  # Recheck current Permissions, including during a model run.
         if name not in {tool["name"] for tool in self.tools(actor)}:
             raise PermissionError("This tool is not available to this Member.")
-        field = "infohash" if name == "request_film" else "query"
+        field = "film" if name == "request_film" else "query"
         if set(arguments) != {field} or not isinstance(arguments[field], str):
             raise ValueError("Invalid tool arguments.")
         value = arguments[field]
         if name == "search_films":
-            return {"rows": self.workspace.search(actor, value[:200])}
+            rows = self.workspace.search(actor, value[:200])
+            return {
+                "rows": [
+                    {key: row.get(key) for key in ("film", "title", "year", "genre", "description")}
+                    for row in rows
+                ]
+            }
         if name == "find_media":
             rows = self.workspace.media.listing(
                 self.workspace.approval.client_id, q=value[:200], limit=30, actor=actor
@@ -130,12 +137,7 @@ class MemberAssistant:
                     {key: row.get(key) for key in ("id", "title", "year", "kind")} for row in rows
                 ]
             }
-        if not self.workspace.media.sees_tracker(actor):
-            raise PermissionError("This tracker film is not visible to this Member.")
-        if len(value) != 40 or any(c not in "0123456789abcdef" for c in value.lower()):
-            raise ValueError("Choose a known tracker release.")
-        release = self.workspace.approval.release(value.lower())
-        return self.workspace.requests.ask(account, release)
+        return self.workspace.ask(actor, value)
 
     def send(self, account: str, message: str, identifier: str = "") -> dict:
         import time

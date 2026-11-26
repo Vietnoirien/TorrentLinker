@@ -5,6 +5,7 @@ from datetime import datetime
 import pytest
 from fastapi.testclient import TestClient
 
+from tests.film_support import seed_index
 from tests.test_members_signin import member, sign_in
 from tests.test_web_jobs import login
 from torrentlinker.accounts import Accounts, Caps, Permission
@@ -108,15 +109,11 @@ def server(tmp_path):
     app = create_app(
         tmp_path, members_enabled=True, password="test-password-long", monitor_verifications=False
     )
-    library = app.state.agent_service.media
-
-    def entry(client_id, infohash):
-        if infohash != DUNE:
-            raise ValueError("This tracker release is no longer suggested.")
-        best = {"hash": DUNE, "name": "Dune.Part.Two.2024.1080p", "size": 7 * GB}
-        return {"facts": {"title": "Dune : Deuxième partie", "year": 2024}, "release": best}
-
-    library.tracker_entry = entry
+    seed_index(
+        app.state.agent_service.media,
+        {"7": ("Dune : Deuxième partie", "Dune: Part Two", "2024", ["Science-Fiction"], "12", 166)},
+        [("c411", DUNE, "Dune.Part.Two.2024.1080p", 7 * GB, 80, "7")],
+    )
     with TestClient(app) as browser:
         browser.headers["X-TorrentLinker"] = "1"
         yield app, browser
@@ -127,11 +124,11 @@ def test_a_member_asks_for_a_tracker_film_and_cancels_it(server):
     lea = member(app, "lea", Permission.FILMS, Permission.REQUEST)
     sign_in(browser, "lea")
     assert browser.post(f"/api/media/tracker/{DUNE}/download", json={}).status_code == 403
-    asked = browser.post("/api/requests", json={"infohash": DUNE, "client_id": "x"})
+    asked = browser.post("/api/requests", json={"film": "tmdb-7"})
     assert asked.status_code == 200, asked.text
     assert asked.json()["title"] == "Dune : Deuxième partie" and asked.json()["size"] == 7 * GB
-    assert browser.post("/api/requests", json={"infohash": DUNE}).status_code == 409
-    assert browser.post("/api/requests", json={"infohash": "b" * 40}).status_code == 404
+    assert browser.post("/api/requests", json={"film": "tmdb-7"}).status_code == 409
+    assert browser.post("/api/requests", json={"film": "tmdb-8"}).status_code == 404
     mine = browser.get("/api/requests").json()
     assert [r["state"] for r in mine["requests"]] == ["pending"]
     assert mine["quota"]["requests_left"] is None
@@ -150,7 +147,7 @@ def test_a_reached_cap_says_why_and_when_it_resets(server):
     lea = member(app, "lea", Permission.FILMS, Permission.REQUEST)
     app.state.accounts.set_caps(lea, Caps(requests_per_week=0))
     sign_in(browser, "lea")
-    refused = browser.post("/api/requests", json={"infohash": DUNE})
+    refused = browser.post("/api/requests", json={"film": "tmdb-7"})
     assert refused.status_code == 409
     assert refused.json()["cap"] == "count" and refused.json()["reset"] > 0
 
@@ -160,21 +157,21 @@ def test_a_member_cannot_reach_another_members_request_and_tracker_needs_no_limi
     lea = member(app, "lea", Permission.FILMS, Permission.REQUEST)
     member(app, "hugo", Permission.FILMS, Permission.REQUEST)
     sign_in(browser, "lea")
-    identifier = browser.post("/api/requests", json={"infohash": DUNE}).json()["id"]
+    identifier = browser.post("/api/requests", json={"film": "tmdb-7"}).json()["id"]
     sign_in(browser, "hugo")
     assert browser.get("/api/requests").json()["requests"] == []
     assert browser.post(f"/api/requests/{identifier}/cancel").status_code == 404
-    # Under an age limit tracker films are hidden, so they cannot be asked for either.
-    app.state.accounts.set_media_limits(lea, "12", None)
+    # A film rated above the Member's limit cannot be asked for (Dune is rated -12).
+    app.state.accounts.set_media_limits(lea, "10", None)
     sign_in(browser, "lea")
-    assert browser.post("/api/requests", json={"infohash": DUNE}).status_code == 404
+    assert browser.post("/api/requests", json={"film": "tmdb-7"}).status_code == 404
 
 
 def test_seen_clears_the_unread_answers(server):
     app, browser = server
     member(app, "lea", Permission.FILMS, Permission.REQUEST)
     sign_in(browser, "lea")
-    identifier = browser.post("/api/requests", json={"infohash": DUNE}).json()["id"]
+    identifier = browser.post("/api/requests", json={"film": "tmdb-7"}).json()["id"]
     app.state.requests.move(identifier, "refused", "owner", "Pas cette semaine")
     assert browser.get("/api/requests").json()["unread"] == 1
     assert browser.post("/api/requests/seen").json()["unread"] == 0
@@ -184,7 +181,7 @@ def test_deleting_a_member_cancels_pending_requests_and_keeps_them(server):
     app, browser = server
     lea = member(app, "lea", Permission.FILMS, Permission.REQUEST)
     sign_in(browser, "lea")
-    identifier = browser.post("/api/requests", json={"infohash": DUNE}).json()["id"]
+    identifier = browser.post("/api/requests", json={"film": "tmdb-7"}).json()["id"]
     browser.cookies.clear()
     login(browser)
     assert browser.post(f"/api/members/{lea}/disable").status_code == 200

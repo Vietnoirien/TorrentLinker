@@ -7,7 +7,6 @@ import pytest
 from tests.test_members_requests import server as requests_server
 from tests.test_members_signin import PASSWORD, member
 from torrentlinker.accounts import Caps, Permission
-from torrentlinker.member_requests import Release
 
 
 @pytest.fixture
@@ -77,12 +76,7 @@ def test_tools_recheck_permissions_and_downloads_become_requests(server, monkeyp
         app, "lea", Permission.FILMS, Permission.SEARCH, Permission.REQUEST, Permission.ASSISTANT
     )
     service = app.state.member_assistant
-    monkeypatch.setattr(
-        app.state.request_approval,
-        "release",
-        lambda _: Release("a" * 40, "Film.2025", 100, "Film", "2025"),
-    )
-    result = service.tool(lea, "request_film", {"infohash": "a" * 40})
+    result = service.tool(lea, "request_film", {"film": "tmdb-7"})
     assert result["state"] == "pending"
     assert len(app.state.requests.mine(lea)) == 1
     for tool in ("execute", "download", "read_file", "list_accounts", "setup", "schedule"):
@@ -90,7 +84,7 @@ def test_tools_recheck_permissions_and_downloads_become_requests(server, monkeyp
             service.tool(lea, tool, {})
     app.state.accounts.grant(lea, {Permission.ASSISTANT})
     with pytest.raises(PermissionError):
-        service.tool(lea, "request_film", {"infohash": "b" * 40})
+        service.tool(lea, "request_film", {"film": "tmdb-8"})
     app.state.accounts.disable(lea)
     with pytest.raises(PermissionError):
         service.chats(lea)
