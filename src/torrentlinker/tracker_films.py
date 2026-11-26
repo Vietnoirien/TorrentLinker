@@ -1,0 +1,636 @@
+"""The Tracker Film index: every seeded film on the Trackers, one entry per film.
+
+A Tracker Film is a Film (one title and year, identified by its TMDb id when known) with at
+least one seeded release on a Tracker. The index is built from the per-Tracker Catalogues, so
+it holds old films too, not only what the listing of c411's latest releases shows. Releases
+are read once (`film_release`) and grouped by TMDb id; until a release is identified it groups
+by its title and year. A background job identifies each title once (`film_title`, then
+`film_meta` for the poster, French synopsis, genres, runtime and Age Rating) and only the new
+Catalogue entries afterwards. The Owner's corrections (`manual`) survive re-identification.
+
+Mixed into MediaLibrary, which provides db and lock.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import threading
+import time
+from typing import Any
+
+from guessit import guessit
+
+from torrentlinker import age_ratings
+from torrentlinker.media_ratings import AgeRatings
+from torrentlinker.media_tracker import TrackerRows, film_key, plain
+from torrentlinker.trackers import valid_order
+
+# The Catalogue categories that hold films (decision 18); the 6000s (adult) never count. A
+# tr4ker category holds non-films too (PDF magazines, series, albums): its releases are listed
+# only once TMDb identifies them as a film.
+FILM_CATEGORIES = {"c411": (2030, 2060, 2070, 2080, 2090), "tr4ker": (2000, 2040)}
+IDENTIFIED_ONLY = frozenset({"tr4ker"})
+# TMDb's French film genres (decision 16), in TMDb's order.
+GENRES = (
+    "Action",
+    "Aventure",
+    "Animation",
+    "Comédie",
+    "Crime",
+    "Documentaire",
+    "Drame",
+    "Familial",
+    "Fantastique",
+    "Histoire",
+    "Horreur",
+    "Musique",
+    "Mystère",
+    "Romance",
+    "Science-Fiction",
+    "Téléfilm",
+    "Thriller",
+    "Guerre",
+    "Western",
+)
+SORTS = ("new", "shared", "year", "title")
+POSTER_BASE = "https://image.tmdb.org/t/p/w500"
+RUN_INTERVAL = 600  # seconds between two refreshes of the index
+IDENTIFY_BUDGET = 120.0  # seconds one refresh may spend asking TMDb; the rest waits
+IDENTIFY_PAUSE = 0.25  # seconds between two TMDb requests
+NOT_FOUND_RETRY = 7 * 86400  # a title TMDb did not know is asked again a week later
+
+
+def film_id(tmdb: str, tkey: str, tracker: str, infohash: str) -> str:
+    """A film's identifier: its TMDb id, else its parsed title and year, else its one release."""
+    if tmdb:
+        return "tmdb-" + tmdb
+    if tkey:
+        return "title-" + hashlib.sha1(tkey.encode()).hexdigest()[:16]
+    return "release-" + hashlib.sha1(f"{tracker}:{infohash}".encode()).hexdigest()[:16]
+
+
+def parse_release(name: str) -> tuple[str, str]:
+    """The title and year a release name says; the year is empty when it names none."""
+    guessed = guessit(name, {"type": "movie"})
+    return str(guessed.get("title") or "").strip(), str(guessed.get("year") or "")
+
+
+class TrackerFilms(TrackerRows, AgeRatings):
+    """Mixed into MediaLibrary, which provides db and lock; the rows' tracker helpers and
+    the ratings' `tmdb_client` come from the classes it builds on."""
+
+    db: Any
+    lock: Any
+
+    def create_films(self) -> None:
+        self._films_generation = 0
+        self._films_cache: tuple[int, list[dict[str, Any]]] | None = None
+        with self.db:
+            self.db.executescript("""
+                CREATE TABLE IF NOT EXISTS film_release
+                    (tracker TEXT, infohash TEXT, name TEXT, size INTEGER, seeders INTEGER,
+                    category INTEGER, published REAL NOT NULL DEFAULT 0, position INTEGER,
+                    tkey TEXT NOT NULL DEFAULT '', title TEXT NOT NULL DEFAULT '',
+                    year TEXT NOT NULL DEFAULT '', manual TEXT NOT NULL DEFAULT '',
+                    download_url TEXT NOT NULL DEFAULT '', PRIMARY KEY(tracker, infohash));
+                CREATE TABLE IF NOT EXISTS film_title
+                    (tkey TEXT PRIMARY KEY, tmdb TEXT NOT NULL, manual INTEGER NOT NULL DEFAULT 0,
+                    checked REAL);
+                CREATE TABLE IF NOT EXISTS film_meta
+                    (tmdb TEXT PRIMARY KEY, title TEXT, original_title TEXT, year TEXT,
+                    overview TEXT, genres TEXT, runtime INTEGER, rating TEXT, rating_by TEXT
+                    NOT NULL DEFAULT '', suggestion TEXT, poster TEXT, artwork TEXT, fetched REAL);
+            """)
+
+    def _films_changed(self) -> None:
+        self._films_generation += 1
+
+    # -- Reading the Catalogues ------------------------------------------------------------
+
+    def films_sync(self, client_id, setup, stop: threading.Event | None = None) -> bool:
+        """Bring `film_release` up to the Catalogues' seeded film releases: parse the new
+        ones, drop the vanished, follow seeders and sizes. True when anything changed."""
+        stop = stop or threading.Event()
+        listed = {
+            r["hash"]: (entry, r)
+            for entry in self._tracker_cache(client_id, "tracker-new").values()
+            for r in entry.get("releases") or []
+        }
+        changed = False
+        for site in self._catalogue_trackers(setup):
+            categories = FILM_CATEGORIES.get(site)
+            if not categories:
+                continue
+            current = {
+                row.infohash.lower(): (row, order)
+                for row, order in self._site_store(setup, site).catalogue_seeded(categories)
+            }
+            with self.lock:
+                known = {
+                    r["infohash"]: (r["size"], r["seeders"], r["published"])
+                    for r in self.db.execute(
+                        "SELECT infohash, size, seeders, published FROM film_release"
+                        " WHERE tracker=?",
+                        (site,),
+                    )
+                }
+            gone = [(site, h) for h in known.keys() - current.keys()]
+            if gone:
+                with self.lock, self.db:
+                    self.db.executemany(
+                        "DELETE FROM film_release WHERE tracker=? AND infohash=?", gone
+                    )
+                changed = True
+            inserts, updates = [], []
+            for infohash, (row, order) in current.items():
+                entry, release = listed.get(infohash, ({}, {}))
+                published = float(release.get("published_at") or 0)
+                if infohash not in known:
+                    if stop.is_set():
+                        break
+                    # c411's own listing already read the title and year of what it returned.
+                    title, year = (
+                        (str(entry.get("title") or ""), str(entry.get("year") or ""))
+                        if entry.get("title")
+                        else parse_release(row.title)
+                    )
+                    tkey = film_key(title, year) if title and year else ""
+                    inserts.append(
+                        (
+                            site,
+                            infohash,
+                            row.title,
+                            row.size,
+                            row.seeders,
+                            row.category,
+                            published,
+                            order,
+                            tkey,
+                            title,
+                            year,
+                            row.download_url,
+                        )
+                    )
+                elif known[infohash] != (row.size, row.seeders, published or known[infohash][2]):
+                    updates.append(
+                        (row.size, row.seeders, published or known[infohash][2], site, infohash)
+                    )
+            with self.lock, self.db:
+                self.db.executemany(
+                    "INSERT OR REPLACE INTO film_release (tracker, infohash, name, size, seeders,"
+                    " category, published, position, tkey, title, year, download_url)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                    inserts,
+                )
+                self.db.executemany(
+                    "UPDATE film_release SET size=?, seeders=?, published=?"
+                    " WHERE tracker=? AND infohash=?",
+                    updates,
+                )
+            changed = changed or bool(inserts or updates)
+        if changed:
+            self._films_changed()
+        return changed
+
+    # -- Identification --------------------------------------------------------------------
+
+    def _fetch_meta(self, tmdb, tmdb_id: str) -> bool:
+        """Store a film's French facts from TMDb; False when TMDb does not know the id."""
+        info = tmdb.details(tmdb_id, "movie")
+        if info is None:
+            return False
+        raw = info.raw
+        try:
+            found = age_ratings.from_tmdb(tmdb.certifications(tmdb_id, "movie"))
+        except Exception:
+            found = None  # the facts are worth keeping without a rating
+        with self.lock, self.db:
+            kept = self.db.execute(
+                "SELECT rating, rating_by FROM film_meta WHERE tmdb=?", (tmdb_id,)
+            ).fetchone()
+            rating = found.rating if found and found.french else None
+            by = "tmdb" if rating else ""
+            if kept and kept["rating_by"] == "person":  # a person's rating is never replaced
+                rating, by = kept["rating"], "person"
+            self.db.execute(
+                "INSERT OR REPLACE INTO film_meta (tmdb, title, original_title, year, overview,"
+                " genres, runtime, rating, rating_by, suggestion, poster, artwork, fetched)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,"
+                " (SELECT artwork FROM film_meta WHERE tmdb=?),?)",
+                (
+                    tmdb_id,
+                    info.title,
+                    info.original_title,
+                    info.year,
+                    info.overview,
+                    json.dumps(
+                        [str(g["name"]) for g in raw.get("genres") or [] if g.get("name")],
+                        ensure_ascii=False,
+                    ),
+                    int(raw.get("runtime") or 0),
+                    rating,
+                    by,
+                    json.dumps(found.suggestion("tmdb")) if found and not rating else None,
+                    POSTER_BASE + raw["poster_path"] if raw.get("poster_path") else "",
+                    tmdb_id,
+                    time.time(),
+                ),
+            )
+        return True
+
+    def films_identify(
+        self,
+        client_id,
+        setup,
+        stop: threading.Event,
+        *,
+        budget: float = IDENTIFY_BUDGET,
+        pause: float = IDENTIFY_PAUSE,
+    ) -> str:
+        """Ask TMDb for what the index does not know yet, within `budget` seconds.
+
+        Each title is asked once (a week later when TMDb did not know it); the facts of each
+        film once. Everything is saved as it arrives, so a later run resumes where this
+        stopped, and the index answers meanwhile with what it has. Returns "off" without a
+        TMDb key, "limit" when the budget ran out, "unavailable" when TMDb stops answering,
+        "cancelled" or "complete".
+        """
+        from torrentlinker.domain import ContentKind
+
+        secrets = getattr(setup, "secrets", None)
+        key = secrets.get("tmdb-api-key") if secrets is not None else ""
+        if not key:
+            return "off"
+        tmdb = self.tmdb_client(key)
+        started, failures = time.monotonic(), 0
+        with self.lock:
+            titles = self.db.execute(
+                "SELECT r.tkey, MIN(r.title) AS title, MIN(r.year) AS year FROM film_release r"
+                " LEFT JOIN film_title t ON t.tkey = r.tkey WHERE r.tkey <> ''"
+                " AND (t.tkey IS NULL OR (t.tmdb = '' AND t.manual = 0 AND t.checked < ?))"
+                " GROUP BY r.tkey",
+                (time.time() - NOT_FOUND_RETRY,),
+            ).fetchall()
+
+        def spent() -> str:
+            if stop.is_set():
+                return "cancelled"
+            return "limit" if time.monotonic() - started > budget else ""
+
+        for row in titles:
+            if stopped := spent():
+                return stopped
+            try:
+                found = tmdb.lookup(row["title"], int(row["year"]), ContentKind.MOVIE) or ""
+            except Exception:
+                failures += 1
+                if failures >= 3:
+                    return "unavailable"
+                continue
+            failures = 0
+            with self.lock, self.db:
+                self.db.execute(
+                    "INSERT OR REPLACE INTO film_title VALUES (?,?,0,?)",
+                    (row["tkey"], found, time.time()),
+                )
+            self._films_changed()
+            time.sleep(pause)
+        with self.lock:
+            wanted = [
+                r[0]
+                for r in self.db.execute(
+                    "SELECT tmdb FROM film_title WHERE tmdb <> '' UNION"
+                    " SELECT manual FROM film_release WHERE manual <> ''"
+                )
+            ]
+            have = {r[0] for r in self.db.execute("SELECT tmdb FROM film_meta")}
+        for tmdb_id in wanted:
+            if tmdb_id in have:
+                continue
+            if stopped := spent():
+                return stopped
+            try:
+                self._fetch_meta(tmdb, tmdb_id)
+            except Exception:
+                failures += 1
+                if failures >= 3:
+                    return "unavailable"
+                continue
+            failures = 0
+            self._films_changed()
+            time.sleep(pause)
+        return "complete"
+
+    def films_refresh(self, client_id, setup, stop: threading.Event, **identify) -> str:
+        """Read the Catalogues, then identify; at most once per RUN_INTERVAL, resumable."""
+        gate = "films-run:" + client_id
+        with self.lock:
+            saved = self.db.execute(
+                "SELECT body FROM media_options WHERE key=?", (gate,)
+            ).fetchone()
+        if saved and time.time() - json.loads(saved[0]) < RUN_INTERVAL:
+            return "waiting"
+        self.films_sync(client_id, setup, stop)
+        status = self.films_identify(client_id, setup, stop, **identify)
+        if status in {"complete", "off"}:
+            with self.lock, self.db:
+                self.db.execute(
+                    "INSERT OR REPLACE INTO media_options VALUES (?,?)",
+                    (gate, json.dumps(time.time())),
+                )
+        return status
+
+    # -- Corrections (decisions 19 and 23) -------------------------------------------------
+
+    def _known_tmdb(self, setup, tmdb_id: str) -> str:
+        """A TMDb id the Owner typed, checked against TMDb and read into `film_meta`."""
+        tmdb_id = str(tmdb_id).strip()
+        if not tmdb_id.isdigit():
+            raise ValueError("Give a TMDb film number.")
+        secrets = getattr(setup, "secrets", None)
+        key = secrets.get("tmdb-api-key") if secrets is not None else ""
+        if not key:
+            raise ValueError("Add a TMDb key in Settings to correct a film.")
+        if not self._fetch_meta(self.tmdb_client(key), tmdb_id):
+            raise ValueError("TMDb does not know this film.")
+        return tmdb_id
+
+    def film_rematch(self, client_id, setup, identifier: str, tmdb_id: str) -> None:
+        """The Owner re-matches a film to another TMDb film; kept across re-identification."""
+        film = self._film_by_id(client_id, setup, identifier)
+        tmdb_id = self._known_tmdb(setup, tmdb_id)
+        with self.lock, self.db:
+            for release in film["releases"]:
+                if release["tkey"]:
+                    self.db.execute(
+                        "INSERT OR REPLACE INTO film_title VALUES (?,?,1,?)",
+                        (release["tkey"], tmdb_id, time.time()),
+                    )
+                else:
+                    self._manual(release["tracker"], release["hash"], tmdb_id)
+        self._films_changed()
+
+    def release_rematch(self, tracker: str, infohash: str, setup, tmdb_id: str) -> None:
+        """ "Wrong film": one release moves to another TMDb film."""
+        tmdb_id = self._known_tmdb(setup, tmdb_id)
+        with self.lock, self.db:
+            if not self.db.execute(
+                "SELECT 1 FROM film_release WHERE tracker=? AND infohash=?", (tracker, infohash)
+            ).fetchone():
+                raise KeyError(infohash)
+            self._manual(tracker, infohash, tmdb_id)
+        self._films_changed()
+
+    def _manual(self, tracker: str, infohash: str, tmdb_id: str) -> None:
+        self.db.execute(
+            "UPDATE film_release SET manual=? WHERE tracker=? AND infohash=?",
+            (tmdb_id, tracker, infohash),
+        )
+
+    def film_rating(self, identifier: str, rating: str, client_id, setup) -> None:
+        """The Owner sets a film's Age Rating by hand; a re-identification keeps it."""
+        if age_ratings.rank(rating) is None:
+            raise ValueError("Choose Tous publics, −10, −12, −16 or −18.")
+        film = self._film_by_id(client_id, setup, identifier)
+        if not film["tmdb"]:
+            raise ValueError("Identify this film before rating it.")
+        with self.lock, self.db:
+            self.db.execute(
+                "UPDATE film_meta SET rating=?, rating_by='person', suggestion=NULL WHERE tmdb=?",
+                (rating, film["tmdb"]),
+            )
+        self._films_changed()
+
+    # -- The index -------------------------------------------------------------------------
+
+    def _film_index(self) -> list[dict[str, Any]]:
+        """Every film with its releases, grouped; kept until something changes."""
+        cached = self._films_cache
+        if cached is not None and cached[0] == self._films_generation:
+            return cached[1]
+        generation = self._films_generation
+        with self.lock:
+            releases = self.db.execute("SELECT * FROM film_release").fetchall()
+            titles = {r[0]: r[1] for r in self.db.execute("SELECT tkey, tmdb FROM film_title")}
+            metas = {r["tmdb"]: r for r in self.db.execute("SELECT * FROM film_meta")}
+        films: dict[str, dict[str, Any]] = {}
+        for row in releases:
+            tmdb = row["manual"] or titles.get(row["tkey"], "")
+            if not tmdb and row["tracker"] in IDENTIFIED_ONLY:
+                continue
+            identifier = film_id(tmdb, row["tkey"], row["tracker"], row["infohash"])
+            film = films.get(identifier)
+            if film is None:
+                meta = metas.get(tmdb)
+                genres = json.loads(meta["genres"] or "[]") if meta else []
+                film = films[identifier] = {
+                    "id": identifier,
+                    "tmdb": tmdb if meta else "",
+                    "identified": bool(meta),
+                    "title": (meta["title"] if meta else "") or row["title"] or row["name"],
+                    "original_title": (meta["original_title"] if meta else "") or "",
+                    "year": (meta["year"] if meta else "") or row["year"],
+                    "overview": (meta["overview"] if meta else "") or "",
+                    "genres": genres,
+                    "runtime": (meta["runtime"] if meta else 0) or 0,
+                    "rating": meta["rating"] if meta else None,
+                    "poster": (meta["poster"] if meta else "") or "",
+                    "releases": [],
+                }
+            film["releases"].append(
+                {
+                    "tracker": row["tracker"],
+                    "hash": row["infohash"],
+                    "name": row["name"],
+                    "size": row["size"],
+                    "seeders": row["seeders"],
+                    "category": row["category"],
+                    "published_at": row["published"] or None,
+                    "position": row["position"],
+                    "tkey": row["tkey"],
+                    "download_url": row["download_url"],
+                }
+            )
+        for film in films.values():
+            members = film["releases"]
+            film["published_at"] = max((r["published_at"] or 0 for r in members), default=0)
+            film["seeders"] = sum(r["seeders"] for r in members)
+            film["position"] = max(r["position"] for r in members)
+            text = " ".join([film["title"], film["original_title"], *(r["name"] for r in members)])
+            film["search"], film["raw"] = plain(text), text.casefold()
+        index = list(films.values())
+        if generation == self._films_generation:
+            self._films_cache = (generation, index)
+        return index
+
+    def _film_by_id(self, client_id, setup, identifier: str) -> dict[str, Any]:
+        for film in self._film_index():
+            if film["id"] == identifier:
+                return film
+        raise KeyError(identifier)
+
+    def _in_library(self, client_id) -> set[str]:
+        """The film keys the library holds, by French and original title."""
+        return set(self._library_films(client_id))
+
+    @staticmethod
+    def _held(film: dict[str, Any], library: set[str]) -> bool:
+        return any(
+            film_key(title, film["year"]) in library
+            for title in (film["title"], film["original_title"])
+            if title
+        )
+
+    def _choose(self, setup, film: dict[str, Any]) -> dict[str, Any]:
+        """The film's releases scored with the Owner's active profile, best first.
+
+        The pre-selected one is ReleaseScore's best, a tie going to the Tracker first in the
+        Owner's order, then to the better seeded release (ADR-0025). A release ReleaseScore
+        cannot read ranks after those it can; a film with none readable still pre-selects
+        its best seeded release, below the threshold.
+        """
+        from torrentlinker.release_score.preferences import Preferences
+
+        preferences = setup.settings.release_score
+        order = getattr(setup.settings, "tracker_order", None)
+        threshold = Preferences.model_validate(preferences).threshold
+        rank = {t: i for i, t in enumerate(valid_order(order))}
+        facts = {
+            "title": film["title"],
+            "year": film["year"],
+            "runtime": film["runtime"],
+            "kind": "movie",
+            "tags": [],
+            "genres": film["genres"],
+            "rating": film["rating"],
+            "overview": film["overview"],
+        }
+        scored = []
+        for release in film["releases"]:
+            result = self._score(preferences, release["name"], release["size"], facts)
+            scored.append(
+                {**release, "score": result.get("score"), "color": result.get("color", "")}
+            )
+
+        def preference(release: dict[str, Any]) -> tuple[float, int, int]:
+            return (
+                -1 if release["score"] is None else release["score"],
+                -rank.get(release["tracker"], len(rank)),
+                release["seeders"],
+            )
+
+        scored.sort(key=preference, reverse=True)
+        chosen = scored[0]
+        return {
+            "releases": scored,
+            "preselected": chosen,
+            "below_threshold": chosen["score"] is None or chosen["score"] < threshold,
+            "threshold": threshold,
+        }
+
+    def tracker_films(
+        self,
+        client_id,
+        setup,
+        *,
+        genres: tuple[str, ...] = (),
+        sort: str = "new",
+        q: str = "",
+        offset: int = 0,
+        limit: int = 60,
+        identified_only: bool = False,
+        hide_library: bool = False,
+        age_limit: int | None = None,
+        choose: bool = False,
+    ) -> dict[str, Any]:
+        """One page of Tracker Films: filtered by genres (all of them), a text search over the
+        French and original title and the release names, and the Member's rules; sorted new
+        (newest on the Trackers), shared (most seeders), year or title.
+
+        Each row carries `in_library` and the release count. With `choose` it also carries the
+        pre-selected release, the scored `releases` and `below_threshold`, which a Member
+        never gets."""
+        library = self._in_library(client_id)
+        words = plain(q).split()
+        found = []
+        for film in self._film_index():
+            if identified_only and not film["identified"]:
+                continue
+            if not set(genres) <= set(film["genres"]):
+                continue
+            if age_limit is not None:
+                rank = age_ratings.rank(film["rating"])
+                if rank is None or rank > age_limit:
+                    continue
+            if words and not all(w in film["search"] for w in words):
+                continue
+            if q.strip() and not words and q.strip().casefold() not in film["raw"]:
+                continue  # a title in a script `plain` folds away is read as it is
+            held = self._held(film, library)
+            if hide_library and held:
+                continue
+            found.append((film, held))
+        keys = {
+            "new": lambda item: (-item[0]["published_at"], -item[0]["position"]),
+            "shared": lambda item: (-item[0]["seeders"], -item[0]["position"]),
+            "year": lambda item: (-int(item[0]["year"] or 0), plain(item[0]["title"])),
+            "title": lambda item: (plain(item[0]["title"]), item[0]["year"]),
+        }
+        found.sort(key=keys.get(sort, keys["new"]))
+        page = found[offset : offset + limit]
+        return {
+            "rows": [self._film_row(setup, film, held, choose) for film, held in page],
+            "total": len(found),
+            "has_more": offset + limit < len(found),
+            "next_offset": offset + limit if offset + limit < len(found) else None,
+        }
+
+    def tracker_film(self, client_id, setup, identifier: str, *, choose: bool = False) -> dict:
+        film = self._film_by_id(client_id, setup, identifier)
+        held = self._held(film, self._in_library(client_id))
+        return self._film_row(setup, film, held, choose)
+
+    def _film_row(self, setup, film: dict[str, Any], held: bool, choose: bool) -> dict[str, Any]:
+        row = {
+            key: film[key]
+            for key in (
+                "id",
+                "title",
+                "original_title",
+                "year",
+                "overview",
+                "genres",
+                "runtime",
+                "rating",
+                "identified",
+                "published_at",
+                "seeders",
+            )
+        }
+        row.update(
+            poster=bool(film["poster"]),
+            in_library=held,
+            release_count=len(film["releases"]),
+        )
+        if choose:
+            chosen = self._choose(setup, film)
+            row.update(
+                chosen,
+                releases=[
+                    {k: v for k, v in r.items() if k not in {"tkey", "position"}}
+                    for r in chosen["releases"]
+                ],
+                preselected={
+                    k: v for k, v in chosen["preselected"].items() if k not in {"tkey", "position"}
+                },
+            )
+        return row
+
+    def film_for(self, client_id, title: str, year: str) -> str:
+        """The index's identifier of the film a title and year name, "" when it holds none."""
+        wanted = film_key(title, year)
+        for film in self._film_index():
+            if any(r["tkey"] == wanted for r in film["releases"]):
+                return film["id"]
+        return ""

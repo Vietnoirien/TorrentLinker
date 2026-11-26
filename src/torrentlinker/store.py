@@ -1247,6 +1247,18 @@ class Store:
             ).fetchall()
         return [CatalogueRow(*r) for r in rows]
 
+    def catalogue_seeded(self, categories: tuple[int, ...]) -> list[tuple[CatalogueRow, int]]:
+        """Torrents of these categories that have a seeder, each with its insertion order
+        (a newer row has a larger one), for the film index."""
+        marks = ",".join("?" * len(categories))
+        with self._lock:
+            rows = self._db.execute(
+                f"SELECT {_COLUMNS}, rowid FROM catalogue WHERE tracker = ? AND seeders > 0"
+                f" AND category IN ({marks})",
+                (self.tracker, *categories),
+            ).fetchall()
+        return [(CatalogueRow(*r[:-1]), int(r[-1])) for r in rows]
+
     def update_catalogue_seeders(self, counts: dict[str, int]) -> None:
         """Apply swarm observations without claiming size/category metadata was refreshed."""
         with self._lock, self._db:

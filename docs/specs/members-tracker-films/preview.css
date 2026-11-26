@@ -1,0 +1,28 @@
+/* Only what the preview adds; the rest is the panel's own CSS. */
+.preview-new { outline: 2px dashed #f59e0b; outline-offset: 3px; border-radius: 6px; }
+.preview-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 16px; }
+#view-media .preview-chips .chip { padding: 5px 12px; border-radius: 999px; border: 1px solid var(--line, #444); background: transparent; color: inherit; cursor: pointer; font: inherit; font-size: 0.85rem; }
+#view-media .preview-chips .chip[aria-pressed="true"] { background: var(--accent, #3b82f6); border-color: transparent; color: #0b1215; font-weight: 600; }
+.preview-sort { margin-left: auto; }
+.preview-landing { padding-top: 8px; flex-wrap: wrap; row-gap: 6px; }
+.preview-landing .media-see-all { white-space: normal; }
+.preview-releases { margin: 12px 0 20px; padding: 10px 14px; }
+.preview-releases summary { cursor: pointer; font-weight: 600; margin-bottom: 6px; }
+.preview-release { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line, rgba(255,255,255,.12)); }
+.preview-release .media-tracker-name { word-break: break-all; }
+.preview-release .media-tracker-facts, .preview-release-actions { grid-column: 2; }
+.preview-release-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.preview-bar { position: fixed; left: 8px; right: 8px; bottom: 8px; z-index: 1000; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 12px; border-radius: 10px; background: rgba(20, 20, 24, .92); color: #f4f4f5; font: 13px/1.35 system-ui, sans-serif; box-shadow: 0 6px 24px rgba(0,0,0,.4); }
+.preview-bar .chip { padding: 4px 10px; border-radius: 999px; border: 1px solid #555; background: transparent; color: inherit; cursor: pointer; }
+.preview-hint { flex: 1 1 280px; opacity: .8; }
+body { padding-bottom: 96px; }
+.preview-bar strong { cursor: pointer; }
+@media (max-width: 650px) {
+  .preview-bar { padding: 6px 8px; gap: 6px; }
+  .preview-bar select { max-width: 52vw; }
+  .preview-hint { display: none; }
+  .preview-bar.open .preview-hint { display: block; }
+}
+.preview-genre-label { font-size: .95rem; opacity: .8; }
+#view-media .preview-genre { appearance: none; -webkit-appearance: none; background: transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%2380bdb6' stroke-width='2'/%3E%3C/svg%3E") no-repeat right 4px center; border: 0; color: var(--accent, #80bdb6); font: inherit; font-size: .95rem; font-weight: 600; padding: 2px 22px 2px 2px; cursor: pointer; }
+#view-media .preview-genre option { color: #111; }

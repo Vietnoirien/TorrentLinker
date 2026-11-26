@@ -22,8 +22,7 @@ from guessit import guessit
 from torrentlinker import media_artwork, media_tracks
 from torrentlinker.accounts import OWNER, OWNER_ACTOR, Actor, Permission
 from torrentlinker.domain import ContentKind
-from torrentlinker.media_ratings import AgeRatings
-from torrentlinker.media_tracker import TrackerRows
+from torrentlinker.tracker_films import TrackerFilms
 
 log = logging.getLogger(__name__)
 VIDEO = {".mp4", ".m4v", ".mkv", ".webm", ".avi", ".mov", ".mpeg", ".mpg", ".ts", ".wmv"}
@@ -134,7 +133,7 @@ class UnfinishedMedia(ValueError):
     """A registered file belongs to a download or verification still in progress."""
 
 
-class MediaLibrary(TrackerRows, AgeRatings):
+class MediaLibrary(TrackerFilms):
     def __init__(self, agent, clock=time.monotonic):
         self.agent = agent
         self.clock = clock
@@ -177,6 +176,7 @@ class MediaLibrary(TrackerRows, AgeRatings):
             """)
         self.migrate_to_actors()
         self.create_ratings()
+        self.create_films()
         self.index_items()
 
     # What a listing narrows by, read out of each item's body so SQLite can index it. The
@@ -693,6 +693,7 @@ class MediaLibrary(TrackerRows, AgeRatings):
         self.apply_age_ratings(client_id, setup, stop)
         if details not in {"limit", "rejected"}:
             self.tracker_refresh(client_id, setup, stop)
+            self.films_refresh(client_id, setup, stop)
         self.prefetch_posters(client_id, stop, progress)
         if stop.is_set():
             return {"cancelled": True}
