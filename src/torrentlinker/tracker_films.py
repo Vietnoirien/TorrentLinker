@@ -111,6 +111,7 @@ class TrackerFilms(TrackerRows, AgeRatings):
                     tkey TEXT NOT NULL DEFAULT '', title TEXT NOT NULL DEFAULT '',
                     year TEXT NOT NULL DEFAULT '', manual TEXT NOT NULL DEFAULT '',
                     download_url TEXT NOT NULL DEFAULT '', PRIMARY KEY(tracker, infohash));
+                CREATE INDEX IF NOT EXISTS film_release_tkey ON film_release(tkey);
                 CREATE TABLE IF NOT EXISTS film_title
                     (tkey TEXT PRIMARY KEY, tmdb TEXT NOT NULL, manual INTEGER NOT NULL DEFAULT 0,
                     checked REAL);
@@ -494,6 +495,7 @@ class TrackerFilms(TrackerRows, AgeRatings):
 
         self._films_from_cache(client_id)
         self._films_from_details()
+        self._films_stored()
         try:
             indexer = setup.indexer()
         except Exception:
@@ -737,6 +739,8 @@ class TrackerFilms(TrackerRows, AgeRatings):
         The revision moves only when what a card draws changed."""
         if not found:
             return False
+        entries = [(tkey, facts, replace) for tkey, facts in found.items()]
+        entries += [(tkey, facts, False) for tkey, facts in self._films_by_original(found).items()]
         with self.lock:
             kept = {
                 r["tkey"]: (
@@ -752,7 +756,7 @@ class TrackerFilms(TrackerRows, AgeRatings):
             }
         changed = False
         with self.lock, self.db:
-            for tkey, facts in found.items():
+            for tkey, facts, overwrite in entries:
                 drawn = (
                     facts["title"],
                     facts["original_title"],
@@ -762,8 +766,9 @@ class TrackerFilms(TrackerRows, AgeRatings):
                     facts["runtime"],
                     facts["poster"],
                 )
-                if kept.get(tkey) == drawn or (tkey in kept and not replace):
+                if kept.get(tkey) == drawn or (tkey in kept and not overwrite):
                     continue
+                kept[tkey] = drawn
                 self.db.execute(
                     "INSERT OR REPLACE INTO film_c411 (tkey, title, original_title, year,"
                     " overview, genres, runtime, poster, artwork, fetched)"
@@ -775,6 +780,46 @@ class TrackerFilms(TrackerRows, AgeRatings):
         if changed:
             self._films_changed()
         return changed
+
+    def _films_by_original(self, found: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+        """c411 names a film by its French title; another tracker's release may name it by the
+        original one. The index's films keyed that way take the same facts."""
+        aliases = {
+            film_key(facts["original_title"], facts["year"]): facts
+            for facts in found.values()
+            if facts["original_title"] and facts["year"]
+        }
+        keys = [tkey for tkey in aliases if tkey not in found]
+        held: set[str] = set()
+        with self.lock:
+            for start in range(0, len(keys), 500):
+                chunk = keys[start : start + 500]
+                held.update(
+                    r[0]
+                    for r in self.db.execute(
+                        "SELECT DISTINCT tkey FROM film_release WHERE tkey IN"
+                        f" ({','.join('?' * len(chunk))})",
+                        chunk,
+                    )
+                )
+        return {tkey: aliases[tkey] for tkey in keys if tkey in held}
+
+    def _films_stored(self) -> None:
+        """Facts stored before the original-title keys existed take those keys too."""
+        with self.lock:
+            found = {
+                r["tkey"]: {
+                    "title": r["title"],
+                    "original_title": r["original_title"] or "",
+                    "year": r["year"] or "",
+                    "overview": r["overview"],
+                    "genres": json.loads(r["genres"] or "[]"),
+                    "runtime": r["runtime"],
+                    "poster": r["poster"],
+                }
+                for r in self.db.execute("SELECT * FROM film_c411")
+            }
+        self._films_save(found, replace=False)
 
     def _films_unasked(self, client_id) -> tuple[str, str, str] | None:
         """The next film on screen c411 has no facts for and was not searched yet:

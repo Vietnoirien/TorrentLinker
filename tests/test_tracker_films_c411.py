@@ -144,6 +144,43 @@ def test_the_facts_the_suggestions_already_cached_fill_the_index_at_once(films):
     assert films.films_behind("default", setup) is True
 
 
+def test_a_release_named_by_the_original_title_takes_the_facts_c411_filed_in_french(
+    films, monkeypatch
+):
+    setup = no_key(films)
+    chihiro = {
+        "title": "Le Voyage de Chihiro",
+        "original_title": "Spirited Away",
+        "year": 2001,
+        "overview": "Chihiro, dix ans.",
+        "genres": ["Animation"],
+        "runtime": 125,
+        "poster_url": POSTER.format("chihiro"),
+    }
+    entry = {"title": chihiro["title"], "year": "2001", "facts": chihiro, "releases": []}
+    films._tracker_save("default", "tracker-new", film_key(chihiro["title"], "2001"), entry)
+    films.films_refresh("default", setup, STOP())
+    found = facts_of(films, "Le Voyage de Chihiro")
+    assert found["id"] == film_id("", film_key("Spirited Away", "2001"), "", "")
+    assert found["overview"] == "Chihiro, dix ans."
+    # Facts stored before that key existed take it on the next walk; a film not in the index
+    # gets no row of its own.
+    with films.lock, films.db:
+        films.db.execute("DELETE FROM film_c411 WHERE tkey=?", (film_key("Spirited Away", "2001"),))
+        films.db.execute("DELETE FROM media_options WHERE key LIKE 'tracker-%'")
+        films.db.execute(
+            "INSERT INTO film_c411 VALUES"
+            " (?, 'Inconnu', 'Unknown', '1950', '', '[]', 0, '', NULL, 0)",
+            (film_key("Inconnu", "1950"),),
+        )
+    c411(films, monkeypatch, {1: EMPTY})
+    films.films_c411("default", setup, STOP(), lambda _: None, walk_pause=0)
+    assert facts_of(films, "Le Voyage de Chihiro")["overview"] == "Chihiro, dix ans."
+    with films.lock:
+        held = {r[0] for r in films.db.execute("SELECT tkey FROM film_c411")}
+    assert film_key("Unknown", "1950") not in held
+
+
 def test_the_films_on_screen_are_searched_first_and_matched_by_release(films, monkeypatch):
     setup = no_key(films)
     chihiro = listing("Le Voyage de Chihiro", 2001, genres=("Animation", "Familial"))
