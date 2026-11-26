@@ -579,7 +579,7 @@ const jobNames = {
   "refine-selection":["Refine the selection","Affinage de la sélection"], "edit-queue-selection":["Edit the queue","Modification de la file"],
   plan:["Build Plan","Créer le Plan"], "send-plan":["Send the Plan","Envoyer le Plan"], catalogue:["Refresh Catalogue","Actualiser le Catalogue"], refresh:["Refresh client","Actualiser le client"],
   search:["Search","Recherche"], "search-options":["Search options","Options de recherche"], details:["Torrent details","Détails du torrent"], "search-details":["Torrent details","Détails du torrent"],
-  "media-scan":["Media scan","Analyse des médias"], manage:["Torrent action","Action sur les torrents"], "tracker-preview":["Tracker preview","Aperçu des trackers"],
+  "media-scan":["Media scan","Analyse des médias"], "films-index":["Film index","Index des films"], manage:["Torrent action","Action sur les torrents"], "tracker-preview":["Tracker preview","Aperçu des trackers"],
   "tracker-update":["Tracker update","Mise à jour des trackers"], "feed-action":["RSS feed","Flux RSS"], "speed-test":["Speed test","Test de débit"], verify:["Verification","Vérification"],
   profile:["c411 profile","Profil c411"], "model-inspect":["3D model check","Contrôle du modèle 3D"], "model-render":["3D model render","Rendu du modèle 3D"],
   "upload-preview":["Upload preview","Aperçu de l’upload"], "upload-draft":["Upload draft","Brouillon d’upload"], "upload-queue":["Upload queue","File d’upload"], "upload-send":["Upload send","Envoi de l’upload"],

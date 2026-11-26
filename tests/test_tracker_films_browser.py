@@ -199,3 +199,102 @@ def test_the_holder_answers_a_household_ask_from_the_bell(tmp_path):
         finally:
             server.should_exit = True
             worker.join(timeout=5)
+
+
+def test_a_film_identified_while_the_owner_looks_swaps_in_place_without_moving_the_page(tmp_path):
+    import uvicorn
+    from playwright.sync_api import expect, sync_playwright
+
+    config, setup, _, _ = prepared(tmp_path)
+    app = create_app(
+        config,
+        members_enabled=True,
+        password="test-password-long",
+        service_override=setup,
+        monitor_verifications=False,
+    )
+    media = app.state.agent_service.media
+    films = {
+        **FILMS,
+        "5": ("Autre", "Other", "2010", ["Drame"], "12", 100),
+        "9": ("Mystère", "Mystery", "2012", ["Drame"], "12", 100),
+    }
+    releases = [
+        *RELEASES,
+        ("c411", "5" * 40, "Autre.2010.MULTi.1080p.WEB.x264-TEAM", 3 * GB, 4, "5"),
+        ("c411", "f" * 40, "Mystery.Film.2012.MULTi.1080p.WEB.x264-TEAM", 3 * GB, 40, ""),
+    ]
+    seed_index(media, {k: v for k, v in films.items() if k != "9"}, releases, poster=False)
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
+        worker = threading.Thread(target=server.run, kwargs={"sockets": [listener]}, daemon=True)
+        worker.start()
+        try:
+            for _ in range(100):
+                if server.started:
+                    break
+                time.sleep(0.02)
+            base = f"http://127.0.0.1:{listener.getsockname()[1]}/"
+            with sync_playwright() as pw:
+                browser = pw.chromium.launch()
+                page = browser.new_page(viewport={"width": 1280, "height": 500}, locale="en-US")
+                errors = []
+                page.on("pageerror", lambda error: errors.append(str(error)))
+                page.goto(base)
+                page.get_by_role("button", name="I am the owner").click()
+                page.get_by_label("Server password").fill("test-password-long")
+                page.locator("#login-form button.primary").click()
+                page.goto(base + "#/media/video/tracker")
+                frame = page.frame_locator("#media-frame")
+                new = frame.locator('section[aria-label="New on the tracker"]')
+                expect(new.locator(".media-row-card")).to_have_count(6, timeout=15000)
+                plain = new.locator(".media-row-card", has_text="Mystery")
+                expect(plain).to_have_count(1)
+                frame.locator(".media-row-card", has_text="Dune").first.click()
+                feature = frame.locator("#media-feature")
+                expect(feature.get_by_text("Synopsis de Dune.")).to_be_visible()
+                mark = "document.querySelectorAll('.media-row-card').forEach(c => c.__kept = true);"
+                scroll = (
+                    "const s = document.querySelector('.media-scroll'); s.scrollTop = 60;"
+                    " window.scrollTo(0, 40);"
+                    " const track = document.querySelector('.media-row-track');"
+                    " return [s.scrollTop, scrollY, track.scrollLeft];"
+                )
+                handle = page.query_selector("#media-frame").content_frame()
+                handle.evaluate(mark)
+                before = handle.evaluate(f"(() => {{{scroll}}})()")
+                # TMDb identifies the film: its facts arrive, and the index's revision moves.
+                with media.lock, media.db:
+                    media.db.execute(
+                        "INSERT INTO film_meta (tmdb, title, original_title, year, overview,"
+                        " genres, runtime, rating, poster) VALUES ('9', 'Mystère', 'Mystery',"
+                        " '2012', 'Synopsis de Mystère.', '[\"Drame\"]', 100, '12', '')"
+                    )
+                    media.db.execute(
+                        "UPDATE film_release SET manual='9' WHERE infohash=?", ("f" * 40,)
+                    )
+                media._films_changed()
+                swapped = new.locator(".media-row-card", has_text="Mystère")
+                expect(swapped).to_have_count(1, timeout=20000)
+                expect(plain).to_have_count(0)
+                after = handle.evaluate(
+                    "[document.querySelector('.media-scroll').scrollTop, scrollY,"
+                    " document.querySelector('.media-row-track').scrollLeft]"
+                )
+                assert after == before
+                # Nothing else was drawn again, and the chosen film is still in the banner.
+                kept = handle.evaluate(
+                    "[...document.querySelectorAll('.media-row-card')].filter(c => c.__kept).length"
+                )
+                assert kept >= 5
+                expect(feature.get_by_text("Synopsis de Dune.")).to_be_visible()
+                # The Drame row took the film in too.
+                drame = frame.locator('section[aria-label="Drame"]')
+                expect(drame.locator(".media-row-card", has_text="Mystère")).to_have_count(1)
+                assert not errors, errors
+                browser.close()
+        finally:
+            server.should_exit = True
+            worker.join(timeout=5)

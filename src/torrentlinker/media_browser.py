@@ -13,12 +13,32 @@ def tracker_hash(value: str) -> str:
     return value
 
 
+def start_films_index(agent, client) -> None:
+    """Start the film index job when it is behind and none runs for this client (decision 25).
+    The job is submitted, never run in the request; a closing server just does not start it."""
+    media = agent.media
+    try:
+        setup = media.setup(client)
+        if media.films_behind(client, setup):
+            agent.jobs.submit(
+                "films-index",
+                lambda stop, progress: media.films_index(client, setup, stop, progress),
+                client_id=client,
+            )
+    except ValueError:
+        pass
+
+
+def films_revision(agent, client, owner: bool) -> dict:
+    running = agent.jobs.running("films-index", client)
+    return agent.media.films_revision(client, running, owner)
+
+
 class MediaBrowserService:
     def __init__(self, agent):
         self.agent = agent
 
-    @staticmethod
-    def tracker_films(media, client, parts, query, body, method):
+    def tracker_films(self, media, client, parts, query, body, method):
         """The Owner's Tracker Films, with the web routes' validation: the landing, one genre's
         grid (two genres at most), a film, and the corrections the film panel makes."""
         import re
@@ -27,7 +47,13 @@ class MediaBrowserService:
 
         setup, who = media.setup(client), OWNER_ACTOR
         one = {key: values[-1] for key, values in query.items()}
+        if method == "GET" and parts == ["revision"]:
+            return films_revision(self.agent, client, True)
+        if method == "POST" and parts == ["focus"]:
+            media.films_focus(client, [str(i) for i in body.get("films", [])[:200]])
+            return {"ok": True}
         if method == "GET" and parts == ["landing"]:
+            start_films_index(self.agent, client)
             return media.tracker_films_landing(client, setup, who)
         if method == "GET" and len(parts) == 1:
             return media.tracker_film_detail(client, setup, who, parts[0])
@@ -35,6 +61,7 @@ class MediaBrowserService:
             sort = one.get("sort", "new")
             if sort not in {"new", "shared", "year", "title"}:
                 raise ValueError("Unknown sort")
+            start_films_index(self.agent, client)
             return media.tracker_films_listing(
                 client,
                 setup,
@@ -115,6 +142,7 @@ class MediaBrowserService:
                     query[key] = query[key] == "true"
             return media.listing(client, **query)
         if parts == ["media", "home"] and method == "GET":
+            start_films_index(self.agent, client)
             return media.home_rows(
                 client,
                 kind="video",

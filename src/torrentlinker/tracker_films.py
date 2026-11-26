@@ -61,6 +61,8 @@ IDENTIFY_BUDGET = 120.0  # seconds one refresh may spend asking TMDb; the rest w
 IDENTIFY_PAUSE = 0.25  # seconds between two TMDb requests
 HIDDEN = {"tkey", "position", "download_url"}  # the index's own columns, never sent out
 NOT_FOUND_RETRY = 7 * 86400  # a title TMDb did not know is asked again a week later
+IDENTIFY_BATCH = 10  # titles the on-demand job asks per batch, then looks at the focus again
+UNAVAILABLE_PAUSE = 60.0  # seconds before a page may start the job again after TMDb failed
 
 
 def film_id(tmdb: str, tkey: str, tracker: str, infohash: str) -> str:
@@ -86,7 +88,11 @@ class TrackerFilms(TrackerRows, AgeRatings):
     lock: Any
 
     def create_films(self) -> None:
-        self._films_generation = 0
+        self._films_generation = int(time.time())  # a restart never repeats a revision
+        self._films_focus: dict[str, frozenset[str]] = {}
+        self._films_status: tuple[int, tuple[int, int]] | None = None
+        self._films_resting: dict[str, float] = {}
+        self._films_working = threading.Lock()  # one identification at a time
         self._films_cache: tuple[int, list[dict[str, Any]]] | None = None
         with self.db:
             self.db.executescript("""
@@ -193,7 +199,20 @@ class TrackerFilms(TrackerRows, AgeRatings):
             changed = changed or bool(inserts or updates)
         if changed:
             self._films_changed()
+        if not stop.is_set():
+            self._films_stamp("films-sync:" + client_id)
         return changed
+
+    def _films_stamp(self, key: str) -> None:
+        with self.lock, self.db:
+            self.db.execute(
+                "INSERT OR REPLACE INTO media_options VALUES (?,?)", (key, json.dumps(time.time()))
+            )
+
+    def _films_fresh(self, key: str) -> bool:
+        with self.lock:
+            saved = self.db.execute("SELECT body FROM media_options WHERE key=?", (key,)).fetchone()
+        return bool(saved) and time.time() - json.loads(saved[0]) < RUN_INTERVAL
 
     # -- Identification --------------------------------------------------------------------
 
@@ -249,14 +268,17 @@ class TrackerFilms(TrackerRows, AgeRatings):
         *,
         budget: float = IDENTIFY_BUDGET,
         pause: float = IDENTIFY_PAUSE,
+        limit: int | None = None,
     ) -> str:
         """Ask TMDb for what the index does not know yet, within `budget` seconds.
 
-        Each title is asked once (a week later when TMDb did not know it); the facts of each
-        film once. Everything is saved as it arrives, so a later run resumes where this
-        stopped, and the index answers meanwhile with what it has. Returns "off" without a
-        TMDb key, "limit" when the budget ran out, "unavailable" when TMDb stops answering,
-        "cancelled" or "complete".
+        Each title is asked once (a week later when TMDb did not know it), with the facts of
+        its film as soon as it is known. The titles on screen (`films_focus`) go first, then
+        the newest, then the most shared. Everything is saved as it arrives, so a later run
+        resumes where this stopped, and the index answers meanwhile with what it has. Returns
+        "off" without a TMDb key, "limit" when the budget ran out, "batch" when `limit` titles
+        were asked and more wait, "unavailable" when TMDb stops answering, "cancelled" or
+        "complete".
         """
         from torrentlinker.domain import ContentKind
 
@@ -271,18 +293,25 @@ class TrackerFilms(TrackerRows, AgeRatings):
                 "SELECT r.tkey, MIN(r.title) AS title, MIN(r.year) AS year FROM film_release r"
                 " LEFT JOIN film_title t ON t.tkey = r.tkey WHERE r.tkey <> ''"
                 " AND (t.tkey IS NULL OR (t.tmdb = '' AND t.manual = 0 AND t.checked < ?))"
-                " GROUP BY r.tkey",
+                " GROUP BY r.tkey ORDER BY MAX(r.published) DESC, SUM(r.seeders) DESC",
                 (time.time() - NOT_FOUND_RETRY,),
             ).fetchall()
+            have = {r[0] for r in self.db.execute("SELECT tmdb FROM film_meta")}
+        focus = self._films_focus.get(client_id, frozenset())
+        titles.sort(key=lambda row: row["tkey"] not in focus)  # stable: the order stays inside
 
         def spent() -> str:
             if stop.is_set():
                 return "cancelled"
             return "limit" if time.monotonic() - started > budget else ""
 
+        asked = 0
         for row in titles:
             if stopped := spent():
                 return stopped
+            if limit is not None and asked >= limit:
+                return "batch"
+            asked += 1
             try:
                 found = tmdb.lookup(row["title"], int(row["year"]), ContentKind.MOVIE) or ""
             except Exception:
@@ -296,6 +325,14 @@ class TrackerFilms(TrackerRows, AgeRatings):
                     "INSERT OR REPLACE INTO film_title VALUES (?,?,0,?)",
                     (row["tkey"], found, time.time()),
                 )
+            if found and found not in have:
+                try:
+                    self._fetch_meta(tmdb, found)
+                    have.add(found)
+                except Exception:
+                    failures += 1
+                    if failures >= 3:
+                        return "unavailable"
             self._films_changed()
             time.sleep(pause)
         with self.lock:
@@ -306,7 +343,6 @@ class TrackerFilms(TrackerRows, AgeRatings):
                     " SELECT manual FROM film_release WHERE manual <> ''"
                 )
             ]
-            have = {r[0] for r in self.db.execute("SELECT tmdb FROM film_meta")}
         for tmdb_id in wanted:
             if tmdb_id in have:
                 continue
@@ -326,22 +362,99 @@ class TrackerFilms(TrackerRows, AgeRatings):
 
     def films_refresh(self, client_id, setup, stop: threading.Event, **identify) -> str:
         """Read the Catalogues, then identify; at most once per RUN_INTERVAL, resumable."""
-        gate = "films-run:" + client_id
-        with self.lock:
-            saved = self.db.execute(
-                "SELECT body FROM media_options WHERE key=?", (gate,)
-            ).fetchone()
-        if saved and time.time() - json.loads(saved[0]) < RUN_INTERVAL:
+        if self._films_fresh("films-run:" + client_id):
             return "waiting"
-        self.films_sync(client_id, setup, stop)
-        status = self.films_identify(client_id, setup, stop, **identify)
+        if not self._films_working.acquire(blocking=False):
+            return "waiting"  # the on-demand job is filling the index
+        try:
+            self.films_sync(client_id, setup, stop)
+            status = self.films_identify(client_id, setup, stop, **identify)
+        finally:
+            self._films_working.release()
         if status in {"complete", "off"}:
-            with self.lock, self.db:
-                self.db.execute(
-                    "INSERT OR REPLACE INTO media_options VALUES (?,?)",
-                    (gate, json.dumps(time.time())),
-                )
+            self._films_stamp("films-run:" + client_id)
         return status
+
+    # -- Filling on demand (decision 25) -----------------------------------------------------
+
+    def films_progress(self) -> tuple[int, int]:
+        """(identified, total) titles of the index; a title TMDb answered counts as identified,
+        found or not. Kept until something changes."""
+        cached = self._films_status
+        if cached is not None and cached[0] == self._films_generation:
+            return cached[1]
+        generation = self._films_generation
+        with self.lock:
+            total = self.db.execute(
+                "SELECT COUNT(DISTINCT tkey) FROM film_release WHERE tkey <> ''"
+            ).fetchone()[0]
+            identified = self.db.execute(
+                "SELECT COUNT(*) FROM (SELECT DISTINCT r.tkey FROM film_release r"
+                " JOIN film_title t ON t.tkey = r.tkey"
+                " LEFT JOIN film_meta m ON m.tmdb = t.tmdb"
+                " WHERE r.tkey <> '' AND (t.tmdb = '' OR m.tmdb IS NOT NULL))"
+            ).fetchone()[0]
+        progress = (identified, total)
+        if generation == self._films_generation:
+            self._films_status = (generation, progress)
+        return progress
+
+    def films_behind(self, client_id, setup) -> bool:
+        """Whether the index needs its job: the Catalogues were not read for a while, or titles
+        wait for TMDb (which needs a key). Cheap; asked by every page that shows films."""
+        if time.monotonic() < self._films_resting.get(client_id, 0.0):
+            return False
+        if not self._films_fresh("films-sync:" + client_id):
+            return True
+        identified, total = self.films_progress()
+        if identified >= total or self._films_fresh("films-run:" + client_id):
+            return False  # a run that ended is not repeated for a title TMDb has no facts for
+        secrets = getattr(setup, "secrets", None)
+        return bool(secrets.get("tmdb-api-key") if secrets is not None else "")
+
+    def films_index(
+        self, client_id, setup, stop: threading.Event, progress, *, pause: float = IDENTIFY_PAUSE
+    ) -> str:
+        """The index job: read the Catalogues, then identify in throttled batches until done.
+        Each batch looks at what the user is looking at again."""
+        if not self._films_working.acquire(blocking=False):
+            return "busy"
+        try:
+            progress({"phase": "sync"})
+            self.films_sync(client_id, setup, stop)
+            while True:
+                status = self.films_identify(
+                    client_id, setup, stop, budget=float("inf"), pause=pause, limit=IDENTIFY_BATCH
+                )
+                done, total = self.films_progress()
+                progress({"phase": "identify", "identified": done, "total": total})
+                if status != "batch":
+                    break
+        finally:
+            self._films_working.release()
+        if status in {"complete", "off"}:
+            self._films_stamp("films-run:" + client_id)
+        elif status == "unavailable":
+            self._films_resting[client_id] = time.monotonic() + UNAVAILABLE_PAUSE
+        return status
+
+    def films_focus(self, client_id, identifiers) -> None:
+        """The films the panel shows that are not identified yet: the next batch takes them
+        first. Each call replaces the last one."""
+        wanted = set(list(identifiers)[:200])
+        titles: set[str] = set()
+        if wanted:
+            for film in self._film_index():
+                if film["id"] in wanted and not film["identified"]:
+                    titles.update(r["tkey"] for r in film["releases"] if r["tkey"])
+        self._films_focus[client_id] = frozenset(titles)
+
+    def films_revision(self, client_id, running: bool, owner: bool) -> dict[str, Any]:
+        """What the panel polls: changes whenever the index does. Only the Owner gets counts."""
+        answer: dict[str, Any] = {"revision": self._films_generation, "running": running}
+        if owner:
+            answer["identified"], answer["total"] = self.films_progress()
+        return answer
 
     # -- Corrections (decisions 19 and 23) -------------------------------------------------
 

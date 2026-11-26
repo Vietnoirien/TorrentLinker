@@ -14,6 +14,8 @@ INTERACTIVE = frozenset(
         "search-search-options",
     }
 )
+# The film index fills for hours, so it has its own worker: it must not hold up the batch lane.
+FILMS = frozenset({"films-index"})
 BACKGROUND = frozenset(
     {"check-all", "reseed-all", "search-library", "plan", "catalogue", "reseed-workspace"}
 )
@@ -26,6 +28,8 @@ def job_lane(kind: str, parameters: dict | None = None) -> str:
     parameters = parameters or {}
     if kind in INTERACTIVE:
         return "interactive"
+    if kind in FILMS:
+        return "films"
     if (
         kind == "candidate-inspector"
         and parameters.get("inspector_action", "review") in READ_INSPECTOR_ACTIONS

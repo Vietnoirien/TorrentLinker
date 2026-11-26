@@ -49,4 +49,6 @@ def seed_index(media, films, releases, poster=True):
                     "INSERT OR IGNORE INTO film_title VALUES (?,?,0,0)",
                     (f'["{name[:4]}", "{films[tmdb][2]}"]', tmdb),
                 )
+    # The seeded index is as fresh as a run just made: no job reads the Catalogues over it.
+    media._films_stamp("films-sync:default")
     media._films_changed()

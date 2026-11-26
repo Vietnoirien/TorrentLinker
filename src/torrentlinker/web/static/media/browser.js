@@ -524,31 +524,33 @@ function mediaRender() {
     const key = media.kind === "music" && media.view === "albums" ? row.album_id || row.id : media.kind === "music" && media.view === "artists" ? row.artist || say("Unknown artist", "Artiste inconnu") : media.kind === "video" ? row.content_id || row.id : row.id;
     if (!groups.has(key)) groups.set(key, []); groups.get(key).push(row);
   }
-  for (const rows of groups.values()) {
-    const row = rows[0], card = element("article", undefined, `media-card ${media.kind === "music" ? "media-music-card" : "media-video-card"}`);
-    const title = media.kind === "music" && media.view === "albums" ? row.album || say("Unknown album", "Album inconnu") : media.kind === "music" && media.view === "artists" ? row.artist || say("Unknown artist", "Artiste inconnu") : row.title;
-    // A series card unfolds its episodes; any other card opens its details.
-    const wall = media.kind === "video" && mediaHorizon("wall");
-    const artwork = button("", () => wall ? mediaSelectFeature(row) : row.film ? filmsShow(row) : row.series_card ? (mediaSelectFeature(row), $("media-feature").scrollIntoView({block: "nearest", behavior: "smooth"})) : mediaDetails(row.id), "media-poster-button"); artwork.setAttribute("aria-label", wall ? title : `${say("Details", "Détails")}: ${title}`);
-    if (wall) { artwork.dataset.id = row.id; artwork.setAttribute("aria-pressed", String(row.id === media.featureId)); artwork.ondblclick = () => guard(() => mediaDetails(row.id)); }
-    if (media.kind === "music" && media.view === "artists") {
-      const initials = title.split(/\s+/).slice(0, 2).map(part => [...part][0]).join("");
-      const portrait = element("div", undefined, "media-artist-art"); portrait.append(element("span", initials)); artwork.append(portrait); card.classList.add("media-artist-card");
-    } else artwork.append(mediaArt({...row, title}));
-    const badge = element("span", row.available === false ? row.availability === "unfinished" ? say("Downloading", "Téléchargement") : say("Unavailable", "Indisponible") : say("Available", "Disponible"), "media-poster-badge");
-    if (media.kind === "video" || row.available === false) artwork.append(badge);
-    card.append(artwork, element("h3", title));
-    card.append(element("p", media.kind === "music" && media.view === "artists" ? say("Artist", "Artiste") : row.series_card ? say(`${row.episode_count} episodes`, `${row.episode_count} épisodes`) : [row.artist, row.year, row.genre].filter(Boolean).join(" · "), "media-card-meta"));
-    if (media.kind === "music" && row.track_count) card.append(element("p", say(`${row.track_count} track${row.track_count === 1 ? "" : "s"}`, `${row.track_count} piste${row.track_count === 1 ? "" : "s"}`), "media-card-meta"));
-    if (row.identity_source === "filename") card.append(element("p", say("Filename metadata", "Métadonnées du nom de fichier"), "media-card-source"));
-    if (row.series || row.episode) card.append(element("p", `${row.series || "Episode"} ${row.season ? `S${row.season}` : ""}${row.episode ? ` E${row.episode}` : ""}`, "media-card-meta"));
-    const actions = element("div", undefined, "media-card-actions");
-    const play = mediaCanPreview(row) ? mediaPreviewAction(row) : button(say("Play", "Lire"), () => mediaStart(mediaGroupIds(rows))); play.disabled = row.available === false && !mediaCanPreview(row);
-    actions.append(play, button(say("Details", "Détails"), () => mediaDetails(row.id)));
-    if (media.kind === "music") actions.append(button(say("Add to queue", "Ajouter à la file"), async () => mediaEnqueue(await mediaGroupIds(rows))));
-    if (row.film) filmsDecorate(row, artwork, actions);
-    card.append(actions); root.append(card);
-  }
+  for (const rows of groups.values()) root.append(mediaCard(rows));
+}
+// One card of the grid: also what the tracker films' live merge draws in place of a plain one.
+function mediaCard(rows) {
+  const row = rows[0], card = element("article", undefined, `media-card ${media.kind === "music" ? "media-music-card" : "media-video-card"}`);
+  const title = media.kind === "music" && media.view === "albums" ? row.album || say("Unknown album", "Album inconnu") : media.kind === "music" && media.view === "artists" ? row.artist || say("Unknown artist", "Artiste inconnu") : row.title;
+  // A series card unfolds its episodes; any other card opens its details.
+  const wall = media.kind === "video" && mediaHorizon("wall");
+  const artwork = button("", () => wall ? mediaSelectFeature(row) : row.film ? filmsShow(row) : row.series_card ? (mediaSelectFeature(row), $("media-feature").scrollIntoView({block: "nearest", behavior: "smooth"})) : mediaDetails(row.id), "media-poster-button"); artwork.setAttribute("aria-label", wall ? title : `${say("Details", "Détails")}: ${title}`);
+  if (wall) { artwork.dataset.id = row.id; artwork.setAttribute("aria-pressed", String(row.id === media.featureId)); artwork.ondblclick = () => guard(() => mediaDetails(row.id)); }
+  if (media.kind === "music" && media.view === "artists") {
+    const initials = title.split(/\s+/).slice(0, 2).map(part => [...part][0]).join("");
+    const portrait = element("div", undefined, "media-artist-art"); portrait.append(element("span", initials)); artwork.append(portrait); card.classList.add("media-artist-card");
+  } else artwork.append(mediaArt({...row, title}));
+  const badge = element("span", row.available === false ? row.availability === "unfinished" ? say("Downloading", "Téléchargement") : say("Unavailable", "Indisponible") : say("Available", "Disponible"), "media-poster-badge");
+  if (media.kind === "video" || row.available === false) artwork.append(badge);
+  card.append(artwork, element("h3", title));
+  card.append(element("p", media.kind === "music" && media.view === "artists" ? say("Artist", "Artiste") : row.series_card ? say(`${row.episode_count} episodes`, `${row.episode_count} épisodes`) : [row.artist, row.year, row.genre].filter(Boolean).join(" · "), "media-card-meta"));
+  if (media.kind === "music" && row.track_count) card.append(element("p", say(`${row.track_count} track${row.track_count === 1 ? "" : "s"}`, `${row.track_count} piste${row.track_count === 1 ? "" : "s"}`), "media-card-meta"));
+  if (row.identity_source === "filename") card.append(element("p", say("Filename metadata", "Métadonnées du nom de fichier"), "media-card-source"));
+  if (row.series || row.episode) card.append(element("p", `${row.series || "Episode"} ${row.season ? `S${row.season}` : ""}${row.episode ? ` E${row.episode}` : ""}`, "media-card-meta"));
+  const actions = element("div", undefined, "media-card-actions");
+  const play = mediaCanPreview(row) ? mediaPreviewAction(row) : button(say("Play", "Lire"), () => mediaStart(mediaGroupIds(rows))); play.disabled = row.available === false && !mediaCanPreview(row);
+  actions.append(play, button(say("Details", "Détails"), () => mediaDetails(row.id)));
+  if (media.kind === "music") actions.append(button(say("Add to queue", "Ajouter à la file"), async () => mediaEnqueue(await mediaGroupIds(rows))));
+  if (row.film) { filmsDecorate(row, artwork, actions); card.dataset.id = row.id; }
+  card.append(actions); return card;
 }
 function mediaRenderTracks(root) {
   const heading = element("div", undefined, "media-track-heading");

@@ -8,7 +8,7 @@ reads the client that holds the item. Progress, playlists and sessions are the a
 from __future__ import annotations
 
 import hashlib
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from torrentlinker.accounts import OWNER_ACTOR, WATCH, Actor, Permission
 from torrentlinker.media import VIDEO
+from torrentlinker.media_browser import films_revision, start_films_index
 from torrentlinker.web.permissions import needs
 
 NOT_FOUND = "Media item not found."
@@ -64,6 +65,10 @@ class AgeRating(MediaClient):
 
 class FilmRematch(MediaClient):
     tmdb: str = Field(pattern=r"^\d{1,9}$")
+
+
+class FilmFocus(MediaClient):
+    films: list[Annotated[str, Field(max_length=80)]] = Field(max_length=200)
 
 
 class MediaChat(BaseModel):
@@ -296,6 +301,7 @@ def media_routes(app, agent, assistant):
         scope: str = Query("home", pattern="^(home|films|series|anime|adult)$"),
         include: str = Query("all", pattern="^(all|library|tracker)$"),
     ):
+        start_films_index(agent, target(request, client_id))
         return media.home_rows(
             target(request, client_id),
             kind="video",
@@ -316,9 +322,21 @@ def media_routes(app, agent, assistant):
         except ValueError as error:
             raise HTTPException(400, str(error)) from error
 
+    @app.get("/api/media/tracker-films/revision")
+    @needs(Permission.FILMS)
+    def film_revision(request: Request, client_id: str = ""):
+        return films_revision(agent, target(request, client_id), actor(request).owner)
+
+    @app.post("/api/media/tracker-films/focus")
+    @needs(Permission.FILMS)
+    def film_focus(body: FilmFocus, request: Request):
+        media.films_focus(target(request, body.client_id), body.films)
+        return {"ok": True}
+
     @app.get("/api/media/tracker-films/landing")
     @needs(Permission.FILMS)
     def film_landing(request: Request, client_id: str = ""):
+        start_films_index(agent, target(request, client_id))
         return films(media.tracker_films_landing, request, client_id)
 
     @app.get("/api/media/tracker-films")
@@ -332,6 +350,7 @@ def media_routes(app, agent, assistant):
         offset: int = Query(0, ge=0),
         limit: int = Query(60, ge=1, le=100),
     ):
+        start_films_index(agent, target(request, client_id))
         return films(
             lambda chosen, setup, who: media.tracker_films_listing(
                 chosen, setup, who, genres=tuple(genre), sort=sort, q=q, offset=offset, limit=limit

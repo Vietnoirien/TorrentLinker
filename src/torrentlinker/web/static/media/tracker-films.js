@@ -5,7 +5,10 @@
    paged from the server as it scrolls. A film's panel is the pinned banner: a Member reads the
    synopsis and asks, never seeing a release; the Owner sees the pre-selected release, every
    grouped release in the details dialog, and can correct the film.
-   The server decides who sees what; hiding is only presentation. */
+   The index fills while the user looks (decision 25): the panel polls the index's revision
+   and merges what changed into what is drawn, and tells the server which unidentified films
+   are on screen so they are identified first. The server decides who sees what; hiding is
+   only presentation. */
 const filmsOwner = () => state.setup?.owner !== false;
 const filmsAllowed = () => filmsOwner() || (state.setup?.permissions || []).includes("films");
 const filmsSorts = () => [["new", say("New on the tracker", "Nouveautés")], ["shared", say("Most shared", "Les plus partagés")], ["year", say("Year", "Année")], ["title", say("Title", "Titre")]];
@@ -65,12 +68,14 @@ function filmsRowActions(row, header) {
 }
 function filmsLandingHead(root) {
   const head = element("div", undefined, "media-home-row-header films-landing");
+  queueMicrotask(filmsProgressLine);
   const total = new Set(media.homeRows.flatMap(row => row.rows.map(item => item.id))).size;
   head.append(button(say("‹ Media", "‹ Médias"), filmsLeave, "quiet"), element("h2", say("On the tracker", "Sur le tracker")), element("span", say("one row per genre", "une rangée par genre"), "media-home-row-count"));
   if (total) root.prepend(head);
 }
 // The one-genre grid's line, "On the tracker · Animation ▾", its second genre and its sort.
 function filmsShelf() {
+  queueMicrotask(filmsObserve);  // once the cards of this render are in the page
   document.querySelector(".films-bar")?.remove();
   const heading = document.querySelector(".media-section-heading"), films = media.films;
   heading.hidden = false;
@@ -185,3 +190,156 @@ function filmsRematch(film, release) {
   };
   root.append(form); field.focus();
 }
+
+/* The index fills while the user looks. Every few seconds, while the tracker row, the landing or
+   a grid is on screen, the panel asks for the index's revision; when it moved, it fetches what
+   is shown again and merges it: a changed card is replaced where it stands, new films join, and
+   nothing else is touched, so the scroll positions and the film chosen in the banner stay. */
+const filmsLive = {revision: null, busy: false, progress: null, visible: new Set(), sent: "", observer: null, timer: null};
+const filmsHomeRow = () => media.homeRows?.find(row => row.key === "tracker" && row.filters?.tracker === "films");
+function filmsWatched() {
+  if (state.view !== "media" || document.hidden || media.kind !== "video" || !filmsAllowed()) return false;
+  return media.view === "tracker" || (!!filmsHomeRow() && mediaHomeActive());
+}
+// What a card shows of a film: when it changes, the card is drawn again.
+const filmsSig = item => item ? [item.title, item.year, item.identified, item.artwork_url, item.genre, item.age_rating?.rating, item.in_library, item.description].join("\u0001") : "";
+// Run `work`, then move the scroller so the first card in view stays where it was.
+function filmsKeepPlace(scroller, cards, horizontal, work) {
+  const box = scroller.getBoundingClientRect(), edge = horizontal ? box.left : Math.max(0, box.top);
+  const anchor = cards.find(card => { const rect = card.getBoundingClientRect(); return (horizontal ? rect.right : rect.bottom) > edge; });
+  const before = anchor?.getBoundingClientRect();
+  work();
+  if (!anchor?.isConnected) return;
+  const after = anchor.getBoundingClientRect(), moved = horizontal ? after.left - before.left : after.top - before.top;
+  if (!moved) return;
+  if (horizontal) scroller.scrollLeft += moved;
+  else if (scroller.scrollHeight > scroller.clientHeight) scroller.scrollTop += moved;
+  else window.scrollBy(0, moved);
+}
+// Put `items` in `container` as cards drawn by `draw`, keeping the cards that did not change.
+function filmsPatchCards(container, selector, items, previous, draw) {
+  const cards = new Map([...container.querySelectorAll(selector)].map(card => [card.dataset.id, card]));
+  let cursor = container.querySelector(selector);
+  for (const item of items) {
+    let card = cards.get(item.id);
+    if (card && filmsSig(previous.get(item.id)) !== filmsSig(item)) { const drawn = draw(item); card.replaceWith(drawn); if (cursor === card) cursor = drawn; card = drawn; }
+    else if (!card) card = draw(item);
+    cards.delete(item.id);
+    if (card === cursor) cursor = cursor.nextElementSibling?.matches(selector) ? cursor.nextElementSibling : null;
+    else container.insertBefore(card, cursor);
+  }
+  for (const card of cards.values()) card.remove();
+}
+function filmsPatchRow(row, fresh, track) {
+  const previous = new Map(row.rows.map(item => [item.id, item])), ids = new Set(fresh.rows.map(item => item.id));
+  for (const item of fresh.rows) mediaItems.set(item.id, item);
+  row.rows = [...fresh.rows, ...row.rows.slice(fresh.rows.length).filter(item => !ids.has(item.id))];
+  row.total = fresh.total;
+  filmsKeepPlace(track, [...track.querySelectorAll(".media-row-card")], true, () => filmsPatchCards(track, ".media-row-card", row.rows, previous, item => mediaRowCard(item, row, track)));
+  const count = track.closest(".media-home-row")?.querySelector(".media-home-row-count");
+  if (count) count.textContent = say(`${row.total} titles`, `${row.total} titres`);
+}
+function filmsRedraw() {
+  const scroller = document.querySelector(".media-scroll"), page = window.scrollY, inner = scroller.scrollTop;
+  const lefts = new Map([...document.querySelectorAll("#media-home-rows .media-row-track")].map((track, i) => [i, track.scrollLeft]));
+  mediaRender();
+  window.scrollTo(0, page); scroller.scrollTop = inner;
+  for (const [i, track] of [...document.querySelectorAll("#media-home-rows .media-row-track")].entries()) track.scrollLeft = lefts.get(i) || 0;
+}
+// Rows (the landing, or Médias' tracker row): patch the cards, or draw again when the rows
+// themselves changed (a genre's first film, the first answer after "loading").
+function filmsMergeRows(fresh) {
+  const shown = media.layout === "horizon" ? [mediaHorizonRow()] : media.homeRows;
+  const keys = rows => rows.map(mediaRowKey).join("|");
+  if (keys(fresh) !== keys(media.homeRows) || shown.some(row => row.state && row.state !== "ready")) {
+    for (const row of fresh) for (const item of row.rows) mediaItems.set(item.id, item);
+    media.homeRows = fresh; filmsRedraw(); return;
+  }
+  const sections = [...document.querySelectorAll("#media-home-rows .media-home-row")];
+  for (const [i, row] of shown.entries()) {
+    const update = fresh.find(other => mediaRowKey(other) === mediaRowKey(row)), track = sections[i]?.querySelector(".media-row-track");
+    if (update && track) filmsPatchRow(row, update, track);
+  }
+  filmsObserve();
+}
+function filmsMergeGrid(rows, total, more) {
+  const root = $("media-results"), previous = new Map(media.rows.map(item => [item.id, item]));
+  for (const item of rows) mediaItems.set(item.id, item);
+  media.films.total = total; media.rows = rows; media.next = more ? rows.length : null;
+  $("media-more").hidden = !more;
+  if (!previous.size || !rows.length) { filmsRedraw(); return; }
+  filmsKeepPlace(document.querySelector(".media-scroll"), [...root.querySelectorAll(".media-card[data-id]")], false, () => filmsPatchCards(root, ".media-card[data-id]", rows, previous, item => mediaCard([item])));
+  const count = document.querySelector(".films-bar .media-home-row-count");
+  if (count) count.textContent = filmsCount(total);
+  filmsObserve();
+}
+async function filmsMerge() {
+  const version = media.request;
+  if (media.view === "tracker" && !media.films?.grid) {
+    const landing = await api(`media/tracker-films/landing?${mediaQuery({})}`);
+    if (version === media.request && filmsWatched()) filmsMergeRows(landing.rows);
+  } else if (media.view === "tracker") {
+    const wanted = Math.max(60, media.rows.length), rows = [];
+    let page;
+    do {
+      page = await filmsPage(media.films, rows.length, Math.min(100, wanted - rows.length));
+      rows.push(...page.rows);
+    } while (page.has_more && rows.length < wanted);
+    if (version === media.request && filmsWatched()) filmsMergeGrid(rows, page.total, page.has_more);
+  } else {
+    const row = filmsHomeRow(), page = await filmsPage({}, 0, Math.max(20, row.rows.length));
+    if (version !== media.request || !filmsWatched()) return;
+    filmsMergeRows(media.homeRows.map(other => other === row ? {...row, rows: page.rows, total: page.total, state: "ready"} : other));
+  }
+}
+// The Owner's one line on the landing, while the index is being identified.
+function filmsProgressLine() {
+  const root = $("media-home-rows"), answer = filmsLive.progress;
+  const shown = filmsOwner() && media.view === "tracker" && !media.films?.grid && answer?.running && answer.identified < answer.total;
+  let line = root.querySelector(".films-progress");
+  if (!shown) { line?.remove(); return; }
+  if (!line) { line = element("p", undefined, "films-progress muted"); root.querySelector(".films-landing")?.after(line); }
+  const number = value => value.toLocaleString(language === "fr" ? "fr-FR" : "en-GB");
+  line.textContent = say(`Film identification: ${number(answer.identified)} / ${number(answer.total)}`, `Identification des films : ${number(answer.identified)} / ${number(answer.total)}`);
+}
+async function filmsPoll() {
+  if (filmsLive.busy) return;
+  if (!filmsWatched()) { filmsLive.revision = null; return; }
+  filmsLive.busy = true;
+  try {
+    const answer = await api(`media/tracker-films/revision?client_id=${encodeURIComponent(mediaClient())}`);
+    filmsLive.progress = answer;
+    // What was drawn is as old as the page, and the revision it matches is unknown: the first
+    // answer after the view opens merges once, then follows the revision.
+    if (filmsLive.revision === null || answer.revision !== filmsLive.revision) await filmsMerge();
+    filmsLive.revision = answer.revision;
+    filmsProgressLine();
+  } catch {
+    /* The page shows what it has; the next tick asks again. */
+  } finally { filmsLive.busy = false; }
+}
+// The unidentified films on screen, sent a moment after the last scroll.
+function filmsObserve() {
+  filmsLive.observer?.disconnect();
+  if (!filmsOwner() || !filmsWatched()) return;
+  filmsLive.observer ||= new IntersectionObserver(entries => {
+    for (const entry of entries) {
+      const id = entry.target.dataset.film || mediaItems.get(entry.target.dataset.id)?.film;
+      if (entry.isIntersecting) filmsLive.visible.add(id); else filmsLive.visible.delete(id);
+    }
+    clearTimeout(filmsLive.debounce);
+    filmsLive.debounce = setTimeout(filmsFocus, 400);
+  });
+  filmsLive.visible.clear();
+  for (const card of document.querySelectorAll(".media-row-card[data-id], .media-card[data-id]")) {
+    const item = mediaItems.get(card.dataset.id);
+    if (item?.film && item.identified === false) { card.dataset.film = item.film; filmsLive.observer.observe(card); }
+  }
+}
+async function filmsFocus() {
+  const films = [...filmsLive.visible].filter(Boolean).sort(), key = films.join(",");
+  if (key === filmsLive.sent) return;
+  filmsLive.sent = key;
+  try { await api("media/tracker-films/focus", {client_id: mediaClient(), films}); } catch { filmsLive.sent = ""; }
+}
+filmsLive.timer = setInterval(filmsPoll, 4000);

@@ -447,3 +447,4 @@ body.media-player-full #media-player-shell[data-kind="video"] { z-index: 89; }
 .films-release .media-tracker-name { word-break: break-all; }
 .films-release .media-tracker-facts, .films-release-actions { grid-column: 2; }
 .films-release-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.films-progress { margin: 0 0 8px; font-size: 0.85rem; }

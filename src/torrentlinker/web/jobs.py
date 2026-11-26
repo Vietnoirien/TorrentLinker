@@ -36,6 +36,9 @@ class Jobs:
         self.interactive_executor = ThreadPoolExecutor(
             max_workers=1, thread_name_prefix="torrentlinker-interactive"
         )
+        self.films_executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="torrentlinker-films"
+        )
         self.stops: dict[str, JobStop] = {}
         # Pending work never survives restart. Keep only digests in memory, not
         # request bodies that may contain paths, confirmation tokens or credentials.
@@ -62,10 +65,23 @@ class Jobs:
             )
 
     def active(self) -> bool:
+        """Whether work is pending; the film index fills in the background and is resumable,
+        so it never counts."""
         with self.lock:
             return bool(
                 self.db.execute(
-                    "SELECT 1 FROM jobs WHERE status IN ('queued','running') LIMIT 1"
+                    "SELECT 1 FROM jobs WHERE status IN ('queued','running')"
+                    " AND lane<>'films' LIMIT 1"
+                ).fetchone()
+            )
+
+    def running(self, kind: str, client_id: str) -> bool:
+        with self.lock:
+            return bool(
+                self.db.execute(
+                    "SELECT 1 FROM jobs WHERE kind=? AND client_id=?"
+                    " AND status IN ('queued','running') LIMIT 1",
+                    (kind, client_id),
                 ).fetchone()
             )
 
@@ -140,7 +156,9 @@ class Jobs:
                     "DELETE FROM jobs WHERE status NOT IN ('queued','running') AND id "
                     "NOT IN (SELECT id FROM jobs ORDER BY created DESC LIMIT 200)"
                 )
-            executor = self.interactive_executor if lane == "interactive" else self.executor
+            executor = {"interactive": self.interactive_executor, "films": self.films_executor}.get(
+                lane, self.executor
+            )
             executor.submit(self._run, identifier, stop, work)
             return identifier
 
@@ -276,6 +294,7 @@ class Jobs:
                     stop.set()
         self.executor.shutdown(wait=True)
         self.interactive_executor.shutdown(wait=True)
+        self.films_executor.shutdown(wait=True)
         self.db.close()
 
 
