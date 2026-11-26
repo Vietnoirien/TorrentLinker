@@ -63,6 +63,10 @@ HIDDEN = {"tkey", "position", "download_url"}  # the index's own columns, never 
 NOT_FOUND_RETRY = 7 * 86400  # a title TMDb did not know is asked again a week later
 IDENTIFY_BATCH = 10  # titles the on-demand job asks per batch, then looks at the focus again
 UNAVAILABLE_PAUSE = 60.0  # seconds before a page may start the job again after TMDb failed
+WALK_PAUSE = 10.0  # seconds between two pages of c411's film listing (decision 26)
+FOCUS_PAUSE = 2.0  # seconds between two searches for the films on screen
+LIMIT_PAUSE = 3600.0  # seconds c411 is left alone after it asked to wait
+WALK_PARAMS = {"category": "1", "sortBy": "createdAt", "sortOrder": "desc"}
 
 
 def film_id(tmdb: str, tkey: str, tracker: str, infohash: str) -> str:
@@ -93,6 +97,7 @@ class TrackerFilms(TrackerRows, AgeRatings):
         self._films_status: tuple[int, tuple[int, int]] | None = None
         self._films_resting: dict[str, float] = {}
         self._films_working = threading.Lock()  # one identification at a time
+        self._films_asked: set[str] = set()  # titles searched on c411 since the start
         self._films_cache: tuple[int, list[dict[str, Any]]] | None = None
         with self.db:
             self.db.executescript("""
@@ -109,6 +114,10 @@ class TrackerFilms(TrackerRows, AgeRatings):
                     (tmdb TEXT PRIMARY KEY, title TEXT, original_title TEXT, year TEXT,
                     overview TEXT, genres TEXT, runtime INTEGER, rating TEXT, rating_by TEXT
                     NOT NULL DEFAULT '', suggestion TEXT, poster TEXT, artwork TEXT, fetched REAL);
+                CREATE TABLE IF NOT EXISTS film_c411
+                    (tkey TEXT PRIMARY KEY, title TEXT, original_title TEXT, year TEXT,
+                    overview TEXT, genres TEXT, runtime INTEGER, poster TEXT, artwork TEXT,
+                    fetched REAL);
             """)
 
     def _films_changed(self) -> None:
@@ -375,6 +384,8 @@ class TrackerFilms(TrackerRows, AgeRatings):
             status = self.films_identify(client_id, setup, stop, **identify)
         finally:
             self._films_working.release()
+        if status == "off":
+            self._films_from_cache(client_id)  # no TMDb key: what c411 already told us
         if status in {"complete", "off"}:
             self._films_stamp("films-run:" + client_id)
         return status
@@ -394,9 +405,11 @@ class TrackerFilms(TrackerRows, AgeRatings):
             ).fetchone()[0]
             identified = self.db.execute(
                 "SELECT COUNT(*) FROM (SELECT DISTINCT r.tkey FROM film_release r"
-                " JOIN film_title t ON t.tkey = r.tkey"
+                " LEFT JOIN film_title t ON t.tkey = r.tkey"
                 " LEFT JOIN film_meta m ON m.tmdb = t.tmdb"
-                " WHERE r.tkey <> '' AND (t.tmdb = '' OR m.tmdb IS NOT NULL))"
+                " LEFT JOIN film_c411 c ON c.tkey = r.tkey"
+                " WHERE r.tkey <> '' AND (c.tkey IS NOT NULL OR (t.tkey IS NOT NULL"
+                " AND (t.tmdb = '' OR m.tmdb IS NOT NULL))))"
             ).fetchone()[0]
         progress = (identified, total)
         if generation == self._films_generation:
@@ -405,7 +418,8 @@ class TrackerFilms(TrackerRows, AgeRatings):
 
     def films_behind(self, client_id, setup) -> bool:
         """Whether the index needs its job: the Catalogues were not read for a while, or titles
-        wait for TMDb (which needs a key). Cheap; asked by every page that shows films."""
+        wait for TMDb (which needs a key), else for c411's listing. Cheap; asked by every page
+        that shows films."""
         if time.monotonic() < self._films_resting.get(client_id, 0.0):
             return False
         if not self._films_fresh("films-sync:" + client_id):
@@ -413,14 +427,21 @@ class TrackerFilms(TrackerRows, AgeRatings):
         identified, total = self.films_progress()
         if identified >= total or self._films_fresh("films-run:" + client_id):
             return False  # a run that ended is not repeated for a title TMDb has no facts for
-        secrets = getattr(setup, "secrets", None)
-        return bool(secrets.get("tmdb-api-key") if secrets is not None else "")
+        return True  # with a TMDb key, TMDb; without, c411's listing (decision 26)
 
     def films_index(
-        self, client_id, setup, stop: threading.Event, progress, *, pause: float = IDENTIFY_PAUSE
+        self,
+        client_id,
+        setup,
+        stop: threading.Event,
+        progress,
+        *,
+        pause: float = IDENTIFY_PAUSE,
+        walk_pause: float = WALK_PAUSE,
     ) -> str:
         """The index job: read the Catalogues, then identify in throttled batches until done.
-        Each batch looks at what the user is looking at again."""
+        Each batch looks at what the user is looking at again. Without a TMDb key c411 fills
+        the index instead (`films_c411`)."""
         if not self._films_working.acquire(blocking=False):
             return "busy"
         try:
@@ -434,13 +455,227 @@ class TrackerFilms(TrackerRows, AgeRatings):
                 progress({"phase": "identify", "identified": done, "total": total})
                 if status != "batch":
                     break
+            if status == "off":
+                status = self.films_c411(client_id, setup, stop, progress, walk_pause=walk_pause)
         finally:
             self._films_working.release()
         if status in {"complete", "off"}:
             self._films_stamp("films-run:" + client_id)
         elif status == "unavailable":
             self._films_resting[client_id] = time.monotonic() + UNAVAILABLE_PAUSE
+        elif status == "limit":
+            self._films_resting[client_id] = time.monotonic() + LIMIT_PAUSE
         return status
+
+    # -- c411 fills the index without a TMDb key (decision 26) ---------------------------------
+
+    def films_c411(
+        self,
+        client_id,
+        setup,
+        stop: threading.Event,
+        progress,
+        *,
+        walk_pause: float = WALK_PAUSE,
+    ) -> str:
+        """Fill the index from c411, which names no TMDb id: what the suggestions already
+        cached at once, then the films on screen (one search each), then c411's film listing
+        walked page by page, newest first, until all of it is read; later runs only read the
+        new pages. Returns "off" when c411 is not the Indexer, "limit" when c411 asks to wait
+        (or refuses the key), "unavailable" after three failures, "cancelled" or "complete".
+        """
+        from torrentlinker.indexer import KeyRefused, RateLimited
+        from torrentlinker.torrent_search import native_search
+
+        self._films_from_cache(client_id)
+        try:
+            indexer = setup.indexer()
+        except Exception:
+            return "off"
+        if not indexer.is_c411:
+            return "off"
+        walk_key = "films-walk:" + client_id
+        with self.lock:
+            row = self.db.execute("SELECT body FROM media_options WHERE key=?", (walk_key,))
+            saved = row.fetchone()
+        state = json.loads(saved[0]) if saved else {"page": 1, "done": False}
+        # A finished walk starts again at the newest page and stops at the first that adds nothing.
+        new_only = state["done"]
+        page_number = 1 if new_only else state["page"]
+        failures = 0
+        with indexer.background(stop):
+            while True:
+                if stop.is_set():
+                    return "cancelled"
+                wanted = self._films_unasked(client_id)
+                try:
+                    if wanted:
+                        self._films_search(indexer, *wanted)
+                        wait = min(walk_pause, FOCUS_PAUSE)
+                    else:
+                        page = native_search(indexer, WALK_PARAMS, page_number)
+                        changed = self._films_read(page)
+                        done, total = self.films_progress()
+                        progress({"phase": "c411", "identified": done, "total": total})
+                        if not page.has_more or (new_only and not changed):
+                            self._films_walk(walk_key, 1, True)
+                            return "complete"
+                        page_number += 1
+                        if not new_only:
+                            self._films_walk(walk_key, page_number, False)
+                        wait = walk_pause
+                except (RateLimited, KeyRefused):
+                    return "limit"
+                except Exception:
+                    failures += 1
+                    if failures >= 3:
+                        return "unavailable"
+                    wait = walk_pause
+                else:
+                    failures = 0
+                if stop.wait(wait):
+                    return "cancelled"
+
+    def _films_walk(self, key: str, page: int, done: bool) -> None:
+        with self.lock, self.db:
+            self.db.execute(
+                "INSERT OR REPLACE INTO media_options VALUES (?,?)",
+                (key, json.dumps({"page": page, "done": done})),
+            )
+
+    @staticmethod
+    def _c411_facts(listing) -> dict[str, Any]:
+        return {
+            "title": listing.title,
+            "original_title": listing.original_title,
+            "year": str(listing.year or ""),
+            "overview": listing.overview,
+            "genres": list(listing.genres),
+            "runtime": listing.runtime or 0,
+            "poster": listing.poster_url,
+        }
+
+    def _films_from_cache(self, client_id) -> None:
+        """The facts c411's latest pages left in the suggestions, without a request."""
+        found: dict[str, dict[str, Any]] = {}
+        # The new releases are c411's own listing; the library's upgrades only fill what is missing.
+        for kind in ("tracker-upgrade", "tracker-new"):
+            for entry in self._tracker_cache(client_id, kind).values():
+                facts = entry.get("facts") or {}
+                title, year = facts.get("title") or "", str(facts.get("year") or "")
+                if title and year:
+                    found[film_key(title, year)] = {
+                        "title": title,
+                        "original_title": facts.get("original_title") or "",
+                        "year": year,
+                        "overview": facts.get("overview") or "",
+                        "genres": list(facts.get("genres") or []),
+                        "runtime": facts.get("runtime") or 0,
+                        "poster": facts.get("poster_url") or "",
+                    }
+        self._films_save(found, replace=False)
+
+    def _films_read(self, page) -> bool:
+        """Keep the facts of the films a listing page names; True when any film's changed.
+        A release the index holds says which film key it belongs to, whatever it parsed to."""
+        hashes = [c.infohash for c in page.rows if c.infohash]
+        with self.lock:
+            keyed = {
+                r[0]: r[1]
+                for r in self.db.execute(
+                    "SELECT infohash, tkey FROM film_release WHERE tkey <> '' AND infohash IN"
+                    f" ({','.join('?' * len(hashes))})",
+                    hashes,
+                )
+            }
+        found: dict[str, dict[str, Any]] = {}
+        for infohash in hashes:
+            listing = page.details.get(infohash)
+            if listing is None or listing.kind != "movie" or not listing.title:
+                continue
+            facts = self._c411_facts(listing)
+            if listing.year:
+                found.setdefault(film_key(listing.title, facts["year"]), facts)
+            if infohash in keyed:
+                found.setdefault(keyed[infohash], facts)
+        return self._films_save(found)
+
+    def _films_save(self, found: dict[str, dict[str, Any]], replace: bool = True) -> bool:
+        """Store facts by film key; `replace` False keeps the film's facts when it has some.
+        The revision moves only when what a card draws changed."""
+        if not found:
+            return False
+        with self.lock:
+            kept = {
+                r["tkey"]: (
+                    r["title"],
+                    r["original_title"],
+                    r["year"],
+                    r["overview"],
+                    r["genres"],
+                    r["runtime"],
+                    r["poster"],
+                )
+                for r in self.db.execute("SELECT * FROM film_c411")
+            }
+        changed = False
+        with self.lock, self.db:
+            for tkey, facts in found.items():
+                drawn = (
+                    facts["title"],
+                    facts["original_title"],
+                    facts["year"],
+                    facts["overview"],
+                    json.dumps(facts["genres"], ensure_ascii=False),
+                    facts["runtime"],
+                    facts["poster"],
+                )
+                if kept.get(tkey) == drawn or (tkey in kept and not replace):
+                    continue
+                self.db.execute(
+                    "INSERT OR REPLACE INTO film_c411 (tkey, title, original_title, year,"
+                    " overview, genres, runtime, poster, artwork, fetched)"
+                    " VALUES (?,?,?,?,?,?,?,?,"
+                    " (SELECT artwork FROM film_c411 WHERE tkey=? AND poster=?),?)",
+                    (tkey, *drawn, tkey, facts["poster"], time.time()),
+                )
+                changed = True
+        if changed:
+            self._films_changed()
+        return changed
+
+    def _films_unasked(self, client_id) -> tuple[str, str, str] | None:
+        """The next film on screen c411 has no facts for and was not searched yet:
+        (film key, title, year)."""
+        pending = self._films_focus.get(client_id, frozenset()) - self._films_asked
+        if not pending:
+            return None
+        with self.lock:
+            for tkey in sorted(pending):
+                if self.db.execute("SELECT 1 FROM film_c411 WHERE tkey=?", (tkey,)).fetchone():
+                    continue
+                row = self.db.execute(
+                    "SELECT MIN(title) AS title, MIN(year) AS year FROM film_release WHERE tkey=?",
+                    (tkey,),
+                ).fetchone()
+                if row and row["title"]:
+                    return tkey, row["title"], row["year"]
+        self._films_asked |= pending
+        return None
+
+    def _films_search(self, indexer, tkey: str, title: str, year: str) -> None:
+        """One c411 search by the film's title and year, falling back to the title alone; the
+        listing rows read are matched to the index by infohash or film key."""
+        from torrentlinker.torrent_search import native_search
+
+        self._films_asked.add(tkey)
+        for name in (f"{title} {year}".strip(), title):
+            self._films_read(native_search(indexer, {"category": "1", "name": name}, 1))
+            with self.lock:
+                if self.db.execute("SELECT 1 FROM film_c411 WHERE tkey=?", (tkey,)).fetchone():
+                    return
+            if name == title:
+                return
 
     def films_focus(self, client_id, identifiers) -> None:
         """The films the panel shows that are not identified yet: the next batch takes them
@@ -533,6 +768,7 @@ class TrackerFilms(TrackerRows, AgeRatings):
             releases = self.db.execute("SELECT * FROM film_release").fetchall()
             titles = {r[0]: r[1] for r in self.db.execute("SELECT tkey, tmdb FROM film_title")}
             metas = {r["tmdb"]: r for r in self.db.execute("SELECT * FROM film_meta")}
+            c411s = {r["tkey"]: r for r in self.db.execute("SELECT * FROM film_c411")}
         films: dict[str, dict[str, Any]] = {}
         for row in releases:
             tmdb = row["manual"] or titles.get(row["tkey"], "")
@@ -541,20 +777,23 @@ class TrackerFilms(TrackerRows, AgeRatings):
             identifier = film_id(tmdb, row["tkey"], row["tracker"], row["infohash"])
             film = films.get(identifier)
             if film is None:
+                # TMDb's facts, when it identified the film, take precedence over c411's.
                 meta = metas.get(tmdb)
-                genres = json.loads(meta["genres"] or "[]") if meta else []
+                facts = meta or c411s.get(row["tkey"])
+                genres = json.loads(facts["genres"] or "[]") if facts else []
                 film = films[identifier] = {
                     "id": identifier,
                     "tmdb": tmdb if meta else "",
-                    "identified": bool(meta),
-                    "title": (meta["title"] if meta else "") or row["title"] or row["name"],
-                    "original_title": (meta["original_title"] if meta else "") or "",
-                    "year": (meta["year"] if meta else "") or row["year"],
-                    "overview": (meta["overview"] if meta else "") or "",
+                    "c411": "" if meta or not facts else row["tkey"],
+                    "identified": bool(facts),
+                    "title": (facts["title"] if facts else "") or row["title"] or row["name"],
+                    "original_title": (facts["original_title"] if facts else "") or "",
+                    "year": (facts["year"] if facts else "") or row["year"],
+                    "overview": (facts["overview"] if facts else "") or "",
                     "genres": genres,
-                    "runtime": (meta["runtime"] if meta else 0) or 0,
+                    "runtime": (facts["runtime"] if facts else 0) or 0,
                     "rating": meta["rating"] if meta else None,
-                    "poster": (meta["poster"] if meta else "") or "",
+                    "poster": (facts["poster"] if facts else "") or "",
                     "releases": [],
                 }
             film["releases"].append(
@@ -939,17 +1178,23 @@ class TrackerFilms(TrackerRows, AgeRatings):
         return {"title": found["title"], "year": found["year"], "release": release}
 
     def film_artwork(self, client_id, identifier: str):
-        """A film's TMDb poster, downloaded once and kept as the other posters are."""
+        """A film's TMDb poster, downloaded once and kept as the other posters are. A film only
+        c411 knows has c411's poster, which is TMDb-hosted too: no key is needed to load it."""
         from torrentlinker import media_artwork
 
         film = self._film_by_id(client_id, self.setup(client_id), identifier)  # type: ignore[attr-defined]
-        tmdb = film["tmdb"]
-        if not tmdb or not film["poster"].startswith("https://image.tmdb.org/"):
+        if not film["poster"].startswith("https://image.tmdb.org/"):
             return None
-        with media_artwork.download_lock("film:" + tmdb):
+        if film["tmdb"]:
+            table, column, wanted = "film_meta", "tmdb", film["tmdb"]
+        elif film["c411"]:
+            table, column, wanted = "film_c411", "tkey", film["c411"]
+        else:
+            return None
+        with media_artwork.download_lock(f"film:{wanted}"):
             with self.lock:
                 image = self.db.execute(
-                    "SELECT artwork FROM film_meta WHERE tmdb=?", (tmdb,)
+                    f"SELECT artwork FROM {table} WHERE {column}=?", (wanted,)
                 ).fetchone()["artwork"]
             if not image:
                 from torrentlinker.assistant.images import fetch_image
@@ -957,7 +1202,9 @@ class TrackerFilms(TrackerRows, AgeRatings):
                 data, _ = fetch_image(film["poster"])
                 image = self.cache_artwork(data)  # type: ignore[attr-defined]
                 with self.lock, self.db:
-                    self.db.execute("UPDATE film_meta SET artwork=? WHERE tmdb=?", (image, tmdb))
+                    self.db.execute(
+                        f"UPDATE {table} SET artwork=? WHERE {column}=?", (image, wanted)
+                    )
         if not re.fullmatch(r"asset:[a-f0-9]{64}\.(png|webp)", image):
             return None
         return self.agent.setup.path.parent / "media-artwork" / image[6:]  # type: ignore[attr-defined]

@@ -236,6 +236,17 @@ the quota with a note). The spec as decided conflicts with that in several place
     ("Identification des films : 1 240 / 87 000") on the landing; Members only see films
     appear.
 
+26. **Without a TMDB key, c411 fills the index** (owner, 2026-11-26, after deploying 25:
+    the instance has no TMDB key, so nothing was identified and no film had a cover).
+    c411's listing gives, per release, the film's title, year, French synopsis, genres,
+    runtime, rating and a TMDB-hosted poster (no key needed to load it), but no TMDB id.
+    Three steps: (1) at once, what the app already cached from c411's latest pages;
+    (2) the films on screen first, one c411 search by title each; (3) in the background,
+    c411's film listing walked page by page (100 releases per page), one page every 10 s,
+    stopping for an hour whenever c411 asks to wait, resumable. Films are keyed by title +
+    year until a TMDB key, when added, gives them a TMDB id; a TMDB key also covers
+    tr4ker-only films and French age ratings, which c411 cannot.
+
 ## Open questions
 
 None.

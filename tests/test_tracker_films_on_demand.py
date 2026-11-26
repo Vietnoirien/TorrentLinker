@@ -71,11 +71,12 @@ def test_the_job_runs_in_batches_until_complete_and_the_index_is_then_not_behind
     assert films.films_behind("default", setup)
 
 
-def test_without_a_tmdb_key_the_job_only_reads_the_catalogues(films):
+def test_without_a_tmdb_key_nor_c411_the_job_only_reads_the_catalogues(films):
     from types import SimpleNamespace
 
     setup = films.setup_for_test
     setup.secrets = SimpleNamespace(get=lambda name: "")
+    setup.indexer = lambda: SimpleNamespace(is_c411=False)  # decision 26 covers c411
     assert films.films_index("default", setup, STOP(), lambda _: None, pause=0) == "off"
     assert query(films)["total"] == 4 and films.tmdb.lookups == []
     assert not films.films_behind("default", setup)
