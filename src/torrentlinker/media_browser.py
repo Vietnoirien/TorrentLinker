@@ -17,6 +17,59 @@ class MediaBrowserService:
     def __init__(self, agent):
         self.agent = agent
 
+    @staticmethod
+    def tracker_films(media, client, parts, query, body, method):
+        """The Owner's Tracker Films, with the web routes' validation: the landing, one genre's
+        grid (two genres at most), a film, and the corrections the film panel makes."""
+        import re
+
+        from torrentlinker.trackers import TRACKERS
+
+        setup, who = media.setup(client), OWNER_ACTOR
+        one = {key: values[-1] for key, values in query.items()}
+        if method == "GET" and parts == ["landing"]:
+            return media.tracker_films_landing(client, setup, who)
+        if method == "GET" and len(parts) == 1:
+            return media.tracker_film_detail(client, setup, who, parts[0])
+        if method == "GET" and not parts:
+            sort = one.get("sort", "new")
+            if sort not in {"new", "shared", "year", "title"}:
+                raise ValueError("Unknown sort")
+            return media.tracker_films_listing(
+                client,
+                setup,
+                who,
+                genres=tuple(query.get("genre", [])[:2]),
+                sort=sort,
+                q=one.get("q", "")[:200],
+                offset=max(0, int(one.get("offset", 0))),
+                limit=min(100, max(1, int(one.get("limit", 60)))),
+            )
+
+        def tmdb() -> str:
+            value = str(body.get("tmdb", ""))
+            if not re.fullmatch(r"\d{1,9}", value):
+                raise ValueError("Give a TMDb film number.")
+            return value
+
+        if method == "POST" and len(parts) == 2 and parts[1] == "rematch":
+            media.film_rematch(client, setup, parts[0], tmdb())
+            return {"ok": True}
+        if method == "POST" and len(parts) == 2 and parts[1] == "rating":
+            media.film_rating(parts[0], str(body.get("rating", "")), client, setup)
+            return {"ok": True}
+        if (
+            method == "POST"
+            and len(parts) == 4
+            and parts[0] == "releases"
+            and parts[3] == "rematch"
+        ):
+            if parts[1] not in TRACKERS:
+                raise ValueError("Unknown tracker.")
+            media.release_rematch(parts[1], tracker_hash(parts[2]), setup, tmdb())
+            return {"ok": True}
+        raise ValueError("Unknown Media browsing operation")
+
     def request(self, path, body=None, method="GET"):
         parsed = urlsplit(path)
         parts = [unquote(part) for part in parsed.path.split("/")]
@@ -68,21 +121,9 @@ class MediaBrowserService:
                 scope=query.get("scope", "home"),
                 limit=int(query.get("limit", 20)),
             )
-        if parts[:2] == ["media", "tracker-films"] and method == "GET":
-            setup, who = media.setup(client), OWNER_ACTOR
-            if len(parts) == 3 and parts[2] == "landing":
-                return media.tracker_films_landing(client, setup, who)
-            if len(parts) == 3:
-                return media.tracker_film_detail(client, setup, who, parts[2])
-            return media.tracker_films_listing(
-                client,
-                setup,
-                who,
-                genres=tuple(g for g in (query.get("genre"),) if g),
-                sort=query.get("sort", "new"),
-                q=query.get("q", ""),
-                offset=int(query.get("offset", 0)),
-                limit=int(query.get("limit", 60)),
+        if parts[:2] == ["media", "tracker-films"]:
+            return self.tracker_films(
+                media, client, parts[2:], parse_qs(parsed.query), body, method
             )
         if parts[:2] == ["media", "items"] and len(parts) >= 3:
             identifier = parts[2]
