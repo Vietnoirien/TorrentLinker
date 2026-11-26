@@ -437,6 +437,24 @@ def test_a_tmdb_key_added_later_takes_over_and_keeps_the_owners_corrections(film
     assert [t for t, _ in films.tmdb.lookups] == ["Dune", "Spirited Away"]  # Alien kept as set
 
 
+def test_two_releases_of_a_film_listing_other_facts_do_not_rewrite_them_page_after_page(
+    films, monkeypatch
+):
+    setup = no_key(films)
+    first = ("Dune.2021.MULTi.1080p.WEB.x264-TEAM", listing("Dune", 2021))
+    other = ("Dune.2021.MULTi.2160p.BluRay.x265-TEAM", listing("Dune", 2021, genres=("Action",)))
+    c411(films, monkeypatch, {1: page_of(films, first, more=False)})
+    films.films_c411("default", setup, STOP(), lambda _: None, walk_pause=0)
+    revision = films._films_generation
+    for _ in range(3):
+        c411(films, monkeypatch, {1: page_of(films, other, more=False)})
+        films.films_c411("default", setup, STOP(), lambda _: None, walk_pause=0)
+        c411(films, monkeypatch, {1: page_of(films, first, more=False)})
+        films.films_c411("default", setup, STOP(), lambda _: None, walk_pause=0)
+    assert films._films_generation == revision
+    assert facts_of(films, "Dune")["genres"] == ["Drame"]
+
+
 def test_the_desktop_router_serves_the_films_c411_filled(service):
     desktop, media = service
     seed_index(media, {}, [("c411", "d" * 40, "Heat.1995.MULTi.1080p.WEB.x264-TEAM", GB, 9, "")])

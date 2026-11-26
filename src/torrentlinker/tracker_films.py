@@ -104,6 +104,7 @@ class TrackerFilms(TrackerRows, AgeRatings):
         self._films_asked: set[str] = set()  # titles searched on c411 since the start
         self._films_cache: tuple[int, list[dict[str, Any]]] | None = None
         self._films_choices: tuple[int, dict[tuple[str, str], dict[str, Any]]] = (-1, {})
+        self._films_sources: dict[str, str] = {}  # film key: the release its c411 facts came from
         with self.db:
             self.db.executescript("""
                 CREATE TABLE IF NOT EXISTS film_release
@@ -728,37 +729,41 @@ class TrackerFilms(TrackerRows, AgeRatings):
                 )
             }
         found: dict[str, dict[str, Any]] = {}
+        origin: dict[str, str] = {}
         for infohash in hashes:
             listing = page.details.get(infohash)
             if listing is None or listing.kind != "movie" or not listing.title:
                 continue
             facts = self._c411_facts(listing)
-            if listing.year:
-                found.setdefault(film_key(listing.title, facts["year"]), facts)
-            if infohash in keyed:
-                found.setdefault(keyed[infohash], facts)
-        return self._films_save(found)
+            tkeys = [film_key(listing.title, facts["year"])] if listing.year else []
+            tkeys += [keyed[infohash]] if infohash in keyed else []
+            for tkey in tkeys:
+                if tkey not in found:
+                    found[tkey], origin[tkey] = facts, infohash
+        return self._films_save(found, origin=origin)
 
-    def _films_save(self, found: dict[str, dict[str, Any]], replace: bool = True) -> bool:
+    def _films_save(
+        self,
+        found: dict[str, dict[str, Any]],
+        replace: bool = True,
+        origin: dict[str, str] | None = None,
+    ) -> bool:
         """Store facts by film key; `replace` False keeps the film's facts when it has some.
-        The revision moves only when what a card draws changed."""
+        The revision moves only when what a card draws changed.
+
+        `origin` names the release each film's facts came from. Two releases of one film may
+        list slightly different facts: once one wrote them, the other does not overwrite them,
+        or a walk would rewrite them page after page and move the revision each time."""
         if not found:
             return False
-        entries = [(tkey, facts, replace) for tkey, facts in found.items()]
+        origin = origin or {}
+        sources = self._films_sources
+        entries = [
+            (tkey, facts, replace and sources.get(tkey, origin.get(tkey)) == origin.get(tkey))
+            for tkey, facts in found.items()
+        ]
         entries += [(tkey, facts, False) for tkey, facts in self._films_by_original(found).items()]
-        with self.lock:
-            kept = {
-                r["tkey"]: (
-                    r["title"],
-                    r["original_title"],
-                    r["year"],
-                    r["overview"],
-                    r["genres"],
-                    r["runtime"],
-                    r["poster"],
-                )
-                for r in self.db.execute("SELECT * FROM film_c411")
-            }
+        kept = self._films_kept([tkey for tkey, _, _ in entries])
         changed = False
         with self.lock, self.db:
             for tkey, facts, overwrite in entries:
@@ -774,6 +779,8 @@ class TrackerFilms(TrackerRows, AgeRatings):
                 if kept.get(tkey) == drawn or (tkey in kept and not overwrite):
                     continue
                 kept[tkey] = drawn
+                if tkey in origin:
+                    sources[tkey] = origin[tkey]
                 self.db.execute(
                     "INSERT OR REPLACE INTO film_c411 (tkey, title, original_title, year,"
                     " overview, genres, runtime, poster, artwork, fetched)"
@@ -785,6 +792,20 @@ class TrackerFilms(TrackerRows, AgeRatings):
         if changed:
             self._films_changed()
         return changed
+
+    def _films_kept(self, tkeys: list[str]) -> dict[str, tuple]:
+        """The stored facts of these films, as `_films_save` compares them."""
+        kept: dict[str, tuple] = {}
+        with self.lock:
+            for start in range(0, len(tkeys), 500):
+                chunk = tkeys[start : start + 500]
+                for r in self.db.execute(
+                    "SELECT tkey, title, original_title, year, overview, genres, runtime, poster"
+                    f" FROM film_c411 WHERE tkey IN ({','.join('?' * len(chunk))})",
+                    chunk,
+                ):
+                    kept[r[0]] = tuple(r[1:])
+        return kept
 
     def _films_by_original(self, found: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
         """c411 names a film by its French title; another tracker's release may name it by the
