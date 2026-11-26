@@ -1386,7 +1386,7 @@ def create_app(
                 *(["notifications"] if holder else []),
                 *(["requests"] if actor.holds(Permission.APPROVE) else []),
                 *(["member-assistant"] if actor.holds(Permission.ASSISTANT) else []),
-                *(["member-search"] if actor.holds(Permission.SEARCH) else []),
+                *(["member-search"] if actor.holds(Permission.FILMS) else []),
                 *(["member-queue"] if actor.holds(Permission.QUEUE) else []),
                 *(["member-torrents"] if actor.holds(Permission.TORRENTS) else []),
                 *(["setup"] if holder else []),

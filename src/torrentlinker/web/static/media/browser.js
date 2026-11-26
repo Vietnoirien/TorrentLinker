@@ -26,7 +26,7 @@ function mediaViews() {
   $("media-search").placeholder = say("Search your media", "Rechercher dans vos médias");
   $("media-playlist-name").placeholder = say("Playlist name", "Nom de la playlist");
   const select = $("media-view"); select.replaceChildren();
-  const choices = media.kind === "video" ? [["recent", say("Recent", "Récents")], ["continue", say("Continue watching", "Reprendre")], ["films", say("Films", "Films")], ["series", say("Series", "Séries")], ["anime", say("Anime", "Animés")], ["rated", say("Highly rated", "Les mieux notés")], ["unwatched", say("Not watched yet", "Pas encore vus")], ["all", say("All videos", "Toutes les vidéos")], ...(state.setup?.adult_content ? [["adult", "XXX"]] : [])] : [["albums", say("Albums", "Albums")], ["artists", say("Artists", "Artistes")], ["tracks", say("Tracks", "Pistes")]];
+  const choices = media.kind === "video" ? [["recent", say("Recent", "Récents")], ["continue", say("Continue watching", "Reprendre")], ["films", say("Films", "Films")], ["series", say("Series", "Séries")], ["anime", say("Anime", "Animés")], ["rated", say("Highly rated", "Les mieux notés")], ["unwatched", say("Not watched yet", "Pas encore vus")], ["all", say("All videos", "Toutes les vidéos")], ...(typeof filmsAllowed === "function" && filmsAllowed() ? [["tracker", say("On the tracker", "Sur le tracker")]] : []), ...(state.setup?.adult_content ? [["adult", "XXX"]] : [])] : [["albums", say("Albums", "Albums")], ["artists", say("Artists", "Artistes")], ["tracks", say("Tracks", "Pistes")]];
   for (const [value, label] of choices) mediaOption(select, value, label);
   select.value = media.view;
   $("media-video-tab").setAttribute("aria-selected", String(media.kind === "video"));
@@ -43,6 +43,8 @@ function rememberMediaView() {
 async function loadMedia(append = false) {
   rememberMediaView();
   if (!$("media-view").options.length) mediaViews();
+  // "On the tracker" is the Tracker Films' own page: genre rows, or one genre's grid.
+  if (media.kind === "video" && media.view === "tracker") return filmsLoad(append);
   const version = ++media.request;
   // The XXX panel is its own view: recent first, from XXX folders only.
   const adult = media.view === "adult";
@@ -202,12 +204,13 @@ function mediaRenderFeature() {
   const tags = element("dl", undefined, "media-feature-tags"); tags.id = "media-feature-details";
   const flags = typeof mediaFlags === "function" ? mediaFlags({...row, release: row.tracker?.name || row.release}) : [];
   const languages = row.language || flags.map(([text]) => text).find(text => ["MULTI", "VF", "VOSTFR"].includes(text));
-  for (const [label, value] of [[say("Languages", "Langues"), languages], [say("Genre", "Genre"), row.genre], [say("Version", "Version"), flags.map(([text]) => text).join(" · ")], [say("File size", "Poids"), mediaFileSize(row.tracker?.size ?? row.size)]]) {
+  for (const [label, value] of [[say("Languages", "Langues"), languages], [say("Genre", "Genre"), row.genre], ...(row.film && state.setup?.owner === false ? [] : [[say("Version", "Version"), flags.map(([text]) => text).join(" · ")], [say("File size", "Poids"), mediaFileSize(row.tracker?.size ?? row.size)]])]) {
     const tag = element("div", undefined, "media-feature-tag");
     tag.append(element("dt", label), element("dd", value || say("Unknown", "Inconnu"))); tags.append(tag);
   }
   content.append(tags);
   const actions = element("div", undefined, "media-feature-actions");
+  if (row.film) { filmsFeature(row, content, description, actions); content.append(actions); root.append(copy); return; }
   if (row.tracker) {
     // A film on c411, not in the library: its best release, and a way to queue it.
     description.append(mediaTrackerRelease(row.tracker));
@@ -276,7 +279,7 @@ function mediaAge(seconds) {
 }
 function mediaTrackerRelease(release) {
   const box = element("div", undefined, "media-tracker-release");
-  const pill = element("span", String(release.score), `media-score score-${release.color || "green"}`);
+  const pill = element("span", String(release.score ?? "?"), `media-score score-${release.color || "green"}`);
   pill.title = "ReleaseScore";
   const size = release.size >= 1e9 ? `${(release.size / 1e9).toFixed(1)} ${say("GB", "Go")}` : `${Math.round(release.size / 1e6)} ${say("MB", "Mo")}`;
   box.append(pill, element("span", release.name, "media-tracker-name"), element("span", [size, say(`${release.seeders} seeders`, `${release.seeders} sources`), mediaAge(release.published_at)].filter(Boolean).join(" · "), "media-tracker-facts"));
@@ -324,10 +327,11 @@ async function mediaTrackerShelves(version) {
 }
 
 function mediaHomeActive() {
+  if (media.kind === "video" && media.view === "tracker") return !media.films?.grid;
   return media.kind === "video" && ["recent", "films", "series", "anime", "adult"].includes(media.view) && !media.gridMode && (media.layout === "cinematic" || mediaHorizon("home")) && !$("media-search").value.trim()
     && ["genre", "year", "language", "availability"].every(key => !$(`media-${key}`).value);
 }
-const mediaRowTitle = row => row.key === "genre" ? row.title : ({recent: say("Recently added", "Récemment ajoutés"), series: say("Series", "Séries"), oav: say("OAV", "OAV"), films: say("Films", "Films"), rated: say("Highly rated", "Les mieux notés"), unwatched: say("Not watched yet", "Pas encore vus"), tracker: say("Available on the tracker", "Disponible sur le tracker"), upgrades: say("Better versions on the tracker", "Meilleures versions sur le tracker")})[row.key] || row.title;
+const mediaRowTitle = row => row.key === "genre" ? row.title : ({recent: say("Recently added", "Récemment ajoutés"), series: say("Series", "Séries"), oav: say("OAV", "OAV"), films: say("Films", "Films"), rated: say("Highly rated", "Les mieux notés"), unwatched: say("Not watched yet", "Pas encore vus"), tracker: say("On the tracker", "Sur le tracker"), "tracker-new": say("New on the tracker", "Nouveautés sur le tracker"), "tracker-shared": say("Most shared", "Les plus partagés"), upgrades: say("Better versions on the tracker", "Meilleures versions sur le tracker")})[row.key] || row.title;
 const mediaRowKey = row => `${row.key}:${row.title}`;
 // Horizon's Home shows one category at a time, chosen from its title.
 const mediaHorizonRow = () => media.homeRows.find(row => mediaRowKey(row) === media.horizonRow) || media.homeRows[0];
@@ -362,13 +366,14 @@ function mediaRenderHome() {
     }
     header.append(heading, element("span", row.state && row.state !== "ready" ? "" : say(`${row.total} titles`, `${row.total} titres`), "media-home-row-count"));
     if (!row.filters?.tracker) header.append(all);
-    else if (row.key === "tracker" && typeof requestPermission === "function" && requestPermission("wish")) header.append(button(say("Make a wish", "Faire un vœu"), requestWishDialog, "quiet"));
+    else if (row.filters.tracker === "films") filmsRowActions(row, header);
     header.append(back, forward);
     for (const item of row.rows) track.append(mediaRowCard(item, row, track));
     if (!row.rows.length && row.state) track.append(...mediaRowPlaceholder(row));
     section.append(header, track); root.append(section);
     if (horizon) requestAnimationFrame(() => track.querySelector('[aria-pressed="true"]')?.scrollIntoView({block: "nearest", inline: "center"}));
   }
+  if (media.view === "tracker") filmsLandingHead(root);
   // Rows can be drawn while the page is hidden; measure again whenever a row's size changes.
   mediaRowObserver ||= new ResizeObserver(mediaRowArrows);
   mediaRowObserver.disconnect();
@@ -403,8 +408,8 @@ function mediaRowCard(item, row, track) {
   }, "media-row-card");
   card.dataset.id = item.id;
   card.setAttribute("aria-label", item.title); card.setAttribute("aria-pressed", String(item.id === media.featureId));
-  if (!item.tracker) card.ondblclick = () => guard(() => mediaStart([item.id]));
-  const art = mediaArt(item); if (typeof mediaRequestBadge === "function") mediaRequestBadge(item, art);
+  if (!item.tracker && !item.film) card.ondblclick = () => guard(() => mediaStart([item.id]));
+  const art = mediaArt(item); if (item.film) filmsBadge(item, art); else if (typeof mediaRequestBadge === "function") mediaRequestBadge(item, art);
   card.append(art, element("strong", item.title), element("span", item.series_card ? say(`${item.episode_count} episodes`, `${item.episode_count} épisodes`) : [item.year, item.rating ? `★ ${item.rating}` : ""].filter(Boolean).join(" · ")));
   return card;
 }
@@ -412,7 +417,7 @@ async function mediaRowMore(row, track) {
   if (row.loading || row.rows.length >= row.total) return;
   row.loading = true;
   try {
-    const page = await api(`media?${mediaQuery({kind: "video", ...row.filters, offset: row.rows.length, limit: 40})}`);
+    const page = row.filters?.tracker === "films" ? await filmsPage(row.filters, row.rows.length, 40) : await api(`media?${mediaQuery({kind: "video", ...row.filters, offset: row.rows.length, limit: 40})}`);
     const known = new Set(row.rows.map(item => item.id));
     for (const item of page.rows) {
       if (known.has(item.id)) continue;
@@ -498,6 +503,7 @@ function mediaRender() {
   mediaRenderFeature(); mediaRenderContinue(); mediaRenderHome(); mediaRenderEpisodes(media.selected).catch(() => {});
   $("media-shelf-title").textContent = media.kind === "music" ? ({albums: say("Albums", "Albums"), artists: say("Artists", "Artistes"), tracks: say("Tracks", "Pistes")})[media.view] : ({recent: say("Recently added", "Récemment ajoutés"), continue: say("Continue watching", "Reprendre la lecture"), films: say("Films", "Films"), series: say("Series", "Séries"), anime: say("Anime", "Animés"), adult: "XXX"})[media.view] || say("Your videos", "Vos vidéos");
   $("media-shelf-count").textContent = say("From your Library Folders", "Dans vos dossiers de bibliothèque");
+  filmsShelf();
   $("media-home-back")?.remove();
   if (media.kind === "video" && media.gridMode && media.homeReturn) {
     const back = button(say("Back to rows", "Retour aux rangées"), () => guard(async () => {
@@ -510,6 +516,7 @@ function mediaRender() {
     back.id = "media-home-back"; $("media-shelf-count").after(back);
   }
   const root = $("media-results"); root.replaceChildren();
+  if (!media.rows.length && media.view === "tracker") { root.append(element("p", say("No film on the tracker yet. The list fills in as the Catalogue is read and the films are identified.", "Aucun film sur le tracker pour l’instant. La liste se remplit à mesure que le Catalogue est lu et que les films sont identifiés."), "media-empty")); return; }
   if (!media.rows.length) { root.append(element("p", say("No media found. Add a Library Folder in Library options, then refresh the inventory.", "Aucun média trouvé. Ajoutez un dossier dans les options de bibliothèque, puis actualisez les médias."), "media-empty")); root.append(button(say("Add Library Folder", "Ajouter un dossier de bibliothèque"), () => navigate("setup"))); return; }
   if (media.kind === "music" && media.view === "tracks") { mediaRenderTracks(root); return; }
   const groups = new Map();
@@ -522,7 +529,7 @@ function mediaRender() {
     const title = media.kind === "music" && media.view === "albums" ? row.album || say("Unknown album", "Album inconnu") : media.kind === "music" && media.view === "artists" ? row.artist || say("Unknown artist", "Artiste inconnu") : row.title;
     // A series card unfolds its episodes; any other card opens its details.
     const wall = media.kind === "video" && mediaHorizon("wall");
-    const artwork = button("", () => wall ? mediaSelectFeature(row) : row.series_card ? (mediaSelectFeature(row), $("media-feature").scrollIntoView({block: "nearest", behavior: "smooth"})) : mediaDetails(row.id), "media-poster-button"); artwork.setAttribute("aria-label", wall ? title : `${say("Details", "Détails")}: ${title}`);
+    const artwork = button("", () => wall ? mediaSelectFeature(row) : row.film ? filmsShow(row) : row.series_card ? (mediaSelectFeature(row), $("media-feature").scrollIntoView({block: "nearest", behavior: "smooth"})) : mediaDetails(row.id), "media-poster-button"); artwork.setAttribute("aria-label", wall ? title : `${say("Details", "Détails")}: ${title}`);
     if (wall) { artwork.dataset.id = row.id; artwork.setAttribute("aria-pressed", String(row.id === media.featureId)); artwork.ondblclick = () => guard(() => mediaDetails(row.id)); }
     if (media.kind === "music" && media.view === "artists") {
       const initials = title.split(/\s+/).slice(0, 2).map(part => [...part][0]).join("");
@@ -539,6 +546,7 @@ function mediaRender() {
     const play = mediaCanPreview(row) ? mediaPreviewAction(row) : button(say("Play", "Lire"), () => mediaStart(mediaGroupIds(rows))); play.disabled = row.available === false && !mediaCanPreview(row);
     actions.append(play, button(say("Details", "Détails"), () => mediaDetails(row.id)));
     if (media.kind === "music") actions.append(button(say("Add to queue", "Ajouter à la file"), async () => mediaEnqueue(await mediaGroupIds(rows))));
+    if (row.film) filmsDecorate(row, artwork, actions);
     card.append(actions); root.append(card);
   }
 }

@@ -124,7 +124,8 @@ def test_who_watches_on_a_shared_screen_with_the_pin_rule(server):
     ]
     assert browser.post("/api/screen/choose", json={"viewer": hugo}).status_code == 200
     shell = browser.get("/api/shell").json()
-    assert shell["actor"]["name"] == "Hugo" and shell["pages"] == ["media", "documentation"]
+    assert shell["actor"]["name"] == "Hugo"
+    assert shell["pages"] == ["media", "documentation", "member-search"]
     assert shell["sections"] == []
     # A Viewer: Media only, never Requests nor "Mon compte".
     assert browser.get("/api/media").status_code == 200

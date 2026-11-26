@@ -3,9 +3,10 @@
 import json
 
 
-def seed_index(media, films, releases):
+def seed_index(media, films, releases, poster=True):
     """`films`: tmdb -> (title, original title, year, genres, rating, runtime);
-    `releases`: (tracker, hash, name, size, seeders, tmdb), an empty tmdb being unidentified."""
+    `releases`: (tracker, hash, name, size, seeders, tmdb), an empty tmdb being unidentified. A browser test passes `poster=False`:
+    a poster is downloaded from TMDb when a page shows it."""
     with media.lock, media.db:
         for tmdb, (title, original, year, genres, rating, runtime) in films.items():
             media.db.execute(
@@ -20,7 +21,7 @@ def seed_index(media, films, releases):
                     json.dumps(genres, ensure_ascii=False),
                     runtime,
                     rating,
-                    f"https://image.tmdb.org/t/p/w500/{tmdb}.jpg",
+                    f"https://image.tmdb.org/t/p/w500/{tmdb}.jpg" if poster else "",
                 ),
             )
         for position, (site, infohash, name, size, seeders, tmdb) in enumerate(releases):

@@ -53,7 +53,7 @@ const pages = {
     "Lisez les vidéos et la musique de vos dossiers de bibliothèque.",
   ],
   "member-assistant": ["Assistant", "Assistant", "Your private discussions and permitted tools.", "Vos discussions privées et vos outils autorisés."],
-  "member-search": ["Search", "Recherche", "Search the tracker and request a film.", "Consultez le tracker et demandez un film."],
+  "member-search": ["Films on the tracker", "Films sur le tracker", "Browse the films on the tracker and ask for one.", "Parcourez les films du tracker et demandez-en un."],
   "member-queue": ["My queue", "Ma file", "Your accepted Requests.", "Vos demandes acceptées."],
   "member-torrents": ["My downloads", "Mes téléchargements", "Downloads from your accepted Requests.", "Les téléchargements de vos demandes acceptées."],
   notifications: ["Notifications", "Notifications", "Updates for your account.", "Les nouvelles de votre compte."],

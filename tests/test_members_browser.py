@@ -7,6 +7,7 @@ import time
 
 import pytest
 
+from tests.film_support import seed_index
 from tests.shell_support import shell_navigate
 from tests.test_web_plan_execution import prepared
 from torrentlinker.web.app import create_app
@@ -301,29 +302,12 @@ def test_a_member_asks_for_a_tracker_film_and_follows_it_in_the_bell(tmp_path):
     )
     app.state.accounts.set_caps(lea, Caps(requests_per_week=3, bytes_per_week=100 * 10**9))
     dune = "d" * 40
-    best = {"hash": dune, "name": "Dune.Part.Two.2024.1080p", "size": 7 * 10**9, "seeders": 80}
-    item = {
-        "id": "tracker-" + dune,
-        "kind": "video",
-        "title": "Dune",
-        "year": "2024",
-        "artwork_url": "",
-        "available": True,
-        "tracker": {**best, "score": 81, "color": "green", "published_at": None},
-    }
-    library = app.state.agent_service.media
-    library.tracker_rows = lambda *_: {
-        "tracker": {
-            "key": "tracker",
-            "title": "",
-            "filters": {"tracker": "tracker"},
-            "total": 1,
-            "rows": [item],
-            "state": "ready",
-        }
-    }
-    library.films_row = lambda client_id, actor, waiting: waiting  # the row as stubbed above
-    library.tracker_entry = lambda *_: {"facts": {"title": "Dune", "year": 2024}, "release": best}
+    seed_index(
+        app.state.agent_service.media,
+        {"7": ("Dune", "Dune", "2024", ["Science-Fiction"], "12", 166)},
+        [("c411", dune, "Dune.Part.Two.2024.1080p", 7 * 10**9, 80, "7")],
+        poster=False,
+    )
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
         listener.listen()
@@ -355,11 +339,14 @@ def test_a_member_asks_for_a_tracker_film_and_follows_it_in_the_bell(tmp_path):
                 [asked] = app.state.requests.mine(lea)
                 assert asked["state"] == "pending" and asked["size"] == 7 * 10**9
 
-                frame.get_by_role("button", name="Make a wish").first.click()
+                # The wish is made from the panel, or from the bell's drawer once a film is asked.
+                frame.locator("#media-requests-bell").click()
+                frame.locator("#media-requests").get_by_role("button", name="Make a wish").click()
                 dialog = frame.locator("#media-wish")
                 dialog.get_by_label("Title").fill("Ponyo")
                 dialog.get_by_role("button", name="Send the wish").click()
                 expect(dialog).to_be_hidden()
+                frame.locator("#media-requests").get_by_role("button", name="Close").click()
 
                 app.state.requests.move(asked["id"], "refused", "owner", "Already in 4K")
                 frame.locator("#media-requests-bell").evaluate(

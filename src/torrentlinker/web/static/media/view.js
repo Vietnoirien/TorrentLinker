@@ -6,11 +6,11 @@ const mediaToggleChat=async()=>{await mediaSelectionChanged(media.selected);retu
 function mediaSelectionChanged(row){
   return guard(async()=>{
     await host("context",{kind:media.kind,view:media.view,q:$("media-search").value,...Object.fromEntries(["genre","year","language","availability"].map(key=>[key,$(`media-${key}`).value]))});
-    await host("selection",{selected_ids:row&&!row.tracker?[row.id]:[]}); // a tracker film is not in the library
+    await host("selection",{selected_ids:row&&!row.tracker&&!row.film?[row.id]:[]}); // a tracker film is not in the library
   });
 }
 async function mediaKind(kind){
-  media.kind=kind;media.view=mediaViewsByKind[kind][0];media.ratingsPage=false;media.gridMode=false;media.animeFilters={};
+  media.kind=kind;media.view=mediaViewsByKind[kind][0];media.ratingsPage=false;media.gridMode=false;media.films=null;media.animeFilters={};
   for(const key of ["genre","year","language","availability"])$(`media-${key}`).value="";
   mediaViews();await host("kind",{kind});await loadMedia();
 }
@@ -50,11 +50,11 @@ $("media-layout-switch").onchange=event=>mediaSetLayout(event.target.value);
 $("media-horizon-switch").onchange=event=>mediaSetHorizon(event.target.value);
 for(const node of document.querySelectorAll("[data-view=setup]"))node.onclick=()=>guard(navigate);
 for(const node of document.querySelectorAll("[data-media-view]"))node.onclick=()=>guard(async()=>{
-  media.gridMode=false;media.ratingsPage=false;media.animeFilters={};
+  media.gridMode=false;media.films=null;media.ratingsPage=false;media.animeFilters={};
   for(const key of ["genre","year","language","availability"])$(`media-${key}`).value="";
   media.view=node.dataset.mediaView;$("media-view").value=media.view;await loadMedia();
 });
-$("media-view").onchange=()=>guard(async()=>{media.view=$("media-view").value;await loadMedia()});
+$("media-view").onchange=()=>guard(async()=>{media.films=null;media.view=$("media-view").value;await loadMedia()});
 for(const key of ["genre","year","language","availability"])$(`media-${key}`).onchange=()=>guard(loadMedia);
 let searchTimer;
 $("media-search").oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>guard(loadMedia),250)};

@@ -420,7 +420,7 @@ const viewTabs = {
 };
 const agentTabs = ["connections", "new", "activity"];
 const mediaViewsByKind = {
-  video: ["recent", "continue", "films", "series", "anime", "rated", "unwatched", "all", "adult"],
+  video: ["recent", "continue", "films", "series", "anime", "rated", "unwatched", "all", "tracker", "adult"],
   music: ["albums", "artists", "tracks"],
 };
 const rememberedTabs = {};
@@ -470,6 +470,8 @@ async function openFragment() {
 window.addEventListener("hashchange", () => guard(openFragment));
 async function navigate(view, section, detail) {
   if (view === "agents") { view = "setup"; section = "agents"; }
+  // A Member's "Films on the tracker" is Médias' own "On the tracker" page.
+  if (view === "member-search") { view = "media"; section = "video"; detail = "tracker"; }
   const requested = [view, ...(section ? [section, ...(detail ? [detail] : [])] : rememberedTabs[view] || [])];
   const parts = resolveRoute(routeFragment(requested));
   [view, section, detail] = parts;
@@ -513,7 +515,7 @@ async function navigate(view, section, detail) {
   if (view === "requests") await loadRequests();
   if (view === "notifications") await loadNotifications();
   if (view === "member-assistant") await loadMemberAssistant();
-  if (["member-search", "member-queue", "member-torrents"].includes(view)) await loadMemberWorkspace(view);
+  if (["member-queue", "member-torrents"].includes(view)) await loadMemberWorkspace(view);
   if (view === "torrents") await loadTorrents();
   if (view === "queue") await loadQueue();
   if (view === "feeds") await loadFeeds();

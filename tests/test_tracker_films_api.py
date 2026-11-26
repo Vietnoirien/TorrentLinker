@@ -246,7 +246,7 @@ def test_only_the_owner_corrects_a_film(server):
         browser.post("/api/media/tracker-films/tmdb-4/rating", json={"rating": "12"}).status_code
         == 200
     )
-    assert browser.get("/api/media/tracker-films/tmdb-4").json()["rating"] == "12"
+    assert browser.get("/api/media/tracker-films/tmdb-4").json()["age_rating"]["rating"] == "12"
 
 
 def test_a_catalogue_release_can_be_read_as_a_suggestion(server):

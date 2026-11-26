@@ -79,7 +79,7 @@ window.addEventListener("message",async event=>{
       if(mediaHorizonViews.includes(message.body.horizon)){media.horizon=message.body.horizon;try{localStorage.setItem("tl-media-horizon",media.horizon)}catch{}}
       value={layout:mediaLayoutValue(media.layout),horizon:mediaHorizonValue(media.horizon)};
     }else{
-      if(!/^(prerolls(?:\/[a-z-]+)?$|media(?:\?|\/home\?|\/items\/[^/]+(?:\?|\/(?:watched|forget-progress|rating)$|\/artwork\?)|\/ratings(?:\?|\/confirm$)|\/playlists(?:$|\?|\/[^/?]+\?)|\/tracker\/[0-9a-f]{40}\/download$)|media\/scan$|requests(?:\?|\/seen$|\/[0-9a-f]{32}\/cancel$|$)|wishes$|jobs\/[^/]+(?:\/cancel)?$)/.test(message.path))throw Error("Unknown Media operation");
+      if(!/^(prerolls(?:\/[a-z-]+)?$|media(?:\?|\/home\?|\/items\/[^/]+(?:\?|\/(?:watched|forget-progress|rating)$|\/artwork\?)|\/ratings(?:\?|\/confirm$)|\/tracker-films(?:\?|\/landing\?|\/[a-z0-9-]+\?|\/[a-z0-9-]+\/rematch$|\/releases\/[a-z0-9]+\/[0-9a-f]{40}\/rematch$)|\/playlists(?:$|\?|\/[^/?]+\?)|\/tracker\/[0-9a-f]{40}\/download$)|media\/scan$|requests(?:\?|\/seen$|\/[0-9a-f]{32}\/cancel$|$)|wishes$|jobs\/[^/]+(?:\/cancel)?$)/.test(message.path))throw Error("Unknown Media operation");
       let client=mediaClient();
       if(message.path==="media/playlists" && message.body.method==="POST"){
         const owner=media.playerClient||client;

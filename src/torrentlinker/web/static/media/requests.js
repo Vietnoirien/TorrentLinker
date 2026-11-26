@@ -18,8 +18,8 @@ function requestState(row) {
 }
 const requestSize = bytes => `${Math.max(0, Math.floor(bytes / 1e9))} ${say("GB", "Go")}`;
 const requestDay = seconds => new Date(seconds * 1000).toLocaleDateString(language === "fr" ? "fr-FR" : "en-GB", {weekday: "long", day: "numeric", month: "long"});
-// The request still open for a tracker release, if any.
-const requestFor = infohash => requests.rows.find(row => row.infohash === infohash && !["refused", "cancelled", "expired"].includes(row.state));
+// The request still open for a Tracker Film, if any.
+const requestFor = film => requests.rows.find(row => row.film === film && !["refused", "cancelled", "expired"].includes(row.state));
 // Why a new Request would be refused, or "" while the caps allow one of this size.
 function requestBlocked(size = 0) {
   const quota = requests.quota;
@@ -95,11 +95,12 @@ async function requestCancel(row) {
   toast(say("Request cancelled", "Demande annulée"));
   await requestsLoad(); mediaRenderFeature(); mediaRenderHome();
 }
-// The tracker film's panel for a Member: "Ask the owner", or the state of their Request.
+// The Tracker Film's panel for a Member: "Ask the owner", or the state of their Request. The
+// quota is checked against the release the owner pre-selected, shared with whoever asked too.
 function mediaRequestActions(row, copy, actions) {
-  const asked = requestFor(row.tracker.hash);
+  const asked = requestFor(row.film);
   // The latest answer stays on the panel, a refusal's note included; asking again is allowed.
-  const latest = asked || requests.rows.find(item => item.infohash === row.tracker.hash && item.state !== "cancelled");
+  const latest = asked || requests.rows.find(item => item.film === row.film && item.state !== "cancelled");
   if (latest) {
     const [label, tone] = requestState(latest), line = element("div", undefined, "media-request-state");
     const said = latest.answer ? `${latest.answered_by || say("The owner", "Le propriétaire")} : « ${latest.answer} »` : "";
@@ -107,15 +108,18 @@ function mediaRequestActions(row, copy, actions) {
     copy.append(line);
   }
   if (asked) {
+    if (asked.state === "pending" && asked.shared_with) copy.append(element("p", say(`Asked together with ${asked.shared_with} other member${asked.shared_with > 1 ? "s" : ""}: ${mediaFileSize(asked.size)} count against your quota, your share of the ${mediaFileSize(asked.quoted)} pre-selected release.`, `Demandé avec ${asked.shared_with} autre${asked.shared_with > 1 ? "s" : ""} membre${asked.shared_with > 1 ? "s" : ""} : ${mediaFileSize(asked.size)} comptés sur votre quota, votre part des ${mediaFileSize(asked.quoted)} de la release pré-sélectionnée.`), "media-quota"));
     if (asked.state === "pending") actions.append(button(say("Cancel the Request", "Annuler la demande"), () => requestCancel(asked), "media-secondary"));
   } else {
     if (requestPermission("request")) {
-      const blocked = requestBlocked(row.tracker.size);
-      copy.append(requestQuotaLine(row.tracker.size));
+      const blocked = requestBlocked(row.quote);
+      const line = requestQuotaLine(row.quote);
+      line.textContent += say(" The quota counts the release the owner pre-selected; if they choose a bigger one, it costs you nothing more.", " Le quota compte la release que le propriétaire a pré-sélectionnée ; s’il en choisit une plus lourde, cela ne vous coûte rien de plus.");
+      copy.append(line);
       const ask = button(say("Ask the owner", "Demander au propriétaire"), async () => {
         ask.disabled = true;
         try {
-          await api("requests", {infohash: row.tracker.hash});
+          await api("requests", {film: row.film});
           toast(say(`Request sent for ${row.title}`, `Demande envoyée pour ${row.title}`));
         } finally { await requestsLoad(); mediaRenderFeature(); mediaRenderHome(); }
       }, "media-primary");
@@ -128,7 +132,7 @@ function mediaRequestActions(row, copy, actions) {
 }
 // The poster badge of a tracker film the Member asked for.
 function mediaRequestBadge(item, art) {
-  const asked = item.tracker && requestsShown() && requestFor(item.tracker.hash);
+  const asked = item.film && requestsShown() && requestFor(item.film);
   if (!asked) return;
   const [label, tone] = requestState(asked);
   art.append(element("span", label, `media-poster-badge ${tone}`));

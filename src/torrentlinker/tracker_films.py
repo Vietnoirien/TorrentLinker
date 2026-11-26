@@ -649,7 +649,10 @@ class TrackerFilms(TrackerRows, AgeRatings):
             "film": film["id"],
             "title": film["title"],
             "year": film["year"],
-            "rating": film["rating"],
+            # The Age Rating, as a library item's: the panel draws it before the year.
+            "age_rating": {"rating": film["rating"], "source": "tmdb", "by": "", "suggestion": None}
+            if film["rating"]
+            else None,
             "genre": ", ".join(film["genres"]),
             "description": film["overview"],
             "duration": film["runtime"] * 60,

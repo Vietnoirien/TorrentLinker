@@ -189,17 +189,13 @@ def test_the_shell_is_trimmed_to_the_member(server):
     sign_in(browser, "lea")
     shell = browser.get("/api/shell").json()
     # Settings hold "Mon compte" for every account holder (#135).
-    assert shell["pages"] == ["media", "documentation", "notifications", "setup"]
+    assert shell["pages"] == ["media", "documentation", "notifications", "member-search", "setup"]
     assert not shell["actor"]["owner"] and shell["release"] is None
     assert shell["setup"]["adult_content"] is False and shell["setup"]["clients"] == []
     assert browser.get("/api/setup").status_code == 403
     sign_in(browser, "tom")
-    assert browser.get("/api/shell").json()["pages"] == [
-        "documentation",
-        "notifications",
-        "member-search",
-        "setup",
-    ]
+    # Search no longer opens the tracker's films: that is the Films Permission's.
+    assert browser.get("/api/shell").json()["pages"] == ["documentation", "notifications", "setup"]
     assert browser.get("/api/media").status_code == 403
     login(browser)
     assert browser.get("/api/shell").json()["actor"]["owner"]

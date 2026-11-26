@@ -12,7 +12,7 @@ const api=(path,body,method)=>panelRequest(path,{body,method:method||(body===und
 const host=(action,values={})=>panelRequest("host",{action,values});
 const navigate=()=>host("settings");
 function rememberTab(){}
-const mediaViewsByKind={video:["recent","continue","films","series","anime","rated","unwatched","all"],music:["albums","artists","tracks"]};
+const mediaViewsByKind={video:["recent","continue","films","series","anime","rated","unwatched","all","tracker"],music:["albums","artists","tracks"]};
 const prefs=new Map();
 window.mediaHostPreferences={getItem:key=>prefs.get(key),setItem:(key,value)=>{prefs.set(key,value);if(panelRequest)guard(()=>panelRequest("preferences",key==="tl-media-horizon"?{horizon:value}:{layout:value}))}};
 const artCache=new Map();
