@@ -435,6 +435,50 @@ def test_the_scan_downloads_the_posters_the_landing_opens_on(films, monkeypatch)
     assert films.film_poster_entries("default") == []
 
 
+def library_body(films):
+    with films.lock:
+        row = films.db.execute("SELECT id, body FROM media_items").fetchone()
+    return row["id"], json.loads(row["body"])
+
+
+def test_library_films_and_the_index_share_film_facts_both_ways(films):
+    identifier, body = library_body(films)
+    assert (body["title"], body["year"]) == ("The Revenant", "2015")
+    asset = "asset:" + "a" * 64 + ".webp"
+    tkey = film_key("The Revenant", "2015")
+    with films.lock, films.db:
+        films.db.execute(
+            "INSERT INTO film_c411 VALUES (?, 'The Revenant', 'The Revenant', '2015',"
+            " 'Un trappeur.', '[\"Aventure\"]', 156, ?, ?, 0)",
+            (tkey, POSTER.format("revenant"), asset),
+        )
+    # c411's release details described nothing: the index's facts fill it, its poster too.
+    films.library_facts("default")
+    _, body = library_body(films)
+    assert body["description"] == "Un trappeur." and body["genre"] == "Aventure"
+    assert body["remote_artwork"] == POSTER.format("revenant") and body["artwork"] == asset
+    # A film c411's release details described gives its facts to a film the index lacks.
+    described = body | {
+        "title": "Heat",
+        "year": "1995",
+        "release_details": "e" * 40,
+        "description": "Un braquage.",
+        "genre": "Crime, Drame",
+        "remote_artwork": POSTER.format("heat"),
+    }
+    with films.lock, films.db:
+        films.db.execute(
+            "UPDATE media_items SET body=? WHERE id=?", (json.dumps(described), identifier)
+        )
+    films.library_facts("default")
+    with films.lock:
+        heat = films.db.execute(
+            "SELECT overview, genres, poster FROM film_c411 WHERE tkey=?",
+            (film_key("Heat", "1995"),),
+        ).fetchone()
+    assert tuple(heat) == ("Un braquage.", '["Crime", "Drame"]', POSTER.format("heat"))
+
+
 def test_a_tmdb_key_added_later_takes_over_and_keeps_the_owners_corrections(films, monkeypatch):
     setup = no_key(films)
     pages = [

@@ -403,6 +403,88 @@ class TrackerFilms(TrackerRows, AgeRatings):
             self._films_stamp("films-run:" + client_id)
         return status
 
+    # -- The library and the film facts ---------------------------------------------------
+
+    def library_facts(self, client_id) -> None:
+        """Share film facts both ways with the library, after the scan described it.
+
+        A library film c411's release details left without a poster or a synopsis takes the
+        film facts the index holds for its title and year, without a request. A film those
+        details did describe gives its facts to a film the index has none for."""
+        with self.lock:
+            rows = self.db.execute(
+                "SELECT id, body FROM media_items WHERE client=?", (client_id,)
+            ).fetchall()
+        updates, found = [], {}
+        for row in rows:
+            body = json.loads(row["body"])
+            if body.get("kind") != "video" or body.get("series"):
+                continue
+            title, year = (body.get("title") or "").strip(), str(body.get("year") or "")
+            if not title or not year:
+                continue
+            tkeys = [film_key(t, year) for t in (title, body.get("original_title")) if t]
+            bare = not body.get("description") or not (
+                body.get("artwork") or body.get("remote_artwork")
+            )
+            if bare:
+                facts = self._film_facts(tkeys)
+                if facts and self._library_fill(body, facts):
+                    updates.append((json.dumps(body), client_id, row["id"]))
+            elif body.get("release_details") and body.get("description"):
+                poster = str(body.get("remote_artwork") or "")
+                found[tkeys[0]] = {
+                    "title": title,
+                    "original_title": str(body.get("original_title") or ""),
+                    "year": year,
+                    "overview": body["description"],
+                    "genres": [g.strip() for g in str(body.get("genre") or "").split(",") if g],
+                    "runtime": round((body.get("duration") or 0) / 60),
+                    "poster": poster if poster.startswith("https://image.tmdb.org/") else "",
+                }
+        if updates:
+            with self.lock, self.db:
+                self.db.executemany(
+                    "UPDATE media_items SET body=? WHERE client=? AND id=?", updates
+                )
+        self._films_save(found, replace=False)
+
+    def _film_facts(self, tkeys: list[str]) -> dict[str, Any] | None:
+        """The facts the index holds for a film key: TMDb's when it identified it, else c411's."""
+        with self.lock:
+            for tkey in tkeys:
+                row = (
+                    self.db.execute(
+                        "SELECT m.* FROM film_title t JOIN film_meta m ON m.tmdb = t.tmdb"
+                        " WHERE t.tkey=?",
+                        (tkey,),
+                    ).fetchone()
+                    or self.db.execute("SELECT * FROM film_c411 WHERE tkey=?", (tkey,)).fetchone()
+                )
+                if row is not None:
+                    return dict(row)
+        return None
+
+    @staticmethod
+    def _library_fill(body: dict[str, Any], facts: dict[str, Any]) -> bool:
+        """Fill what the library film lacks; True when anything was filled."""
+        filled = False
+        if not body.get("description") and facts.get("overview"):
+            body["description"], filled = facts["overview"], True
+        if not body.get("genre") and facts.get("genres"):
+            body["genre"] = ", ".join(json.loads(facts["genres"] or "[]"))
+            filled = filled or bool(body["genre"])
+        if not body.get("original_title") and facts.get("original_title"):
+            body["original_title"] = facts["original_title"]
+        poster = str(facts.get("poster") or "")
+        if not (body.get("artwork") or body.get("remote_artwork")) and poster.startswith(
+            "https://image.tmdb.org/"
+        ):
+            body["remote_artwork"], filled = poster, True
+            if re.fullmatch(r"asset:[a-f0-9]{64}\.(png|webp)", str(facts.get("artwork") or "")):
+                body["artwork"] = facts["artwork"]  # the index already downloaded it
+        return filled
+
     # -- Filling on demand (decision 25) -----------------------------------------------------
 
     def films_progress(self) -> tuple[int, int]:

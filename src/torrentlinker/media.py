@@ -694,6 +694,7 @@ class MediaLibrary(TrackerFilms):
         if details not in {"limit", "rejected"}:
             self.tracker_refresh(client_id, setup, stop)
             self.films_refresh(client_id, setup, stop)
+        self.library_facts(client_id)
         self.prefetch_posters(client_id, stop, progress)
         if stop.is_set():
             return {"cancelled": True}
