@@ -350,6 +350,35 @@ def test_a_rating_set_by_hand_is_kept(films):
     assert next(f for f in query(films)["rows"] if f["id"] == "tmdb-2")["rating"] == "TP"
 
 
+def test_pages_asking_at_once_build_the_index_once_and_posters_take_the_previous_one(
+    films, monkeypatch
+):
+    run(films)
+    previous = films._film_index()
+    films._films_changed()
+    builds, started, release = [], threading.Event(), threading.Event()
+    build = films._film_index_build
+
+    def slow():
+        builds.append(1)
+        started.set()
+        release.wait(5)
+        return build()
+
+    monkeypatch.setattr(films, "_film_index_build", slow)
+    answers = []
+    pages = [threading.Thread(target=lambda: answers.append(films._film_index())) for _ in "ab"]
+    for page in pages:
+        page.start()
+    assert started.wait(5)
+    # A poster does not wait for the build: the previous index names its film.
+    assert films._film_index(stale_ok=True) is previous
+    release.set()
+    for page in pages:
+        page.join(5)
+    assert len(builds) == 1 and answers[0] is answers[1] is not previous
+
+
 def test_seeders_and_sizes_moving_do_not_move_the_revision_new_films_do(films, tmp_path):
     # A page following the index fetches again when the revision moves: a Catalogue refresh
     # changing seeder counts must not make it reorder its cards.

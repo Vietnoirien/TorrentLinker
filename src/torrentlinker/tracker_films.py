@@ -101,6 +101,7 @@ class TrackerFilms(TrackerRows, AgeRatings):
         self._films_status: tuple[int, tuple[int, int]] | None = None
         self._films_resting: dict[str, float] = {}
         self._films_working = threading.Lock()  # one identification at a time
+        self._films_building = threading.Lock()  # one index build at a time; others wait for it
         self._films_asked: set[str] = set()  # titles searched on c411 since the start
         self._films_cache: tuple[int, list[dict[str, Any]]] | None = None
         self._films_choices: tuple[int, dict[tuple[str, str], dict[str, Any]]] = (-1, {})
@@ -961,11 +962,24 @@ class TrackerFilms(TrackerRows, AgeRatings):
 
     # -- The index -------------------------------------------------------------------------
 
-    def _film_index(self) -> list[dict[str, Any]]:
-        """Every film with its releases, grouped; kept until something changes."""
+    def _film_index(self, stale_ok: bool = False) -> list[dict[str, Any]]:
+        """Every film with its releases, grouped; kept until something changes. `stale_ok`
+        takes the previous index while another caller builds the next (a poster needs no
+        newer one)."""
         cached = self._films_cache
-        if cached is not None and cached[0] == self._films_generation:
+        if cached is not None and (
+            cached[0] == self._films_generation or stale_ok and self._films_building.locked()
+        ):
             return cached[1]
+        # A page asks for a dozen posters at once: each one building the index (2 s at 80,000
+        # films, all on the one interpreter) made every one of them wait for all the others.
+        with self._films_building:
+            cached = self._films_cache
+            if cached is not None and cached[0] == self._films_generation:
+                return cached[1]
+            return self._film_index_build()
+
+    def _film_index_build(self) -> list[dict[str, Any]]:
         generation = self._films_generation
         with self.lock:
             releases = self.db.execute("SELECT * FROM film_release").fetchall()
@@ -1032,8 +1046,10 @@ class TrackerFilms(TrackerRows, AgeRatings):
             self._films_cache = (generation, index)
         return index
 
-    def _film_by_id(self, client_id, setup, identifier: str) -> dict[str, Any]:
-        for film in self._film_index():
+    def _film_by_id(
+        self, client_id, setup, identifier: str, stale_ok: bool = False
+    ) -> dict[str, Any]:
+        for film in self._film_index(stale_ok):
             if film["id"] == identifier:
                 return film
         raise KeyError(identifier)
@@ -1385,7 +1401,7 @@ class TrackerFilms(TrackerRows, AgeRatings):
         """Whether the actor may see this film's poster: as for its page, a hidden film is as
         missing as an unknown one."""
         try:
-            film = self._film_by_id(client_id, self.setup(client_id), identifier)  # type: ignore[attr-defined]
+            film = self._film_by_id(client_id, self.setup(client_id), identifier, stale_ok=True)  # type: ignore[attr-defined]
         except KeyError:
             return False
         return self._may_see(film, self._held(film, self._in_library(client_id)), actor)
@@ -1458,7 +1474,7 @@ class TrackerFilms(TrackerRows, AgeRatings):
         c411 knows has c411's poster, which is TMDb-hosted too: no key is needed to load it."""
         from torrentlinker import media_artwork
 
-        film = self._film_by_id(client_id, self.setup(client_id), identifier)  # type: ignore[attr-defined]
+        film = self._film_by_id(client_id, self.setup(client_id), identifier, stale_ok=True)  # type: ignore[attr-defined]
         if not film["poster"].startswith("https://image.tmdb.org/"):
             return None
         if film["tmdb"]:
