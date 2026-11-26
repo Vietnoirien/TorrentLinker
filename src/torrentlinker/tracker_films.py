@@ -389,8 +389,10 @@ class TrackerFilms(TrackerRows, AgeRatings):
         finally:
             self._films_working.release()
         if status == "off":
-            self._films_from_cache(client_id)  # no TMDb key: what c411 already told us
-        if status in {"complete", "off"}:
+            # No TMDb key: what c411 already told us. c411's listing is the index job's to
+            # walk, so this run is not recorded: it would hold that job off (`films_behind`).
+            self._films_from_cache(client_id)
+        if status == "complete":
             self._films_stamp("films-run:" + client_id)
         return status
 

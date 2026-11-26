@@ -139,6 +139,9 @@ def test_the_facts_the_suggestions_already_cached_fill_the_index_at_once(films):
     films._films_from_cache("default")
     assert films._films_generation == revision
     assert facts_of(films, "Alien")["identified"] is False
+    # The Media scan's refresh runs every minute: without a key it must not hold off the index
+    # job, which walks c411's listing for what is left.
+    assert films.films_behind("default", setup) is True
 
 
 def test_the_films_on_screen_are_searched_first_and_matched_by_release(films, monkeypatch):
