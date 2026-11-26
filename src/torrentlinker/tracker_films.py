@@ -18,6 +18,7 @@ import json
 import re
 import threading
 import time
+from datetime import date
 from typing import Any
 
 from guessit import guessit
@@ -66,7 +67,10 @@ UNAVAILABLE_PAUSE = 60.0  # seconds before a page may start the job again after 
 WALK_PAUSE = 10.0  # seconds between two pages of c411's film listing (decision 26)
 FOCUS_PAUSE = 2.0  # seconds between two searches for the films on screen
 LIMIT_PAUSE = 3600.0  # seconds c411 is left alone after it asked to wait
-WALK_PARAMS = {"category": "1", "sortBy": "createdAt", "sortOrder": "desc"}
+FILM_ROOT = "1"  # c411's native root of the films; its children are the film categories
+SLICE_CAP = 10_000  # releases c411 reports for one search; it answers no page deeper than this
+FIRST_YEAR = 1900  # the oldest year c411's `year` filter takes
+RECENT_YEARS = 3  # years a finished walk reads again, newest pages only
 
 
 def film_id(tmdb: str, tkey: str, tracker: str, infohash: str) -> str:
@@ -485,23 +489,26 @@ class TrackerFilms(TrackerRows, AgeRatings):
         (or refuses the key), "unavailable" after three failures, "cancelled" or "complete".
         """
         from torrentlinker.indexer import KeyRefused, RateLimited
-        from torrentlinker.torrent_search import native_search
 
         self._films_from_cache(client_id)
+        self._films_from_details()
         try:
             indexer = setup.indexer()
         except Exception:
             return "off"
         if not indexer.is_c411:
             return "off"
-        walk_key = "films-walk:" + client_id
+        walk_key = "films-years:" + client_id  # per-year slices; "films-walk:" was one capped walk
         with self.lock:
             row = self.db.execute("SELECT body FROM media_options WHERE key=?", (walk_key,))
             saved = row.fetchone()
-        state = json.loads(saved[0]) if saved else {"page": 1, "done": False}
-        # A finished walk starts again at the newest page and stops at the first that adds nothing.
-        new_only = state["done"]
-        page_number = 1 if new_only else state["page"]
+        walk = json.loads(saved[0]) if saved else self._films_slices(FIRST_YEAR)
+        # A finished walk starts again at the newest years, each read up to the first page that
+        # adds nothing; that pass is not saved.
+        fresh = walk["done"]
+        if fresh:
+            walk = self._films_slices(date.today().year + 2 - RECENT_YEARS, walk["capped"])
+        children: list[int] | None = None
         failures = 0
         with indexer.background(stop):
             while True:
@@ -513,16 +520,24 @@ class TrackerFilms(TrackerRows, AgeRatings):
                         self._films_search(indexer, *wanted)
                         wait = min(walk_pause, FOCUS_PAUSE)
                     else:
-                        page = native_search(indexer, WALK_PARAMS, page_number)
-                        changed = self._films_read(page)
+                        if children is None:
+                            children = self._films_children(indexer)
+                        more = self._films_step(indexer, walk, children, fresh)
                         done, total = self.films_progress()
-                        progress({"phase": "c411", "identified": done, "total": total})
-                        if not page.has_more or (new_only and not changed):
-                            self._films_walk(walk_key, 1, True)
+                        progress(
+                            {
+                                "phase": "c411",
+                                "identified": done,
+                                "total": total,
+                                "capped": len(walk["capped"]),
+                            }
+                        )
+                        if not more:
+                            walk["done"] = True
+                            self._films_walk(walk_key, walk)
                             return "complete"
-                        page_number += 1
-                        if not new_only:
-                            self._films_walk(walk_key, page_number, False)
+                        if not fresh:
+                            self._films_walk(walk_key, walk)
                         wait = walk_pause
                 except (RateLimited, KeyRefused):
                     return "limit"
@@ -536,11 +551,91 @@ class TrackerFilms(TrackerRows, AgeRatings):
                 if stop.wait(wait):
                     return "cancelled"
 
-    def _films_walk(self, key: str, page: int, done: bool) -> None:
+    @staticmethod
+    def _films_slices(floor: int, capped=()) -> dict[str, Any]:
+        """A walk's cursor: the year (newest first, down to `floor`), the slices of that year
+        still to read (`todo`), the page and order of the one being read, how many releases the
+        newest end gave (`first`) and this end `seen`, and the slices both ends could not cover."""
+        return {
+            "year": date.today().year + 1,
+            "floor": floor,
+            "todo": [],
+            "order": "desc",
+            "page": 1,
+            "first": 0,
+            "seen": 0,
+            "capped": list(capped),
+            "done": False,
+        }
+
+    @staticmethod
+    def _films_children(indexer) -> list[int]:
+        """c411's native film categories, read from its own tree, not from Torznab ids."""
+        from torrentlinker.catalogue_sync import SUBCATS
+        from torrentlinker.torrent_search import parse_tree
+
+        tree = parse_tree(indexer.search_categories(), adult=False)
+        children = sorted(
+            -key
+            for key, category in tree.categories.items()
+            if key < 0
+            and str(category.parent) == FILM_ROOT
+            and SUBCATS[int(FILM_ROOT)].get(-key) in FILM_CATEGORIES["c411"]
+        )
+        if not children:
+            raise ValueError("c411 lists no film category.")
+        return children
+
+    def _films_step(self, indexer, walk: dict[str, Any], children: list[int], fresh: bool) -> bool:
+        """One c411 request of the walk: a page of one year's slice of the film categories.
+        c411 answers no page past SLICE_CAP releases, so a year with more is read per category,
+        and a category still with more is read from the newest end, then from the oldest until
+        the two meet (a slice they do not cover is flagged in `capped`). `fresh` only reads each
+        year's newest pages. False once every year is read."""
+        from torrentlinker.torrent_search import native_search
+
+        if not walk["todo"]:
+            if walk["year"] < walk["floor"]:
+                return False
+            walk["todo"] = [",".join(str(child) for child in children)]
+        subcat = walk["todo"][0]
+        params = {
+            "category": FILM_ROOT,
+            "subcat": subcat,
+            "year": str(walk["year"]),
+            "sortBy": "createdAt",
+            "sortOrder": walk["order"],
+        }
+        page = native_search(indexer, params, walk["page"])
+        changed = self._films_read(page)
+        walk["seen"] += len(page.rows)
+        if not fresh and walk["page"] == 1 and walk["order"] == "desc" and page.total > SLICE_CAP:
+            if "," in subcat:  # too many for one search: one per film category
+                walk["todo"][:1] = subcat.split(",")
+                walk["seen"] = 0
+                return True
+        if walk["order"] == "asc":
+            covered = walk["first"] + walk["seen"] >= page.total
+        else:
+            covered = walk["seen"] >= page.total
+        if page.has_more and not covered and (changed or not fresh):
+            walk["page"] += 1
+            return True
+        if not fresh and not covered and walk["order"] == "desc":
+            walk.update(order="asc", page=1, first=walk["seen"], seen=0)
+            return True
+        if not covered and not fresh:
+            walk["capped"].append(f"{walk['year']}:{subcat}")
+        walk.update(order="desc", page=1, first=0, seen=0)
+        walk["todo"].pop(0)
+        if not walk["todo"]:
+            walk["year"] -= 1
+        return True
+
+    def _films_walk(self, key: str, walk: dict[str, Any]) -> None:
         with self.lock, self.db:
             self.db.execute(
-                "INSERT OR REPLACE INTO media_options VALUES (?,?)",
-                (key, json.dumps({"page": page, "done": done})),
+                "INSERT OR REPLACE INTO media_options VALUES (?,?)", (key, json.dumps(walk))
             )
 
     @staticmethod
@@ -574,6 +669,41 @@ class TrackerFilms(TrackerRows, AgeRatings):
                         "poster": facts.get("poster_url") or "",
                     }
         self._films_save(found, replace=False)
+
+    def _films_from_details(self) -> None:
+        """The TMDb ids c411 already gave in the Library's cached release details: a film of
+        the index with the same title and year as one of them takes that id."""
+        with self.lock:
+            bodies = [
+                r[0]
+                for r in self.db.execute(
+                    "SELECT body FROM media_options WHERE key LIKE 'c411-details:%'"
+                )
+            ]
+            open_keys = {
+                r[0]
+                for r in self.db.execute(
+                    "SELECT DISTINCT tkey FROM film_release WHERE tkey <> ''"
+                    " AND tkey NOT IN (SELECT tkey FROM film_title)"
+                )
+            }
+        found: dict[str, str] = {}
+        for body in bodies:
+            details = json.loads(body)
+            tmdb, year = str(details.get("id") or ""), str(details.get("year") or "")
+            if not tmdb.isdigit() or not year:
+                continue
+            for title in (details.get("title"), details.get("originalTitle")):
+                if title and (tkey := film_key(str(title), year)) in open_keys:
+                    found[tkey] = tmdb
+        if not found:
+            return
+        with self.lock, self.db:
+            self.db.executemany(
+                "INSERT OR IGNORE INTO film_title VALUES (?,?,0,?)",
+                [(tkey, tmdb, time.time()) for tkey, tmdb in found.items()],
+            )
+        self._films_changed()
 
     def _films_read(self, page) -> bool:
         """Keep the facts of the films a listing page names; True when any film's changed.

@@ -246,6 +246,13 @@ the quota with a note). The spec as decided conflicts with that in several place
     stopping for an hour whenever c411 asks to wait, resumable. Films are keyed by title +
     year until a TMDB key, when added, gives them a TMDB id; a TMDB key also covers
     tr4ker-only films and French age ratings, which c411 cannot.
+    c411 answers no page past about 10,000 results of one search, so step (3) walks slices
+    that stay under it: the year (newest first, down to 1900; c411 has no range) over the
+    film categories read from c411's own tree, a year too big for one search read per
+    category, and a category still too big from both ends until they meet. A slice the two
+    ends cannot cover is flagged in the progress. A finished walk reads the newest three
+    years again. The TMDB ids c411 already gave in the Library's cached details go to the
+    films with the same title and year.
 
 ## Open questions
 

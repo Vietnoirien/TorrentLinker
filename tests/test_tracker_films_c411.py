@@ -3,7 +3,10 @@ cached, the films on screen, then c411's listing walked page by page. c411 and T
 
 # ruff: noqa: F811  (the `films` fixture is imported, then used as an argument)
 
+import hashlib
+import json
 import threading
+from datetime import date
 from io import BytesIO
 from types import SimpleNamespace
 
@@ -13,12 +16,25 @@ from tests.film_support import seed_index
 from tests.test_media_desktop_films import service  # noqa: F401
 from tests.test_media_tracker import FakeIndexer, library  # noqa: F401
 from tests.test_tracker_films import STOP, films, query  # noqa: F401
+from torrentlinker import tracker_films
 from torrentlinker.indexer import Candidate, KeyRefused, RateLimited
 from torrentlinker.media_tracker import film_key
 from torrentlinker.torrent_search import ListingRow
 from torrentlinker.tracker_films import film_id
 
 POSTER = "https://image.tmdb.org/t/p/w500/{}.jpg"
+YEAR = date.today().year
+# c411's tree: root 1 with its film children (6, 1, 3: Torznab 2030, 2060, 2090) and others.
+TREE = {
+    "data": [
+        {
+            "id": 1,
+            "name": "Films & Séries",
+            "subcategories": [{"id": n, "name": f"Sous {n}"} for n in (1, 2, 3, 6, 57)],
+        },
+        {"id": 2, "name": "Musique", "subcategories": [{"id": 11, "name": "Sous 11"}]},
+    ]
+}
 
 
 class Waits(threading.Event):
@@ -65,21 +81,31 @@ def page_of(films, *rows, more=True):
     known = hashes(films)
     candidates = [Candidate(t, 1, "", 1, known[t], "") for t, _ in rows]
     return SimpleNamespace(
-        rows=candidates, details={known[t]: row for t, row in rows}, has_more=more
+        rows=candidates,
+        details={known[t]: row for t, row in rows},
+        has_more=more,
+        total=len(rows) + (100 if more else 0),
     )
 
 
+EMPTY = SimpleNamespace(rows=[], details={}, has_more=False, total=0)
+
+
 def c411(films, monkeypatch, pages):
-    """c411's film listing: `pages` by number; a search by name answers `pages["name"]`."""
+    """c411's film listing: `pages` by number, for this year's slice only (every other year is
+    empty); a search by name answers `pages["name"]`. `calls` holds those two kinds."""
     calls = []
 
     def search(indexer, params, page=1):
+        if "name" not in params and params["year"] != str(YEAR):
+            return EMPTY
         calls.append((params.get("name"), page))
         answer = pages["name" if "name" in params else page]
         if isinstance(answer, Exception):
             raise answer
         return answer
 
+    monkeypatch.setattr(FakeIndexer, "search_categories", lambda self: TREE, raising=False)
     monkeypatch.setattr("torrentlinker.torrent_search.native_search", search)
     return calls
 
@@ -156,7 +182,7 @@ def test_the_walk_reads_a_page_every_ten_seconds_and_resumes_after_c411_asks_to_
     calls = c411(films, monkeypatch, pages)
     stop, seen = Waits(), []
     assert films.films_index("default", setup, stop, seen.append) == "limit"
-    assert [c[1] for c in calls] == [1, 2] and stop.asked == [10.0]
+    assert [c[1] for c in calls] == [1, 2] and stop.asked == [10.0, 10.0]  # 2027 was empty
     assert seen[-1]["phase"] == "c411" and seen[-1]["identified"] == 1
     assert facts_of(films, "Alien")["identified"] and not facts_of(films, "Dune")["identified"]
     # c411 is left alone for an hour; then the page that failed is read again, not the first.
@@ -174,6 +200,114 @@ def test_the_walk_reads_a_page_every_ten_seconds_and_resumes_after_c411_asks_to_
     assert not films.films_behind("default", setup)
     assert films.films_c411("default", setup, STOP(), lambda _: None, walk_pause=0) == "complete"
     assert [c[1] for c in calls] == [1]
+
+
+class CappedC411:
+    """c411's film listing as it is: `SLICE` releases per (year, film category), two to a page,
+    and no page past CAP releases of a search, whatever its total."""
+
+    CAP = 5
+    SLICE = {(YEAR, 6): 7, (YEAR, 1): 2, (YEAR - 1, 3): 3, (YEAR - 2, 6): 12}
+
+    def __init__(self, fail_at=None):
+        self.calls, self.fail_at = [], fail_at
+
+    def release(self, year, child, n):
+        return f"Film {year} {child} {n}", hashlib.sha1(f"{year}.{child}.{n}".encode()).hexdigest()
+
+    def __call__(self, indexer, params, page=1):
+        self.calls.append((params["year"], params["subcat"], params["sortOrder"], page))
+        if len(self.calls) == self.fail_at:
+            raise RateLimited(60)
+        wanted = [int(c) for c in params["subcat"].split(",")]
+        found = [
+            (n, child)
+            for child in wanted
+            for n in range(self.SLICE.get((int(params["year"]), child), 0))
+        ]
+        found.sort(reverse=params["sortOrder"] == "desc")
+        reachable = found[: self.CAP]
+        rows = reachable[(page - 1) * 2 : page * 2]
+        names = [self.release(int(params["year"]), child, n) for n, child in rows]
+        return SimpleNamespace(
+            rows=[Candidate(t, 1, "", 1, h, "") for t, h in names],
+            details={h: listing(t, int(params["year"])) for t, h in names},
+            has_more=page * 2 < len(reachable),
+            total=len(found),
+        )
+
+
+def test_the_walk_reads_each_year_under_c411s_paging_cap_and_flags_what_it_cannot(
+    films, monkeypatch
+):
+    setup = no_key(films)
+    monkeypatch.setattr(tracker_films, "SLICE_CAP", CappedC411.CAP)
+    monkeypatch.setattr(FakeIndexer, "search_categories", lambda self: TREE, raising=False)
+    fake = CappedC411()
+    monkeypatch.setattr("torrentlinker.torrent_search.native_search", fake)
+    films_c411 = lambda: films.films_c411(  # noqa: E731
+        "default", setup, Waits(), lambda _: None, walk_pause=0
+    )
+    assert films_c411() == "complete"
+    with films.lock:
+        reached = films.db.execute("SELECT COUNT(*) FROM film_c411").fetchone()[0]
+        walk = films.db.execute(
+            "SELECT body FROM media_options WHERE key=?", ("films-years:default",)
+        )
+        state = json.loads(walk.fetchone()[0])
+    # Year by year, newest first, down to 1900 (an empty year costs one request); a year with
+    # more than the cap is read per film category; a category over it from both ends.
+    years = [int(c[0]) for c in fake.calls]
+    assert years[0] == YEAR + 1 and years == sorted(years, reverse=True) and years[-1] == 1900
+    assert (str(YEAR), "1,3,6", "desc", 1) in fake.calls
+    assert (str(YEAR), "6", "asc", 1) in fake.calls
+    assert (str(YEAR - 1), "1,3,6", "desc", 2) in fake.calls  # under the cap: one slice
+    assert (str(YEAR - 1), "3", "desc", 1) not in fake.calls
+    # Every release was reached but the two c411 hides in the middle of the year's 12; those
+    # are flagged, and the walk is done only then.
+    assert reached == 7 + 2 + 3 + 10 and state["done"] and state["capped"] == [f"{YEAR - 2}:6"]
+    # A finished walk reads the newest years again, up to a page that adds nothing.
+    fake.calls.clear()
+    assert films_c411() == "complete"
+    assert [c[0] for c in fake.calls] == [str(YEAR + 1), str(YEAR), str(YEAR - 1)]
+    assert [c[3] for c in fake.calls] == [1, 1, 1]
+
+
+def test_the_walk_resumes_in_the_slice_where_c411_asked_it_to_wait(films, monkeypatch):
+    setup = no_key(films)
+    monkeypatch.setattr(tracker_films, "SLICE_CAP", CappedC411.CAP)
+    monkeypatch.setattr(FakeIndexer, "search_categories", lambda self: TREE, raising=False)
+    fake = CappedC411(fail_at=8)  # the oldest end of this year's category 6
+    monkeypatch.setattr("torrentlinker.torrent_search.native_search", fake)
+    assert films.films_c411("default", setup, Waits(), lambda _: None, walk_pause=0) == "limit"
+    asked = fake.calls[-1]
+    assert asked[2] == "asc"
+    with films.lock:
+        saved = films.db.execute("SELECT body FROM media_options WHERE key='films-years:default'")
+        assert not json.loads(saved.fetchone()[0])["done"]
+    fake.calls.clear()
+    fake.fail_at = None
+    assert films.films_c411("default", setup, Waits(), lambda _: None, walk_pause=0) == "complete"
+    assert fake.calls[0] == asked  # the page that failed, not the year's first
+    with films.lock:
+        assert films.db.execute("SELECT COUNT(*) FROM film_c411").fetchone()[0] == 22
+
+
+def test_the_tmdb_ids_c411_gave_in_the_library_details_go_to_the_films(films):
+    no_key(films)
+    details = {"id": 438631, "title": "Dune", "originalTitle": "Dune", "year": 2021}
+    with films.lock, films.db:
+        films.db.execute(
+            "INSERT INTO media_options VALUES (?,?)",
+            ("c411-details:" + "a" * 40, json.dumps(details)),
+        )
+    films._films_from_details()
+    with films.lock:
+        got = films.db.execute(
+            "SELECT tmdb FROM film_title WHERE tkey=?", (film_key("Dune", "2021"),)
+        )
+        assert got.fetchone()[0] == "438631"
+        assert films.db.execute("SELECT COUNT(*) FROM film_title").fetchone()[0] == 1
 
 
 def test_a_refused_key_stops_the_walk_like_a_limit_and_other_failures_after_three(
