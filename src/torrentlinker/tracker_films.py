@@ -103,6 +103,7 @@ class TrackerFilms(TrackerRows, AgeRatings):
         self._films_working = threading.Lock()  # one identification at a time
         self._films_asked: set[str] = set()  # titles searched on c411 since the start
         self._films_cache: tuple[int, list[dict[str, Any]]] | None = None
+        self._films_choices: tuple[int, dict[tuple[str, str], dict[str, Any]]] = (-1, {})
         with self.db:
             self.db.executescript("""
                 CREATE TABLE IF NOT EXISTS film_release
@@ -201,6 +202,8 @@ class TrackerFilms(TrackerRows, AgeRatings):
                     updates.append(
                         (row.size, row.seeders, published or known[infohash][2], site, infohash)
                     )
+                    # A new publication date moves the film in "new"; seeders do not count.
+                    shown = shown or bool(published and published != known[infohash][2])
             with self.lock, self.db:
                 self.db.executemany(
                     "INSERT OR REPLACE INTO film_release (tracker, infohash, name, size, seeders,"
@@ -217,6 +220,7 @@ class TrackerFilms(TrackerRows, AgeRatings):
             shown = shown or bool(inserts)
         if shown:
             self._films_changed()
+            self._film_index()  # rebuilt by the scan, not by the next page that asks
         if not stop.is_set():
             self._films_stamp("films-sync:" + client_id)
         return changed
@@ -527,6 +531,7 @@ class TrackerFilms(TrackerRows, AgeRatings):
                         if children is None:
                             children = self._films_children(indexer)
                         more = self._films_step(indexer, walk, children, fresh)
+                        self._film_index()  # rebuilt here, not by the next page that asks
                         done, total = self.films_progress()
                         progress(
                             {
@@ -994,6 +999,13 @@ class TrackerFilms(TrackerRows, AgeRatings):
             film["position"] = max(r["position"] for r in members)
             text = " ".join([film["title"], film["original_title"], *(r["name"] for r in members)])
             film["search"], film["raw"] = plain(text), text.casefold()
+            # What `_held` looks up and the genre filter matches, once per index, not per page.
+            film["keys"] = frozenset(
+                film_key(title, film["year"])
+                for title in (film["title"], film["original_title"])
+                if title
+            )
+            film["genre_set"] = frozenset(film["genres"])
         index = list(films.values())
         if generation == self._films_generation:
             self._films_cache = (generation, index)
@@ -1011,11 +1023,7 @@ class TrackerFilms(TrackerRows, AgeRatings):
 
     @staticmethod
     def _held(film: dict[str, Any], library: set[str]) -> bool:
-        return any(
-            film_key(title, film["year"]) in library
-            for title in (film["title"], film["original_title"])
-            if title
-        )
+        return not library.isdisjoint(film["keys"])
 
     def _choose(self, setup, film: dict[str, Any]) -> dict[str, Any]:
         """The film's releases scored with the Owner's active profile, best first.
@@ -1025,10 +1033,21 @@ class TrackerFilms(TrackerRows, AgeRatings):
         cannot read ranks after those it can; a film with none readable still pre-selects
         its best seeded release, below the threshold.
         """
-        from torrentlinker.release_score.preferences import Preferences
-
         preferences = setup.settings.release_score
         order = getattr(setup.settings, "tracker_order", None)
+        # A film's choice holds until the index or the Owner's profile changes: a page shows
+        # a film in several rows, and every page asks again.
+        key = (film["id"], json.dumps([preferences, order], sort_keys=True, default=str))
+        if self._films_choices[0] != self._films_generation:
+            self._films_choices = (self._films_generation, {})
+        choices = self._films_choices[1]
+        if key not in choices:
+            choices[key] = self._choose_fresh(preferences, order, film)
+        return choices[key]
+
+    def _choose_fresh(self, preferences, order, film: dict[str, Any]) -> dict[str, Any]:
+        from torrentlinker.release_score.preferences import Preferences
+
         threshold = Preferences.model_validate(preferences).threshold
         rank = {t: i for i, t in enumerate(valid_order(order))}
         facts = {
@@ -1078,34 +1097,25 @@ class TrackerFilms(TrackerRows, AgeRatings):
         hide_library: bool = False,
         age_limit: int | None = None,
         choose: bool = False,
+        within: list[tuple[dict[str, Any], bool]] | None = None,
     ) -> dict[str, Any]:
         """One page of Tracker Films: filtered by genres (all of them), a text search over the
         French and original title and the release names, and the Member's rules; sorted new
-        (newest on the Trackers), shared (most seeders), year or title.
+        (newest on the Trackers), shared (most seeders), year or title. `within` is the films
+        to filter, with whether the library holds each; the whole index when None.
 
         Each row carries `in_library` and the release count. With `choose` it also carries the
         pre-selected release, the scored `releases` and `below_threshold`, which a Member
         never gets."""
-        library = self._in_library(client_id)
-        words = plain(q).split()
-        found = []
-        for film in self._film_index():
-            if identified_only and not film["identified"]:
-                continue
-            if not set(genres) <= set(film["genres"]):
-                continue
-            if age_limit is not None:
-                rank = age_ratings.rank(film["rating"])
-                if rank is None or rank > age_limit:
-                    continue
-            if words and not all(w in film["search"] for w in words):
-                continue
-            if q.strip() and not words and q.strip().casefold() not in film["raw"]:
-                continue  # a title in a script `plain` folds away is read as it is
-            held = self._held(film, library)
-            if hide_library and held:
-                continue
-            found.append((film, held))
+        found = self._films_found(
+            client_id,
+            genres=genres,
+            q=q,
+            identified_only=identified_only,
+            hide_library=hide_library,
+            age_limit=age_limit,
+            within=within,
+        )
         keys = {
             "new": lambda item: (-item[0]["published_at"], -item[0]["position"]),
             "shared": lambda item: (-item[0]["seeders"], -item[0]["position"]),
@@ -1120,6 +1130,41 @@ class TrackerFilms(TrackerRows, AgeRatings):
             "has_more": offset + limit < len(found),
             "next_offset": offset + limit if offset + limit < len(found) else None,
         }
+
+    def _films_found(
+        self,
+        client_id,
+        *,
+        genres: tuple[str, ...] = (),
+        q: str = "",
+        identified_only: bool = False,
+        hide_library: bool = False,
+        age_limit: int | None = None,
+        within: list[tuple[dict[str, Any], bool]] | None = None,
+    ) -> list[tuple[dict[str, Any], bool]]:
+        """The films that pass the filters, each with whether the library holds it."""
+        if within is None:
+            library = self._in_library(client_id)
+            within = [(film, self._held(film, library)) for film in self._film_index()]
+        words = plain(q).split()
+        found = []
+        for film, held in within:
+            if identified_only and not film["identified"]:
+                continue
+            if not film["genre_set"].issuperset(genres):
+                continue
+            if age_limit is not None:
+                rank = age_ratings.rank(film["rating"])
+                if rank is None or rank > age_limit:
+                    continue
+            if words and not all(w in film["search"] for w in words):
+                continue
+            if q.strip() and not words and q.strip().casefold() not in film["raw"]:
+                continue  # a title in a script `plain` folds away is read as it is
+            if hide_library and held:
+                continue
+            found.append((film, held))
+        return found
 
     def tracker_film(self, client_id, setup, identifier: str, *, choose: bool = False) -> dict:
         film = self._film_by_id(client_id, setup, identifier)
@@ -1214,7 +1259,7 @@ class TrackerFilms(TrackerRows, AgeRatings):
             card["quote"] = film.get("quote")
         return card
 
-    def _seen(self, client_id, setup, actor, **query) -> dict[str, Any]:
+    def _seen(self, client_id, setup, actor, **query: Any) -> dict[str, Any]:
         """A page of films for this actor. A Member's rows never name a release: they carry
         the size of the pre-selected one, which their quota is checked against."""
         rules = self._rules(actor)
@@ -1272,6 +1317,13 @@ class TrackerFilms(TrackerRows, AgeRatings):
         """The landing page: what is new and most shared, then one row per genre. A grid is
         always of one genre, opened from its row, so only genre rows can be seen in full."""
         rows = []
+        # The actor's films, read from the index once and split by genre for every row.
+        rules = {k: v for k, v in self._rules(actor).items() if k != "choose"}
+        within = self._films_found(client_id, **rules)
+        by_genre: dict[str, list[tuple[dict[str, Any], bool]]] = {genre: [] for genre in GENRES}
+        for item in within:
+            for genre in item[0]["genre_set"] & by_genre.keys():
+                by_genre[genre].append(item)
         wanted = [("tracker-new", "", {"sort": "new"}), ("tracker-shared", "", {"sort": "shared"})]
         wanted += [("genre", genre, {"genre": genre}) for genre in GENRES]
         for key, title, filters in wanted:
@@ -1283,6 +1335,7 @@ class TrackerFilms(TrackerRows, AgeRatings):
                 genres=genres,
                 sort=filters.get("sort", "new"),
                 limit=limit,
+                within=by_genre[genres[0]] if genres else within,
             )
             if page["rows"]:
                 rows.append(
