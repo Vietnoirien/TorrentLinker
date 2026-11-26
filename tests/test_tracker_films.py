@@ -348,3 +348,22 @@ def test_a_rating_set_by_hand_is_kept(films):
     assert next(f for f in query(films)["rows"] if f["id"] == "tmdb-2")["rating"] == "TP"
     films._fetch_meta(films.tmdb, "2")  # a refetch does not replace a person's rating
     assert next(f for f in query(films)["rows"] if f["id"] == "tmdb-2")["rating"] == "TP"
+
+
+def test_seeders_and_sizes_moving_do_not_move_the_revision_new_films_do(films, tmp_path):
+    # A page following the index fetches again when the revision moves: a Catalogue refresh
+    # changing seeder counts must not make it reorder its cards.
+    setup = films.setup_for_test
+    films.films_sync("default", setup)
+    start = films._films_generation
+    setup.store.save_catalogue(
+        [
+            row(r.title, r.size, seeders=r.seeders + 7 if r.seeders else 0, category=r.category)
+            for r in CATALOGUE
+        ]
+    )
+    assert films.films_sync("default", setup) is True
+    assert films._films_generation == start
+    setup.store.save_catalogue([row("Heat.1995.MULTi.1080p.BluRay.x264-TEAM", 9 * GB)])
+    films.films_sync("default", setup)
+    assert films._films_generation > start

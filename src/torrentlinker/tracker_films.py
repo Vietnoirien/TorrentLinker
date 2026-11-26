@@ -125,7 +125,10 @@ class TrackerFilms(TrackerRows, AgeRatings):
             for entry in self._tracker_cache(client_id, "tracker-new").values()
             for r in entry.get("releases") or []
         }
-        changed = False
+        # `changed` reports any change; `shown` only what changes the films a page draws. A
+        # seeder count or a size moves with every Catalogue refresh: a page following the
+        # index must not fetch and reorder its cards for that.
+        changed = shown = False
         for site in self._catalogue_trackers(setup):
             categories = FILM_CATEGORIES.get(site)
             if not categories:
@@ -149,7 +152,7 @@ class TrackerFilms(TrackerRows, AgeRatings):
                     self.db.executemany(
                         "DELETE FROM film_release WHERE tracker=? AND infohash=?", gone
                     )
-                changed = True
+                changed = shown = True
             inserts, updates = [], []
             for infohash, (row, order) in current.items():
                 entry, release = listed.get(infohash, ({}, {}))
@@ -197,7 +200,8 @@ class TrackerFilms(TrackerRows, AgeRatings):
                     updates,
                 )
             changed = changed or bool(inserts or updates)
-        if changed:
+            shown = shown or bool(inserts)
+        if shown:
             self._films_changed()
         if not stop.is_set():
             self._films_stamp("films-sync:" + client_id)

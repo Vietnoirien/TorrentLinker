@@ -216,6 +216,14 @@ function filmsKeepPlace(scroller, cards, horizontal, work) {
   else if (scroller.scrollHeight > scroller.clientHeight) scroller.scrollTop += moved;
   else window.scrollBy(0, moved);
 }
+// While a page is looked at, its cards keep their order: those still there stay where they are,
+// new films join at the end. The index's order (newest, most shared) applies on the next visit.
+function filmsSteady(drawn, items) {
+  const fresh = new Map(items.map(item => [item.id, item]));
+  const kept = drawn.filter(item => fresh.has(item.id)).map(item => fresh.get(item.id));
+  const known = new Set(kept.map(item => item.id));
+  return [...kept, ...items.filter(item => !known.has(item.id))];
+}
 // Put `items` in `container` as cards drawn by `draw`, keeping the cards that did not change.
 function filmsPatchCards(container, selector, items, previous, draw) {
   const cards = new Map([...container.querySelectorAll(selector)].map(card => [card.dataset.id, card]));
@@ -233,7 +241,7 @@ function filmsPatchCards(container, selector, items, previous, draw) {
 function filmsPatchRow(row, fresh, track) {
   const previous = new Map(row.rows.map(item => [item.id, item])), ids = new Set(fresh.rows.map(item => item.id));
   for (const item of fresh.rows) mediaItems.set(item.id, item);
-  row.rows = [...fresh.rows, ...row.rows.slice(fresh.rows.length).filter(item => !ids.has(item.id))];
+  row.rows = filmsSteady(row.rows, [...fresh.rows, ...row.rows.slice(fresh.rows.length).filter(item => !ids.has(item.id))]);
   row.total = fresh.total;
   filmsKeepPlace(track, [...track.querySelectorAll(".media-row-card")], true, () => filmsPatchCards(track, ".media-row-card", row.rows, previous, item => mediaRowCard(item, row, track)));
   const count = track.closest(".media-home-row")?.querySelector(".media-home-row-count");
@@ -264,6 +272,7 @@ function filmsMergeRows(fresh) {
 }
 function filmsMergeGrid(rows, total, more) {
   const root = $("media-results"), previous = new Map(media.rows.map(item => [item.id, item]));
+  rows = filmsSteady(media.rows, rows);
   for (const item of rows) mediaItems.set(item.id, item);
   media.films.total = total; media.rows = rows; media.next = more ? rows.length : null;
   $("media-more").hidden = !more;
