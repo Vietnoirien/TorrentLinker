@@ -16,8 +16,11 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import sqlite3
 import threading
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import date
 from typing import Any
 
@@ -131,6 +134,24 @@ class TrackerFilms(TrackerRows, AgeRatings):
     def _films_changed(self) -> None:
         self._films_generation += 1
 
+    @contextmanager
+    def _bulk(self) -> Iterator[sqlite3.Connection]:
+        """A connection for the index's large reads. Every Media request takes `self.lock`:
+        a read of 80,000 films or 280,000 releases held it for seconds, so a page's requests,
+        down to the player saving its position, all waited for it. With WAL a connection of
+        this thread's own reads beside the shared one, without the lock."""
+        path = self.db.execute("PRAGMA database_list").fetchone()[2]
+        if not path:  # an in-memory database has no second connection
+            with self.lock:
+                yield self.db
+            return
+        local = self.__dict__.setdefault("_films_readers", threading.local())
+        reader = getattr(local, "db", None)
+        if reader is None:
+            reader = local.db = sqlite3.connect(path, check_same_thread=False)
+            reader.row_factory = sqlite3.Row
+        yield reader
+
     # -- Reading the Catalogues ------------------------------------------------------------
 
     def films_sync(self, client_id, setup, stop: threading.Event | None = None) -> bool:
@@ -154,10 +175,10 @@ class TrackerFilms(TrackerRows, AgeRatings):
                 row.infohash.lower(): (row, order)
                 for row, order in self._site_store(setup, site).catalogue_seeded(categories)
             }
-            with self.lock:
+            with self._bulk() as db:
                 known = {
                     r["infohash"]: (r["size"], r["seeders"], r["published"])
-                    for r in self.db.execute(
+                    for r in db.execute(
                         "SELECT infohash, size, seeders, published FROM film_release"
                         " WHERE tracker=?",
                         (site,),
@@ -494,11 +515,11 @@ class TrackerFilms(TrackerRows, AgeRatings):
         if cached is not None and cached[0] == self._films_generation:
             return cached[1]
         generation = self._films_generation
-        with self.lock:
-            total = self.db.execute(
+        with self._bulk() as db:
+            total = db.execute(
                 "SELECT COUNT(DISTINCT tkey) FROM film_release WHERE tkey <> ''"
             ).fetchone()[0]
-            identified = self.db.execute(
+            identified = db.execute(
                 "SELECT COUNT(*) FROM (SELECT DISTINCT r.tkey FROM film_release r"
                 " LEFT JOIN film_title t ON t.tkey = r.tkey"
                 " LEFT JOIN film_meta m ON m.tmdb = t.tmdb"
@@ -879,10 +900,10 @@ class TrackerFilms(TrackerRows, AgeRatings):
     def _films_kept(self, tkeys: list[str]) -> dict[str, tuple]:
         """The stored facts of these films, as `_films_save` compares them."""
         kept: dict[str, tuple] = {}
-        with self.lock:
+        with self._bulk() as db:
             for start in range(0, len(tkeys), 500):
                 chunk = tkeys[start : start + 500]
-                for r in self.db.execute(
+                for r in db.execute(
                     "SELECT tkey, title, original_title, year, overview, genres, runtime, poster"
                     f" FROM film_c411 WHERE tkey IN ({','.join('?' * len(chunk))})",
                     chunk,
@@ -900,12 +921,12 @@ class TrackerFilms(TrackerRows, AgeRatings):
         }
         keys = [tkey for tkey in aliases if tkey not in found]
         held: set[str] = set()
-        with self.lock:
+        with self._bulk() as db:
             for start in range(0, len(keys), 500):
                 chunk = keys[start : start + 500]
                 held.update(
                     r[0]
-                    for r in self.db.execute(
+                    for r in db.execute(
                         "SELECT DISTINCT tkey FROM film_release WHERE tkey IN"
                         f" ({','.join('?' * len(chunk))})",
                         chunk,
@@ -914,8 +935,13 @@ class TrackerFilms(TrackerRows, AgeRatings):
         return {tkey: aliases[tkey] for tkey in keys if tkey in held}
 
     def _films_stored(self) -> None:
-        """Facts stored before the original-title keys existed take those keys too."""
+        """Facts stored before the original-title keys existed take those keys too, once."""
         with self.lock:
+            if self.db.execute(
+                "SELECT 1 FROM media_options WHERE key='films-original-keys'"
+            ).fetchone():
+                return
+        with self._bulk() as db:
             found = {
                 r["tkey"]: {
                     "title": r["title"],
@@ -926,9 +952,13 @@ class TrackerFilms(TrackerRows, AgeRatings):
                     "runtime": r["runtime"],
                     "poster": r["poster"],
                 }
-                for r in self.db.execute("SELECT * FROM film_c411")
+                for r in db.execute("SELECT * FROM film_c411")
             }
         self._films_save(found, replace=False)
+        with self.lock, self.db:
+            self.db.execute(
+                "INSERT OR REPLACE INTO media_options VALUES ('films-original-keys', '1')"
+            )
 
     def _films_unasked(self, client_id) -> tuple[str, str, str] | None:
         """The next film on screen c411 has no facts for and was not searched yet:
@@ -1063,11 +1093,11 @@ class TrackerFilms(TrackerRows, AgeRatings):
 
     def _film_index_build(self) -> list[dict[str, Any]]:
         generation = self._films_generation
-        with self.lock:
-            releases = self.db.execute("SELECT * FROM film_release").fetchall()
-            titles = {r[0]: r[1] for r in self.db.execute("SELECT tkey, tmdb FROM film_title")}
-            metas = {r["tmdb"]: r for r in self.db.execute("SELECT * FROM film_meta")}
-            c411s = {r["tkey"]: r for r in self.db.execute("SELECT * FROM film_c411")}
+        with self._bulk() as db:
+            releases = db.execute("SELECT * FROM film_release").fetchall()
+            titles = {r[0]: r[1] for r in db.execute("SELECT tkey, tmdb FROM film_title")}
+            metas = {r["tmdb"]: r for r in db.execute("SELECT * FROM film_meta")}
+            c411s = {r["tkey"]: r for r in db.execute("SELECT * FROM film_c411")}
         films: dict[str, dict[str, Any]] = {}
         for row in releases:
             tmdb = row["manual"] or titles.get(row["tkey"], "")
@@ -1530,10 +1560,10 @@ class TrackerFilms(TrackerRows, AgeRatings):
         """The films the landing's rows open on, and their first grid page, whose poster is
         not downloaded yet: `{"film": id}`, in the landing's order. The scan downloads them,
         so a page draws them from disk instead of waiting on TMDb for each card."""
-        with self.lock:
+        with self._bulk() as db:
             fetched = {
                 r[0]
-                for r in self.db.execute(
+                for r in db.execute(
                     "SELECT tkey FROM film_c411 WHERE artwork LIKE 'asset:%'"
                     " UNION SELECT tmdb FROM film_meta WHERE artwork LIKE 'asset:%'"
                 )
