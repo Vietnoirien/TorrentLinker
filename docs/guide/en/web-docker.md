@@ -201,7 +201,8 @@ The Owner opens **Settings → Users** to create a Member, choose their Permissi
 
 - **Viewers and Shared Screens.** A Viewer watches under an account without signing in, with their own progress and playlists. A browser marked as a Shared Screen asks who is watching; a less restricted Viewer needs a PIN.
 - **Age Ratings.** Films and series carry a minimum age (All audiences, −10, −12, −16, −18). A Member's age limit hides anything above it, and unrated titles under any limit.
-- **Requests and Wishes.** A Member asks for a tracker release from Media or Search. An Approver (the Owner, or a Member allowed to) accepts it, and it goes to the Torrent Client at once, or refuses it with a note. A Wish asks for a title that has no release yet; an Approver can match it to one later.
+- **Requests and Wishes.** A Member browses **On the tracker** in Media (see [Media](media.md)) and asks the owner for a film; they never choose the release. An Approver (the Owner, or a Member allowed to) chooses it from the film's releases, the pre-selected one first, and it goes to the Torrent Client at once, or refuses it with a note. Members asking for the same film share one Request and its quota. A Wish asks for a title the tracker does not have; an Approver can match it to a film later.
+- **Household Asks.** In **My account**, an account holder (or the Owner) can turn on **Can ask for films** for a Viewer, off by default. That Viewer can then ask for a film from a Shared Screen; the ask waits in the holder's Media bell under **My household's asks**, where the holder accepts it into a Request of their own, on their own quota, or refuses it with a word. On the Owner's own account, accepting opens the release choice and downloads directly.
 - **Member Assistant.** Each Member has a private Assistant with daily caps set by the Owner.
 
 ### Member notifications

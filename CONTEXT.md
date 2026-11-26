@@ -181,7 +181,7 @@ One thing a Member may see or do, granted per Member: a feature, a Library Folde
 _Avoid_: Role, right, access level
 
 **Viewer**:
-A person who watches under the Owner's or a Member's account without signing in, chosen on a Shared Screen; they have their own watch progress and playlists, only Media Permissions, never broader than the account's, and never make Requests.
+A person who watches under the Owner's or a Member's account without signing in, chosen on a Shared Screen; they have their own watch progress and playlists, only Media Permissions, never broader than the account's, and never make Requests (they may make a Household Ask).
 _Avoid_: Profile (Zen Profile and ReleaseScore profiles), home user, sub-account
 
 **Shared Screen**:
@@ -189,12 +189,20 @@ A browser an account holder marked as shared when signing in, named ("Télé du 
 _Avoid_: Device (a browser is all the server can tell apart), TV
 
 **Request**:
-A Member's ask to download a tracker release, waiting for an Approver; once accepted it is sent to the Torrent Client at once.
+A Member's ask for a Tracker Film, waiting for an Approver who picks the release; once accepted it is sent to the Torrent Client at once. Members asking for the same film while it is pending share one Request, charged an equal share of the smaller of the quoted and the chosen size. An Owner's own Request names its release.
 _Avoid_: Proposal (an agent's), order, download request
 
 **Wish**:
-A Request for a title with no release chosen yet; the Approver picks the release.
+A Request for a title the tracker does not have, or the Member cannot find; the Approver finds the Tracker Film, then picks the release.
 _Avoid_: Free-text request, suggestion
+
+**Tracker Film**:
+A Film with at least one seeded release on a Tracker, identified by its TMDb id when known and otherwise by its title and year; it carries a poster, synopsis, genres and Age Rating, and its releases, which Members never see. A Member never sees one already in the Library.
+_Avoid_: Tracker release (one torrent of a Tracker Film), suggestion
+
+**Household Ask**:
+A Viewer's ask to its account holder for a Tracker Film, allowed per Viewer by the holder; the holder accepts it into a Request of their own, or refuses it. A Viewer still never makes a Request.
+_Avoid_: Viewer Request
 
 **Approver**:
 The Owner, or a Member holding the Permission to accept or refuse Requests.

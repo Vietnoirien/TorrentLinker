@@ -1,0 +1,21 @@
+# A Request names a Film, and Viewers ask their account holder
+
+ADR-0022 let a Member ask for a tracker release. The Member then saw release names they could not judge, and the same film appeared once per release. Issue #194 records the Owner's choices: a Member browses every film the Trackers hold as posters, one per film, reads its synopsis and asks for the film; the Owner, or an Approver, picks the release.
+
+A **Request** now names a **Tracker Film** (a Film with at least one seeded release on a Tracker), never a release, and is made with no release. The pre-selected release is the best under the Owner's ReleaseScore profile, a tie going to the Tracker first in the Owner's order and then to the better seeded release (ADR-0025); a film whose best release scores under the threshold is still listed and pre-selected, and only the Approver is told. The quota is checked against the pre-selected release's size when the Member asks. The Approver sees the film's grouped releases from every Tracker, reads their torrent descriptions, and chooses; an Owner's own Request still names its release. A **Wish** stays for a film the tracker does not have, or the Member cannot find.
+
+Members asking for the same film while it is pending share one Request: each keeps their own row, timeline, notification and cancel, linked by the film's identifier (its TMDb id, else its title and year). The Approver answers the group once. The group is charged the smaller of the size quoted at the first ask and the size of the release chosen, split equally, so a bigger release costs a Member nothing more, and the Owner's margin bar reads the real size. A cancel gives its share back to the others and the last one cancels the group; a refusal moves every row and frees every slot. A Member may join only while the Request is pending, expiry runs from the first ask, and Members never learn who else asked.
+
+The film list comes from the per-Tracker Catalogues, seeded releases only, in the film categories (c411 2030, 2060, 2070, 2080, 2090; tr4ker 2000 and 2040 only once TMDb identifies the release as a film; never the adult categories). A background job identifies each title once with TMDb (poster, French synopsis, genres, runtime, Age Rating) and only new Catalogue entries afterwards; the grid answers meanwhile, and a Member sees identified films only. The Owner can re-match a film, or one release, to another TMDb film, and set an Age Rating by hand; both are kept across re-identification. A Member never sees a film already in the Library, and under an Age Rating limit sees only films rated at or under it: a film without a rating stays hidden. The Films Permission lets a Member browse, the Request Permission shows "Demander"; the Search Permission no longer gates it.
+
+This amends ADR-0022, which said a Viewer never makes a Request. A Viewer still never does. A **Household Ask** lets a Viewer on a Shared Screen ask its account holder for a Tracker Film, if the holder turned on "Peut demander des films" for that Viewer (off by default; the holder and the Owner set it). The ask waits in the holder's Médias bell, where the holder accepts, which makes the holder's own Request to the Owner on the holder's quota, or refuses with an optional note. On the Owner's own account, accepting makes no Request: the Owner chooses the release and downloads directly. The Viewer follows the ask and may cancel it while it is pending.
+
+## Considered Options
+
+- **Members choosing the release**: rejected; they cannot judge release names, and one film appeared many times.
+- **One shared row for a film asked by several Members**: rejected; each Member needs their own timeline, notification, cancel and quota share, so rows are linked instead.
+- **Letting a Viewer make a Request**: rejected; a Request is a person's, charged to a named account. The holder decides, then asks.
+
+## Consequences
+
+`requests` gains the film key, the quoted size and the chosen size; existing Requests keep working and get their film where their release is in the index, and Wishes stay as they are. The Médias row "Disponible sur le tracker" becomes "Sur le tracker", drawn from the same index as the grid, so it no longer clashes with the "Disponible" badge of the Library.
