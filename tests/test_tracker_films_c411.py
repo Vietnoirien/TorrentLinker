@@ -416,6 +416,25 @@ def test_a_poster_loads_without_a_tmdb_key_and_is_downloaded_once(films, monkeyp
     assert films.film_artwork("default", facts_of(films, "Mystery Film")["id"]) is None
 
 
+def test_the_scan_downloads_the_posters_the_landing_opens_on(films, monkeypatch):
+    setup = no_key(films)
+    alien = ("Alien.1979.MULTi.1080p.BluRay.x264-TEAM", listing("Alien", 1979))
+    c411(films, monkeypatch, {1: page_of(films, alien, more=False)})
+    films.films_c411("default", setup, STOP(), lambda _: None, walk_pause=0)
+    picture, fetched = BytesIO(), []
+    Image.new("RGB", (600, 900), "#335577").save(picture, "PNG")
+    monkeypatch.setattr(
+        "torrentlinker.assistant.images.fetch_image",
+        lambda url: fetched.append(url) or (picture.getvalue(), "image/png"),
+    )
+    film = facts_of(films, "Alien")["id"]
+    assert films.film_poster_entries("default") == [{"film": film}]
+    films.prefetch_posters("default", STOP(), lambda _: None)
+    assert fetched == [POSTER.format("Alien")]
+    # Downloaded once: the next scan asks for nothing.
+    assert films.film_poster_entries("default") == []
+
+
 def test_a_tmdb_key_added_later_takes_over_and_keeps_the_owners_corrections(films, monkeypatch):
     setup = no_key(films)
     pages = [

@@ -1787,6 +1787,7 @@ class MediaLibrary(TrackerFilms):
             ).fetchall()
         pending = [r for r in rows if json.loads(r["body"]).get("remote_artwork")]
         pending += self.tracker_poster_entries(client_id)
+        pending += self.film_poster_entries(client_id)
         deadline = time.monotonic() + limit
         done = 0
 
@@ -1794,7 +1795,9 @@ class MediaLibrary(TrackerFilms):
             if stop.is_set() or time.monotonic() > deadline:
                 return False
             try:
-                if isinstance(item, dict):
+                if isinstance(item, dict) and "film" in item:
+                    path = self.film_artwork(client_id, item["film"])
+                elif isinstance(item, dict):
                     path = self.tracker_artwork(client_id, item["hash"], item.get("entry"))
                 else:
                     path = self.artwork(client_id, item["id"])

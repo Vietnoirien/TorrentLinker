@@ -1428,6 +1428,31 @@ class TrackerFilms(TrackerRows, AgeRatings):
             release.update(tracker=found["tracker"], download_url=found["download_url"])
         return {"title": found["title"], "year": found["year"], "release": release}
 
+    def film_poster_entries(self, client_id, per_row: int = 60) -> list[dict[str, Any]]:
+        """The films the landing's rows open on, and their first grid page, whose poster is
+        not downloaded yet: `{"film": id}`, in the landing's order. The scan downloads them,
+        so a page draws them from disk instead of waiting on TMDb for each card."""
+        with self.lock:
+            fetched = {
+                r[0]
+                for r in self.db.execute(
+                    "SELECT tkey FROM film_c411 WHERE artwork LIKE 'asset:%'"
+                    " UNION SELECT tmdb FROM film_meta WHERE artwork LIKE 'asset:%'"
+                )
+            }
+        films = [film for film, _ in self._films_found(client_id) if film["poster"]]
+        newest = sorted(films, key=lambda f: (-f["published_at"], -f["position"]))
+        rows = [newest, sorted(films, key=lambda f: (-f["seeders"], -f["position"]))]
+        rows += [[f for f in newest if genre in f["genre_set"]] for genre in GENRES]
+        found: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            for film in row[:per_row]:
+                if (film["tmdb"] or film["c411"]) not in fetched:
+                    found.setdefault(film["id"], {"film": film["id"]})
+        # Each row's first screen before any row's next ones.
+        first = [found[f["id"]] for row in rows for f in row[:20] if f["id"] in found]
+        return list({e["film"]: e for e in [*first, *found.values()]}.values())
+
     def film_artwork(self, client_id, identifier: str):
         """A film's TMDb poster, downloaded once and kept as the other posters are. A film only
         c411 knows has c411's poster, which is TMDb-hosted too: no key is needed to load it."""
