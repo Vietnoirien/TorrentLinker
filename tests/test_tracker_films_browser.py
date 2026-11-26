@@ -138,3 +138,64 @@ def test_a_member_browses_the_tracker_films_by_genre_and_asks_and_the_owner_sees
         finally:
             server.should_exit = True
             worker.join(timeout=5)
+
+
+def test_the_holder_answers_a_household_ask_from_the_bell(tmp_path):
+    import uvicorn
+    from playwright.sync_api import expect, sync_playwright
+
+    from torrentlinker.accounts import Permission
+    from torrentlinker.member_requests import FilmAsk
+
+    config, setup, _, _ = prepared(tmp_path)
+    app = create_app(
+        config,
+        members_enabled=True,
+        password="test-password-long",
+        service_override=setup,
+        monitor_verifications=False,
+    )
+    accounts = app.state.accounts
+    lea = accounts.create(
+        "Léa", "lea", {Permission.FILMS, Permission.REQUEST}, password="lea-password-long"
+    )
+    accounts.set_pin(lea, "", "2468")
+    tom = accounts.add_viewer(lea, "Tom", {Permission.FILMS}, None, True)
+    seed_index(app.state.agent_service.media, FILMS, RELEASES, poster=False)
+    app.state.household_asks.ask(lea, tom, "", FilmAsk("tmdb-1", "Dune", "2021", 4 * GB))
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
+        worker = threading.Thread(target=server.run, kwargs={"sockets": [listener]}, daemon=True)
+        worker.start()
+        try:
+            for _ in range(100):
+                if server.started:
+                    break
+                time.sleep(0.02)
+            with sync_playwright() as pw:
+                browser = pw.chromium.launch()
+                page = browser.new_page(viewport={"width": 1280, "height": 900}, locale="en-US")
+                errors = []
+                page.on("pageerror", lambda error: errors.append(str(error)))
+                page.goto(f"http://127.0.0.1:{listener.getsockname()[1]}/")
+                page.get_by_label("Sign-in name").fill("lea")
+                page.get_by_label("Password", exact=True).fill("lea-password-long")
+                page.locator("#login-form button.primary").click()
+                page.wait_for_url("**#/media/video")
+                frame = page.frame_locator("#media-frame")
+                expect(frame.locator("#media-requests-bell b")).to_have_text("1", timeout=15000)
+                frame.locator("#media-requests-bell").click()
+                drawer = frame.locator("#media-requests")
+                expect(drawer.get_by_text("My household's asks")).to_be_visible()
+                expect(drawer.get_by_text("Tom")).to_be_visible()
+                drawer.get_by_role("button", name="Accept").click()
+                expect(drawer.get_by_text("accepted, asked of the owner")).to_be_visible()
+                [request] = app.state.requests.mine(lea)
+                assert request["film"] == "tmdb-1" and request["state"] == "pending"
+                assert not errors
+                browser.close()
+        finally:
+            server.should_exit = True
+            worker.join(timeout=5)

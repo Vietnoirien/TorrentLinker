@@ -494,7 +494,10 @@ def create_app(
             signed_in=signed_in,
             requests=requests,
         )
-        request_routes(app, requests, agent_service.media)
+        from torrentlinker.household_asks import HouseholdAsks
+
+        household_asks = app.state.household_asks = HouseholdAsks(accounts, requests)
+        request_routes(app, requests, agent_service.media, household_asks)
         from torrentlinker.web.member_workspace import member_workspace_routes
 
         member_workspace_routes(app, requests, app.state.request_approval, agent_service.media)
@@ -1403,6 +1406,7 @@ def create_app(
                     else accounts.display_name(actor.account),
                     "permissions": sorted(actor.permissions),
                     "screen": screen,
+                    "asks": actor.asks,
                 },
                 "pages": [] if actor.viewer == PICKING else pages,
                 "sections": [

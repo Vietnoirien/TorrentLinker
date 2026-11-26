@@ -10,8 +10,8 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
-from torrentlinker.accounts import OWNER_ACTOR, Actor, Permission
-from torrentlinker.member_requests import CapReached, Requests
+from torrentlinker.accounts import OWNER_ACTOR, PICKING, Actor, Permission
+from torrentlinker.member_requests import CapReached, FilmAsk, Requests
 from torrentlinker.request_approval import RequestApproval
 from torrentlinker.web.permissions import Audience, needs
 
@@ -33,7 +33,7 @@ class Answer(BaseModel):
     note: str = Field(default="", max_length=500)
 
 
-def request_routes(app: FastAPI, requests: Requests, media) -> None:
+def request_routes(app: FastAPI, requests: Requests, media, household_asks) -> None:
     approval = RequestApproval(media)
     app.state.request_approval = approval
 
@@ -51,7 +51,9 @@ def request_routes(app: FastAPI, requests: Requests, media) -> None:
         return {
             "requests": rows,
             "quota": requests.quota(account),
-            "unread": sum(1 for r in rows if r["unread"]),
+            # Household Asks wait here too: a Viewer's ask the holder has not yet opened is new.
+            "household": household_asks.household(account),
+            "unread": sum(1 for r in rows if r["unread"]) + household_asks.unseen(account),
         }
 
     @app.get("/api/requests")
@@ -63,6 +65,7 @@ def request_routes(app: FastAPI, requests: Requests, media) -> None:
     @needs(Audience.ACCOUNT_HOLDER)
     def seen(request: Request) -> dict:
         requests.seen(actor(request).account)
+        household_asks.seen(actor(request).account)
         return mine(actor(request).account)
 
     @app.post("/api/requests")
@@ -75,6 +78,76 @@ def request_routes(app: FastAPI, requests: Requests, media) -> None:
             raise HTTPException(404, "This film is not on the tracker.") from None
         except CapReached as error:
             return refused(error)
+        except ValueError as error:
+            raise HTTPException(409, str(error)) from error
+
+    # Household Asks (decision 24): a Viewer asks its account holder, who answers.
+
+    def viewer_of(request: Request) -> Actor:
+        found = actor(request)
+        if not found.viewer or found.viewer == PICKING:
+            raise HTTPException(403, "Only a profile on a Shared Screen asks its account holder.")
+        return found
+
+    @app.get("/api/household-asks")
+    @needs(Audience.SIGNED_IN)
+    def viewer_asks(request: Request) -> dict:
+        found = viewer_of(request)
+        return {**household_asks.mine(found.account, found.viewer), "can_ask": found.asks}
+
+    @app.post("/api/household-asks")
+    @needs(Audience.SIGNED_IN)
+    def viewer_ask(body: TrackerRequest, request: Request):
+        found = viewer_of(request)
+        if not found.asks or not media.sees_tracker(found):
+            raise HTTPException(403, "The account holder has not allowed this profile to ask.")
+        client = approval.client_id
+        try:
+            film = media.tracker_film_detail(client, media.setup(client), found, body.film)
+            return household_asks.ask(
+                found.account,
+                found.viewer,
+                found.screen,
+                FilmAsk(body.film, film["title"], film["year"], int(film["quote"])),
+            )
+        except KeyError:
+            raise HTTPException(404, "This film is not on the tracker.") from None
+        except ValueError as error:
+            raise HTTPException(409, str(error)) from error
+
+    @app.post("/api/household-asks/{identifier}/cancel")
+    @needs(Audience.SIGNED_IN)
+    def viewer_cancel(identifier: str, request: Request) -> dict:
+        found = viewer_of(request)
+        try:
+            return household_asks.cancel(found.account, found.viewer, identifier)
+        except KeyError:
+            raise HTTPException(404, "This ask no longer exists.") from None
+        except ValueError as error:
+            raise HTTPException(409, str(error)) from error
+
+    @app.post("/api/household-asks/{identifier}/accept")
+    @needs(Audience.ACCOUNT_HOLDER)
+    def holder_accept(identifier: str, request: Request):
+        found = actor(request)
+        if not found.holds(Permission.REQUEST):
+            raise HTTPException(403, "Your account cannot make Requests.")
+        try:
+            return household_asks.accept(found.account, identifier)
+        except KeyError:
+            raise HTTPException(404, "This ask no longer exists.") from None
+        except CapReached as error:
+            return refused(error)
+        except ValueError as error:
+            raise HTTPException(409, str(error)) from error
+
+    @app.post("/api/household-asks/{identifier}/refuse")
+    @needs(Audience.ACCOUNT_HOLDER)
+    def holder_refuse(identifier: str, body: Answer, request: Request) -> dict:
+        try:
+            return household_asks.refuse(actor(request).account, identifier, body.note)
+        except KeyError:
+            raise HTTPException(404, "This ask no longer exists.") from None
         except ValueError as error:
             raise HTTPException(409, str(error)) from error
 

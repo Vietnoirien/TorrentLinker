@@ -36,6 +36,7 @@ class Viewer(BaseModel):
     name: str = Field(max_length=100)
     permissions: list[Permission] = Field(default_factory=list, max_length=len(MEDIA))
     age_limit: Literal["TP", "10", "12", "16", "18"] | None = None
+    can_ask: bool | None = None  # may ask the account holder for films; None keeps it as it is
 
 
 class Pin(BaseModel):
@@ -212,6 +213,10 @@ def household_routes(
         ):
             raise PermissionError("You cannot show a Library Folder you do not see.")
 
+    def may_ask(request: Request, prefix: str) -> bool:
+        """Only the account holder and the Owner decide who may ask for films, not a manager."""
+        return prefix == "/api/account" or actor(request).owner
+
     def viewer_routes(prefix: str, holder: Callable[[Request, str], str]) -> None:
         """The same Viewer routes for one's own account and, for a manager, another's."""
 
@@ -224,7 +229,11 @@ def household_routes(
             )
             answer(
                 lambda: accounts.add_viewer(
-                    owner_of, body.name, body.permissions, rank(body.age_limit)
+                    owner_of,
+                    body.name,
+                    body.permissions,
+                    rank(body.age_limit),
+                    bool(body.can_ask) and may_ask(request, prefix),
                 )
             )
             return household(owner_of)
@@ -244,7 +253,12 @@ def household_routes(
             )
             answer(
                 lambda: accounts.update_viewer(
-                    owner_of, viewer, body.name, body.permissions, rank(body.age_limit)
+                    owner_of,
+                    viewer,
+                    body.name,
+                    body.permissions,
+                    rank(body.age_limit),
+                    body.can_ask if may_ask(request, prefix) else None,
                 )
             )
             return household(owner_of)

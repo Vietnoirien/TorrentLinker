@@ -161,8 +161,8 @@ function householdProfile(root, options, profile, holder) {
 function householdForm(root, options, profile, holder, after) {
   document.querySelector(".household-form")?.remove();
   const value = profile
-    ? { name: profile.name, permissions: [...profile.permissions], age_limit: profile.age_limit }
-    : { name: "", permissions: holder.permissions.filter((p) => p !== "adult"), age_limit: holder.age_limit };
+    ? { name: profile.name, permissions: [...profile.permissions], age_limit: profile.age_limit, can_ask: !!profile.can_ask }
+    : { name: "", permissions: holder.permissions.filter((p) => p !== "adult"), age_limit: holder.age_limit, can_ask: false };
   const form = element("fieldset", undefined, "household-form");
   form.append(element("legend", profile ? say(`Edit ${profile.name}`, `Modifier ${profile.name}`) : say("New profile", "Nouveau profil")));
   const fields = element("div", undefined, "settings-fields");
@@ -183,6 +183,11 @@ function householdForm(root, options, profile, holder, after) {
         value.permissions = checked ? [...value.permissions, key] : value.permissions.filter((p) => p !== key);
       });
   form.append(kinds);
+  // A Viewer may ask the account holder for a film; the holder then asks the owner (off by default).
+  const asks = element("div");
+  memberCheck(asks, say("Can ask for films", "Peut demander des films"), value.can_ask, false, (checked) => (value.can_ask = checked));
+  asks.append(element("p", say("Its asks wait in your Médias bell; you accept or refuse them.", "Ses demandes attendent dans votre cloche de Médias ; vous les acceptez ou les refusez."), "muted"));
+  form.append(asks);
   const actions = element("div", undefined, "settings-actions");
   actions.append(
     button(say("Save", "Enregistrer"), async () => {

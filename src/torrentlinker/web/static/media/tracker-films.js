@@ -119,7 +119,7 @@ function filmsShow(row) {
 }
 // The film's panel, after the synopsis and tags the banner already drew.
 function filmsFeature(row, content, description, actions) {
-  if (!filmsOwner()) { mediaRequestActions(row, description, actions); return; }
+  if (!filmsOwner()) { (state.setup?.viewer ? householdActions : mediaRequestActions)(row, description, actions); return; }
   if (row.in_library) content.querySelector("h2").append(element("span", say("In the Library", "Dans la bibliothèque"), "media-poster-badge films-inline"));
   if (row.tracker) {
     const chosen = mediaTrackerRelease(row.tracker);

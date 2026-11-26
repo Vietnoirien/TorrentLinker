@@ -60,9 +60,9 @@ async function applyEnvironment(){
   language=env.language||"en";state.clientId=env.client_id||"default";state.view=env.active?"media":"";
   // A Member's Médias has none of the Owner's tools: no library refresh, no Assistant (#138
   // declares its route) and no tracker download: they ask instead (requests.js).
-  state.setup={adult_content:!!env.adult_content,owner:env.owner!==false,permissions:env.permissions||[]};
+  state.setup={adult_content:!!env.adult_content,owner:env.owner!==false,permissions:env.permissions||[],web:env.mode==="web",viewer:!!env.viewer,asks:!!env.asks};
   // requests.js is the Web's alone: the desktop stays the Owner's.
-  if(typeof requestsBell==="function"){requestsBell();if(requestsShown()&&!requests.loaded)guard(()=>requestsLoad())}
+  if(typeof requestsBell==="function"){requestsBell();if(requestsShown()&&!requests.loaded)guard(()=>requestsLoad());if(typeof householdLoad==="function")guard(householdLoad)}
   for(const id of ["media-toolbar-refresh","media-refresh","media-toolbar-chat"])$(id).hidden=!state.setup.owner;
   for(const node of document.querySelectorAll("[data-view=setup]"))node.hidden=!state.setup.owner;
   document.documentElement.lang=language;document.documentElement.dataset.theme=env.theme||"dark";

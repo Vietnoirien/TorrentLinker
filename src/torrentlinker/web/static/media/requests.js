@@ -3,9 +3,11 @@
    owner" instead of Download on a tracker film, "Make a wish", and a bell in the Media menu
    whose drawer lists each Request and Wish with its state and the approver's note.
    The server checks the Permissions and caps again; hiding is only presentation. */
-const requests = {rows: [], quota: null, unread: 0, loaded: false, timer: 0, sequence: 0};
+const requests = {rows: [], household: [], quota: null, unread: 0, loaded: false, timer: 0, sequence: 0};
 const requestPermission = name => state.setup?.owner === false && (state.setup.permissions || []).includes(name);
-const requestsShown = () => requestPermission("request") || requestPermission("wish");
+// An account holder (the Owner too, on the Web) also answers the asks of their Viewers.
+const requestsHolder = () => !!state.setup?.web && !state.setup.viewer && (state.setup.owner || requestPermission("request"));
+const requestsShown = () => requestPermission("request") || requestPermission("wish") || requestsHolder();
 const requestStates = () => ({
   pending: [say("Pending", "En attente"), "wait"], accepted: [say("Accepted", "Acceptée"), ""], sent: [say("Accepted", "Acceptée"), ""],
   send_failed: [say("Waiting to be sent", "En attente d’envoi"), "wait"], downloading: [say("Downloading", "En téléchargement"), ""],
@@ -45,7 +47,7 @@ async function requestsLoad(result) {
   if (sequence !== requests.sequence) return; // a later answer is on its way
   const before = new Map(requests.rows.map(row => [row.id, row.state]));
   const fresh = found.requests.filter(row => row.unread && requests.loaded && before.get(row.id) !== row.state);
-  Object.assign(requests, {rows: found.requests, quota: found.quota, unread: found.unread, loaded: true});
+  Object.assign(requests, {rows: found.requests, household: found.household || [], quota: found.quota, unread: found.unread, loaded: true});
   // A new answer shows a short notice, then waits in the drawer until it is seen.
   for (const row of fresh) toast(`${row.title} · ${requestState(row)[0]}${row.answer ? ` · « ${row.answer} »` : ""}`);
   requestsBell();
@@ -68,7 +70,8 @@ function requestsDrawer() {
   header.append(element("h2", say("My Requests", "Mes demandes")), button(say("Close", "Fermer"), () => { root.hidden = true; }, "quiet"));
   root.replaceChildren(header);
   if (requestPermission("request")) root.append(requestQuotaLine());
-  if (!requests.rows.length) root.append(element("p", say("Your Requests and Wishes will appear here.", "Vos demandes et vœux apparaîtront ici."), "media-row-note"));
+  if (requests.household.length) root.append(householdSection());
+  if (!requests.rows.length && state.setup?.owner === false) root.append(element("p", say("Your Requests and Wishes will appear here.", "Vos demandes et vœux apparaîtront ici."), "media-row-note"));
   for (const row of requests.rows) {
     const item = element("div", undefined, `media-request${row.unread ? " unread" : ""}`), copy = element("div");
     const [label] = requestState(row);
@@ -81,6 +84,76 @@ function requestsDrawer() {
     const actions = element("div", undefined, "media-feature-actions");
     actions.append(button(say("Make a wish", "Faire un vœu"), requestWishDialog, "media-secondary")); root.append(actions);
   }
+}
+// "Household asks": what a Viewer on a Shared Screen asks for, above the holder's own Requests.
+function householdSection() {
+  const box = element("section", undefined, "media-household");
+  box.append(element("h3", say("My household's asks", "Demandes de mon foyer")));
+  for (const ask of requests.household) {
+    const item = element("div", undefined, "media-request"), copy = element("div");
+    const where = [ask.viewer, ask.screen].filter(Boolean).join(" · ");
+    const states = {pending: say("waiting", "en attente"), accepted: state.setup.owner ? say("accepted", "acceptée") : say("accepted, asked of the owner", "acceptée, demandée au propriétaire"), refused: say("refused", "refusée")};
+    copy.append(element("strong", [ask.title, ask.year].filter(Boolean).join(" · ")), element("small", `${where} · ${states[ask.state] || ask.state}`));
+    if (ask.state === "pending") {
+      if (!state.setup.owner) copy.append(requestQuotaLine(ask.size));
+      const actions = element("div", undefined, "media-feature-actions");
+      actions.append(button(say("Accept", "Accepter"), () => guard(() => householdAnswer(ask, true)), "media-primary"), button(say("Refuse", "Refuser"), () => householdRefuse(ask, actions), "media-secondary"));
+      copy.append(actions);
+    } else if (ask.state === "accepted" && state.setup.owner) copy.append(button(say("Choose the release", "Choisir la release"), () => guard(() => filmsReleases({film: ask.film})), "quiet"));
+    item.append(mediaArt({id: `film-${ask.film}`, title: ask.title, kind: "video", artwork_url: "tracker"}), copy); box.append(item);
+  }
+  return box;
+}
+async function householdAnswer(ask, accept, note = "") {
+  await api(`household-asks/${encodeURIComponent(ask.id)}/${accept ? "accept" : "refuse"}`, accept ? {} : {note});
+  await requestsLoad(); requestsDrawer();
+  if (accept) {
+    toast(state.setup.owner ? say(`${ask.title} accepted: choose its release.`, `${ask.title} accepté : choisissez sa release.`) : say(`${ask.title} asked of the owner`, `${ask.title} demandé au propriétaire`));
+    // On the Owner's own account there is no Request: the release is chosen and downloaded here.
+    if (state.setup.owner) { $("media-requests").hidden = true; await filmsReleases({film: ask.film}); }
+  }
+}
+// "Refuse" asks for a word for the Viewer, optional.
+function householdRefuse(ask, actions) {
+  const note = element("input"); note.maxLength = 500; note.placeholder = say("A word for them (optional)", "Un mot pour lui ou elle (facultatif)"); note.setAttribute("aria-label", note.placeholder);
+  const send = button(say("Send the refusal", "Envoyer le refus"), () => guard(() => householdAnswer(ask, false, note.value)), "media-secondary");
+  actions.replaceChildren(note, send); note.focus();
+}
+// A Viewer's side: whom it asks, and where each ask stands.
+const household = {asks: [], holder: "", can: false, timer: 0};
+async function householdLoad() {
+  if (!state.setup?.viewer) return;
+  const found = await api("household-asks");
+  Object.assign(household, {asks: found.asks, holder: found.holder, can: found.can_ask});
+  clearInterval(household.timer);
+  household.timer = setInterval(() => { if (state.view === "media") guard(householdLoad); }, 60000);
+  mediaRenderFeature(); mediaRenderHome();
+}
+const householdFor = film => household.asks.find(ask => ask.film === film && ask.state !== "cancelled");
+const householdName = () => household.holder || say("the owner", "le propriétaire");
+function householdState(ask) {
+  const who = householdName();
+  if (ask.state === "pending") return [say(`Waiting for ${who}`, `En attente de ${who}`), "wait"];
+  if (ask.state === "refused") return [say(`${who} refused`, `${who} a refusé`), "no"];
+  if (ask.request_state && ask.request_state !== "pending") return requestStates()[ask.request_state] || [ask.request_state, ""];
+  return [household.holder ? say(`${who} asked the owner`, `${who} l’a demandé au propriétaire`) : say("Accepted", "Accepté"), ""];
+}
+function householdActions(row, copy, actions) {
+  const ask = householdFor(row.film);
+  if (ask) {
+    const [label, tone] = householdState(ask), line = element("div", undefined, "media-request-state");
+    line.append(element("span", label, `media-poster-badge ${tone}`), element("span", ask.state === "refused" && ask.note ? `« ${ask.note} »` : ""));
+    copy.append(line);
+    if (ask.state === "pending") actions.append(button(say("Cancel the ask", "Annuler la demande"), () => guard(async () => { await api(`household-asks/${encodeURIComponent(ask.id)}/cancel`, {}); await householdLoad(); }), "media-secondary"));
+  } else if (household.can) {
+    copy.append(element("p", say(`${householdName()} decides, then asks the owner.`, `${householdName()} décide, puis demande au propriétaire.`), "media-quota"));
+    actions.append(button(say(`Ask ${householdName()}`, `Demander à ${householdName()}`), () => guard(async () => {
+      await api("household-asks", {film: row.film});
+      toast(say(`Ask sent for ${row.title}`, `Demande envoyée pour ${row.title}`));
+      await householdLoad();
+    }), "media-primary"));
+  }
+  copy.append(actions);
 }
 async function requestsOpen() {
   const root = $("media-requests");
@@ -132,6 +205,8 @@ function mediaRequestActions(row, copy, actions) {
 }
 // The poster badge of a tracker film the Member asked for.
 function mediaRequestBadge(item, art) {
+  const heard = item.film && state.setup?.viewer && householdFor(item.film);
+  if (heard) { const [label, tone] = householdState(heard); art.append(element("span", label, `media-poster-badge ${tone}`)); return; }
   const asked = item.film && requestsShown() && requestFor(item.film);
   if (!asked) return;
   const [label, tone] = requestState(asked);

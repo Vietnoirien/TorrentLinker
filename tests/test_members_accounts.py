@@ -186,6 +186,10 @@ def test_every_existing_route_without_a_declaration_is_the_owners(server):
         "/api/media/sessions",
         "/api/media/sessions/{identifier}",
         # Requests and Wishes, the Member's side (#133).
+        "/api/household-asks",
+        "/api/household-asks/{identifier}/accept",
+        "/api/household-asks/{identifier}/cancel",
+        "/api/household-asks/{identifier}/refuse",
         "/api/requests",
         "/api/requests/releases/{infohash}/description",
         "/api/requests/seen",

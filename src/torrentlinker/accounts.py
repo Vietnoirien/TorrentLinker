@@ -66,6 +66,7 @@ class Actor:
     folders: frozenset[str] | None = None
     max_quality: int | None = None  # the tallest playback, in pixels of height (None: no limit)
     screen: str = ""  # the Shared Screen this actor watches on, if any
+    asks: bool = False  # a Viewer who may ask its account holder for a Tracker Film
 
     @property
     def owner(self) -> bool:
@@ -147,6 +148,8 @@ class Accounts:
                 r[1] for r in self.db.execute("PRAGMA table_info(media_limits)")
             }:
                 self.db.execute("ALTER TABLE media_limits ADD COLUMN max_quality INTEGER")
+            if "can_ask" not in {r[1] for r in self.db.execute("PRAGMA table_info(viewers)")}:
+                self.db.execute("ALTER TABLE viewers ADD COLUMN can_ask INTEGER NOT NULL DEFAULT 0")
             self.db.execute(
                 "INSERT OR IGNORE INTO accounts (id, name, created) VALUES (?, 'Owner', ?)",
                 (OWNER, time.time()),
@@ -689,6 +692,7 @@ class Accounts:
                 "permissions": sorted(p.value for p in base.permissions if p in MEDIA),
                 "age_limit": base.age_limit,
                 "pin": bool(holder["pin"]),
+                "can_ask": False,
             }
         ]
         for row in rows:
@@ -701,6 +705,7 @@ class Accounts:
                     "permissions": sorted(permissions & {p.value for p in base.permissions}),
                     "age_limit": narrowest(base.age_limit, row["age_limit"]),
                     "pin": bool(row["pin"]),
+                    "can_ask": bool(row["can_ask"]),
                 }
             )
         for profile in found:
@@ -714,7 +719,12 @@ class Accounts:
         return found
 
     def add_viewer(
-        self, account: str, name: str, permissions: Iterable[Permission], age_limit: int | None
+        self,
+        account: str,
+        name: str,
+        permissions: Iterable[Permission],
+        age_limit: int | None,
+        can_ask: bool = False,
     ) -> str:
         identifier = uuid4().hex
         with self.lock, self.db:
@@ -722,7 +732,7 @@ class Accounts:
                 "INSERT INTO viewers (id, account, name, permissions, created) VALUES (?,?,'',?,?)",
                 (identifier, account, "[]", time.time()),
             )
-            self._viewer(account, identifier, name, permissions, age_limit)
+            self._viewer(account, identifier, name, permissions, age_limit, can_ask)
         return identifier
 
     def update_viewer(
@@ -732,13 +742,15 @@ class Accounts:
         name: str,
         permissions: Iterable[Permission],
         age_limit: int | None,
+        can_ask: bool | None = None,
     ) -> None:
+        """Change a profile; `can_ask` (None: unchanged) lets it ask its holder for films."""
         with self.lock, self.db:
             if not self.db.execute(
                 "SELECT 1 FROM viewers WHERE id=? AND account=?", (viewer, account)
             ).fetchone():
                 raise ValueError("This profile no longer exists.")
-            self._viewer(account, viewer, name, permissions, age_limit)
+            self._viewer(account, viewer, name, permissions, age_limit, can_ask)
 
     def _viewer(
         self,
@@ -747,6 +759,7 @@ class Accounts:
         name: str,
         permissions: Iterable[Permission],
         age_limit: int | None,
+        can_ask: bool | None = None,
     ) -> None:
         base = self.actor(account)
         if base is None:
@@ -767,6 +780,8 @@ class Accounts:
             "UPDATE viewers SET name=?, permissions=?, age_limit=? WHERE id=?",
             (name, json.dumps(sorted(p.value for p in granted)), age_limit, viewer),
         )
+        if can_ask is not None:
+            self.db.execute("UPDATE viewers SET can_ask=? WHERE id=?", (int(can_ask), viewer))
         self._pins_needed(account)
 
     def _pins_needed(self, account: str) -> None:
@@ -856,6 +871,8 @@ class Accounts:
             folders=base.folders,
             max_quality=base.max_quality,
             screen=screen,
+            # An ask goes to the holder, who answers it with a Request of their own.
+            asks=found["can_ask"] and base.holds(Permission.REQUEST),
         )
 
     def promote(self, account: str, viewer: str, *, days: int, inviter: str) -> tuple[str, str]:
