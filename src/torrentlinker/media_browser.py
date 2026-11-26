@@ -3,6 +3,8 @@
 import base64
 from urllib.parse import parse_qs, unquote, urlsplit
 
+from torrentlinker.accounts import OWNER_ACTOR
+
 
 def tracker_hash(value: str) -> str:
     value = value.lower()
@@ -65,6 +67,22 @@ class MediaBrowserService:
                 kind="video",
                 scope=query.get("scope", "home"),
                 limit=int(query.get("limit", 20)),
+            )
+        if parts[:2] == ["media", "tracker-films"] and method == "GET":
+            setup, who = media.setup(client), OWNER_ACTOR
+            if len(parts) == 3 and parts[2] == "landing":
+                return media.tracker_films_landing(client, setup, who)
+            if len(parts) == 3:
+                return media.tracker_film_detail(client, setup, who, parts[2])
+            return media.tracker_films_listing(
+                client,
+                setup,
+                who,
+                genres=tuple(g for g in (query.get("genre"),) if g),
+                sort=query.get("sort", "new"),
+                q=query.get("q", ""),
+                offset=int(query.get("offset", 0)),
+                limit=int(query.get("limit", 60)),
             )
         if parts[:2] == ["media", "items"] and len(parts) >= 3:
             identifier = parts[2]

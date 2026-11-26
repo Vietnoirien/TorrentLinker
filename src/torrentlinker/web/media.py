@@ -62,6 +62,10 @@ class AgeRating(MediaClient):
     rating: Literal["TP", "10", "12", "16", "18"]
 
 
+class FilmRematch(MediaClient):
+    tmdb: str = Field(pattern=r"^\d{1,9}$")
+
+
 class MediaChat(BaseModel):
     token: str = Field(max_length=100)
     conversation_id: str = Field(default="", max_length=64)
@@ -301,6 +305,90 @@ def media_routes(app, agent, assistant):
             include=include,
         )
 
+    # Tracker Films: the films the Trackers hold, one per film (decisions 7 and 20). The
+    # Films Permission browses them; a Member never gets a release, the Owner every one.
+    def films(work, request: Request, client_id: str):
+        try:
+            chosen = target(request, client_id)
+            return work(chosen, media.setup(chosen), actor(request))
+        except KeyError:
+            raise HTTPException(404, "This film is not on the tracker.") from None
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from error
+
+    @app.get("/api/media/tracker-films/landing")
+    @needs(Permission.FILMS)
+    def film_landing(request: Request, client_id: str = ""):
+        return films(media.tracker_films_landing, request, client_id)
+
+    @app.get("/api/media/tracker-films")
+    @needs(Permission.FILMS)
+    def film_grid(
+        request: Request,
+        client_id: str = "",
+        genre: list[str] = Query([], max_length=2),
+        sort: str = Query("new", pattern="^(new|shared|year|title)$"),
+        q: str = Query("", max_length=200),
+        offset: int = Query(0, ge=0),
+        limit: int = Query(60, ge=1, le=100),
+    ):
+        return films(
+            lambda chosen, setup, who: media.tracker_films_listing(
+                chosen, setup, who, genres=tuple(genre), sort=sort, q=q, offset=offset, limit=limit
+            ),
+            request,
+            client_id,
+        )
+
+    @app.get("/api/media/tracker-films/{identifier}")
+    @needs(Permission.FILMS)
+    def film_detail(identifier: str, request: Request, client_id: str = ""):
+        return films(
+            lambda chosen, setup, who: media.tracker_film_detail(chosen, setup, who, identifier),
+            request,
+            client_id,
+        )
+
+    @app.post("/api/media/tracker-films/{identifier}/rematch")
+    def film_rematch(identifier: str, body: FilmRematch):
+        target_client = client(body.client_id)
+        try:
+            media.film_rematch(target_client, media.setup(target_client), identifier, body.tmdb)
+        except KeyError:
+            raise HTTPException(404, "This film is not on the tracker.") from None
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from error
+        return {"ok": True}
+
+    @app.post("/api/media/tracker-films/releases/{site}/{infohash}/rematch")
+    def release_rematch(site: str, infohash: str, body: FilmRematch):
+        from torrentlinker.media_browser import tracker_hash
+        from torrentlinker.trackers import TRACKERS
+
+        target_client = client(body.client_id)
+        try:
+            if site not in TRACKERS:
+                raise ValueError("Unknown tracker.")
+            media.release_rematch(
+                site, tracker_hash(infohash), media.setup(target_client), body.tmdb
+            )
+        except KeyError:
+            raise HTTPException(404, "This release is not on the tracker.") from None
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from error
+        return {"ok": True}
+
+    @app.post("/api/media/tracker-films/{identifier}/rating")
+    def film_rating(identifier: str, body: AgeRating):
+        target_client = client(body.client_id)
+        try:
+            media.film_rating(identifier, body.rating, target_client, media.setup(target_client))
+        except KeyError:
+            raise HTTPException(404, "This film is not on the tracker.") from None
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from error
+        return {"ok": True}
+
     @app.post("/api/media/tracker/{infohash}/download")
     def tracker_download(infohash: str, body: MediaClient):
         from torrentlinker.media_browser import tracker_hash
@@ -516,9 +604,12 @@ def media_routes(app, agent, assistant):
         size: Literal["grid", "hero"] | None = None,
         v: str = "",
     ):
-        if not identifier.startswith("tracker-"):
+        if not identifier.startswith(("tracker-", "film-")):
             client_id = item(request, client_id, identifier)
-        elif not media.sees_tracker(actor(request)):
+        elif not media.sees_tracker(actor(request)) or (
+            identifier.startswith("film-")
+            and not media.film_visible(target(request, client_id), identifier[5:], actor(request))
+        ):
             raise HTTPException(404, "Artwork unavailable.")
         else:
             client_id = target(request, client_id)

@@ -432,6 +432,10 @@ class TrackerRows:
                 for release in entry.get("releases") or []:
                     if release["hash"] == infohash:
                         return {**entry, "release": release}
+        # A Catalogue release the film index lists, though no suggestion names it.
+        found = self.film_release(infohash)  # type: ignore[attr-defined]
+        if found is not None:
+            return found
         raise ValueError("This tracker release is no longer suggested.")
 
     def tracker_poster_entries(self, client_id) -> list[dict[str, Any]]:

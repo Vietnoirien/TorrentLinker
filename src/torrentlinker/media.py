@@ -1604,6 +1604,8 @@ class MediaLibrary(TrackerFilms):
                 tracker.pop("upgrades", None)
                 if not self.sees_tracker(actor):
                     tracker.pop("tracker", None)
+            if "tracker" in tracker:
+                tracker["tracker"] = self.films_row(client_id, actor, tracker["tracker"])
             return {"rows": [tracker[key] for key in ("tracker", "upgrades") if key in tracker]}
         if scope == "home":
             add("continue", "", view="continue")
@@ -1624,7 +1626,7 @@ class MediaLibrary(TrackerFilms):
             if not self.sees_tracker(actor):
                 tracker.pop("tracker", None)
         if "tracker" in tracker:
-            rows.append(tracker["tracker"])
+            rows.append(self.films_row(client_id, actor, tracker["tracker"]))
         # Libraries hold far fewer series than films.
         genre_rows(base, least=2 if base == "series" else 3, **apart)
         if scope == "home":
@@ -1637,8 +1639,9 @@ class MediaLibrary(TrackerFilms):
 
     @staticmethod
     def sees_tracker(actor: Actor) -> bool:
-        """Tracker films are unrated films: shown with the Films Permission and no limit."""
-        return actor.owner or actor.holds(Permission.FILMS) and actor.age_limit is None
+        """Tracker films are shown with the Films Permission. An Age Rating limit narrows
+        them by each film's rating (a film without one is hidden), not all at once."""
+        return actor.owner or actor.holds(Permission.FILMS)
 
     def detail(
         self,
@@ -1717,6 +1720,8 @@ class MediaLibrary(TrackerFilms):
         return "asset:" + key
 
     def artwork(self, client_id, identifier):
+        if identifier.startswith("film-"):
+            return self.film_artwork(client_id, identifier[5:])
         if identifier.startswith("tracker-"):
             return self.tracker_artwork(client_id, identifier[8:])
         row = self.record(client_id, identifier)

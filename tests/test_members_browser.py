@@ -322,6 +322,7 @@ def test_a_member_asks_for_a_tracker_film_and_follows_it_in_the_bell(tmp_path):
             "state": "ready",
         }
     }
+    library.films_row = lambda client_id, actor, waiting: waiting  # the row as stubbed above
     library.tracker_entry = lambda *_: {"facts": {"title": "Dune", "year": 2024}, "release": best}
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))

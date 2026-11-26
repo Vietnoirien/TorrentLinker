@@ -70,7 +70,8 @@ def request_routes(app: FastAPI, requests: Requests, media) -> None:
     def ask(body: TrackerRequest, request: Request):
         """A Request for a tracker film the Member sees; the server reads its release."""
         found = actor(request)
-        if not media.sees_tracker(found):
+        # A release is unrated: under an Age Rating limit it cannot be asked for by its hash.
+        if not media.sees_tracker(found) or found.age_limit is not None:
             raise HTTPException(404, "This tracker release is no longer suggested.")
         client = media.agent.setup.settings.default_client_id
         try:

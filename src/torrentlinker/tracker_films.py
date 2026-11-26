@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import threading
 import time
 from typing import Any
@@ -24,7 +25,7 @@ from guessit import guessit
 from torrentlinker import age_ratings
 from torrentlinker.media_ratings import AgeRatings
 from torrentlinker.media_tracker import TrackerRows, film_key, plain
-from torrentlinker.trackers import valid_order
+from torrentlinker.trackers import DEFAULT_TRACKER, valid_order
 
 # The Catalogue categories that hold films (decision 18); the 6000s (adult) never count. A
 # tr4ker category holds non-films too (PDF magazines, series, albums): its releases are listed
@@ -58,6 +59,7 @@ POSTER_BASE = "https://image.tmdb.org/t/p/w500"
 RUN_INTERVAL = 600  # seconds between two refreshes of the index
 IDENTIFY_BUDGET = 120.0  # seconds one refresh may spend asking TMDb; the rest waits
 IDENTIFY_PAUSE = 0.25  # seconds between two TMDb requests
+HIDDEN = {"tkey", "position", "download_url"}  # the index's own columns, never sent out
 NOT_FOUND_RETRY = 7 * 86400  # a title TMDb did not know is asked again a week later
 
 
@@ -618,14 +620,227 @@ class TrackerFilms(TrackerRows, AgeRatings):
             row.update(
                 chosen,
                 releases=[
-                    {k: v for k, v in r.items() if k not in {"tkey", "position"}}
-                    for r in chosen["releases"]
+                    {k: v for k, v in r.items() if k not in HIDDEN} for r in chosen["releases"]
                 ],
                 preselected={
                     k: v for k, v in chosen["preselected"].items() if k not in {"tkey", "position"}
                 },
             )
         return row
+
+    # -- What each role is shown -----------------------------------------------------------
+
+    @staticmethod
+    def _rules(actor) -> dict[str, Any]:
+        """Which films an actor sees (decisions 11, 14 and 21): the Owner every one, with its
+        releases; a Member identified films only, none already in the Library, and under an
+        Age Rating limit only those rated at or under it."""
+        if actor.owner:
+            return {"choose": True}
+        return {"identified_only": True, "hide_library": True, "age_limit": actor.age_limit}
+
+    @staticmethod
+    def _film_card(film: dict[str, Any], owner: bool) -> dict[str, Any]:
+        """A film as a Médias row. The Owner's carries the pre-selected release, as a tracker
+        suggestion does; a Member's only the size their quota is checked against."""
+        card: dict[str, Any] = {
+            "id": "film-" + film["id"],
+            "kind": "video",
+            "film": film["id"],
+            "title": film["title"],
+            "year": film["year"],
+            "rating": film["rating"],
+            "genre": ", ".join(film["genres"]),
+            "description": film["overview"],
+            "duration": film["runtime"] * 60,
+            "artwork_url": "tracker" if film["poster"] else "",
+            "available": True,
+            "identified": film["identified"],
+        }
+        chosen = film.get("preselected")
+        if owner and chosen:
+            card.update(
+                in_library=film["in_library"],
+                release_count=film["release_count"],
+                below_threshold=film["below_threshold"],
+                tracker={
+                    **({"site": chosen["tracker"]} if chosen["tracker"] != "c411" else {}),
+                    "hash": chosen["hash"],
+                    "name": chosen["name"],
+                    "size": chosen["size"],
+                    "seeders": chosen["seeders"],
+                    "score": chosen["score"],
+                    "color": chosen["color"],
+                    "published_at": chosen["published_at"],
+                },
+            )
+        elif not owner:
+            card["quote"] = film.get("quote")
+        return card
+
+    def _seen(self, client_id, setup, actor, **query) -> dict[str, Any]:
+        """A page of films for this actor. A Member's rows never name a release: they carry
+        the size of the pre-selected one, which their quota is checked against."""
+        rules = self._rules(actor)
+        page = self.tracker_films(client_id, setup, **query, **{**rules, "choose": True})
+        for film in page["rows"]:
+            film["quote"] = film["preselected"]["size"]
+            if not actor.owner:
+                for name in ("preselected", "releases", "below_threshold", "threshold"):
+                    film.pop(name, None)
+        page["rows"] = [self._film_card(film, actor.owner) for film in page["rows"]]
+        return page
+
+    def films_row(self, client_id, actor, waiting: dict[str, Any]) -> dict[str, Any]:
+        """Médias' "On the tracker" row, from the same index, grouping and rules as the grid
+        (decision 22). While the index holds no film it keeps the state `waiting` says."""
+        from torrentlinker.media_tracker import ROW_LIMIT
+
+        page = self._seen(client_id, self.setup(client_id), actor, limit=ROW_LIMIT)  # type: ignore[attr-defined]
+        if not page["rows"]:
+            state = "loading" if waiting["state"] == "ready" else waiting["state"]
+            return {
+                **waiting,
+                "rows": [],
+                "total": 0,
+                "state": state,
+                "filters": {"tracker": "films"},
+            }
+        return {
+            **waiting,
+            "filters": {"tracker": "films"},
+            "total": page["total"],
+            "rows": page["rows"],
+            "state": "ready",
+            "reason": "",
+        }
+
+    def tracker_films_listing(
+        self, client_id, setup, actor, *, genres=(), sort="new", q="", offset=0, limit=60
+    ) -> dict[str, Any]:
+        """The one-genre grid: paged, sorted and searched on the server. At most two genres."""
+        genres = tuple(g for g in genres if g in GENRES)[:2]
+        page = self._seen(
+            client_id,
+            setup,
+            actor,
+            genres=genres,
+            sort=sort if sort in SORTS else "new",
+            q=q,
+            offset=offset,
+            limit=limit,
+        )
+        return {**page, "filters": {"genres": list(GENRES)}}
+
+    def tracker_films_landing(self, client_id, setup, actor, limit: int = 20) -> dict[str, Any]:
+        """The landing page: what is new and most shared, then one row per genre. A grid is
+        always of one genre, opened from its row, so only genre rows can be seen in full."""
+        rows = []
+        wanted = [("tracker-new", "", {"sort": "new"}), ("tracker-shared", "", {"sort": "shared"})]
+        wanted += [("genre", genre, {"genre": genre}) for genre in GENRES]
+        for key, title, filters in wanted:
+            genres = (filters["genre"],) if "genre" in filters else ()
+            page = self._seen(
+                client_id,
+                setup,
+                actor,
+                genres=genres,
+                sort=filters.get("sort", "new"),
+                limit=limit,
+            )
+            if page["rows"]:
+                rows.append(
+                    {
+                        "key": key,
+                        "title": title,
+                        "filters": {"tracker": "films", **filters},
+                        "total": page["total"],
+                        "rows": page["rows"],
+                    }
+                )
+        return {"rows": rows}
+
+    @staticmethod
+    def _may_see(film: dict[str, Any], held: bool, actor) -> bool:
+        if actor.owner:
+            return True
+        rank = age_ratings.rank(film["rating"])
+        return (
+            film["identified"]
+            and not held
+            and (actor.age_limit is None or rank is not None and rank <= actor.age_limit)
+        )
+
+    def film_visible(self, client_id, identifier: str, actor) -> bool:
+        """Whether the actor may see this film's poster: as for its page, a hidden film is as
+        missing as an unknown one."""
+        try:
+            film = self._film_by_id(client_id, self.setup(client_id), identifier)  # type: ignore[attr-defined]
+        except KeyError:
+            return False
+        return self._may_see(film, self._held(film, self._in_library(client_id)), actor)
+
+    def tracker_film_detail(self, client_id, setup, actor, identifier: str) -> dict[str, Any]:
+        """One film. A film a Member may not see is as missing as an unknown one. The Owner
+        also gets every grouped release, the pre-selected first."""
+        film = self._film_by_id(client_id, setup, identifier)
+        held = self._held(film, self._in_library(client_id))
+        if not self._may_see(film, held, actor):
+            raise KeyError(identifier)
+        row = self._film_row(setup, film, held, True)
+        row["quote"] = row["preselected"]["size"]
+        if not actor.owner:
+            for name in ("preselected", "releases", "below_threshold", "threshold"):
+                row.pop(name, None)
+        card = self._film_card(row, actor.owner)
+        if actor.owner:
+            card["releases"] = row["releases"]
+        return card
+
+    def film_release(self, infohash: str) -> dict[str, Any] | None:
+        """A Catalogue release the index holds, shaped as a tracker suggestion's entry so the
+        Owner's download and an Approver's choice read it as they read one."""
+        with self.lock:
+            found = self.db.execute(
+                "SELECT * FROM film_release WHERE infohash=? ORDER BY published DESC", (infohash,)
+            ).fetchone()
+        if found is None:
+            return None
+        release = {
+            "hash": found["infohash"],
+            "name": found["name"],
+            "size": found["size"],
+            "seeders": found["seeders"],
+            "category": found["category"],
+            "published_at": found["published"] or None,
+        }
+        if found["tracker"] != DEFAULT_TRACKER:
+            release.update(tracker=found["tracker"], download_url=found["download_url"])
+        return {"title": found["title"], "year": found["year"], "release": release}
+
+    def film_artwork(self, client_id, identifier: str):
+        """A film's TMDb poster, downloaded once and kept as the other posters are."""
+        from torrentlinker import media_artwork
+
+        film = self._film_by_id(client_id, self.setup(client_id), identifier)  # type: ignore[attr-defined]
+        tmdb = film["tmdb"]
+        if not tmdb or not film["poster"].startswith("https://image.tmdb.org/"):
+            return None
+        with media_artwork.download_lock("film:" + tmdb):
+            with self.lock:
+                image = self.db.execute(
+                    "SELECT artwork FROM film_meta WHERE tmdb=?", (tmdb,)
+                ).fetchone()["artwork"]
+            if not image:
+                from torrentlinker.assistant.images import fetch_image
+
+                data, _ = fetch_image(film["poster"])
+                image = self.cache_artwork(data)  # type: ignore[attr-defined]
+                with self.lock, self.db:
+                    self.db.execute("UPDATE film_meta SET artwork=? WHERE tmdb=?", (image, tmdb))
+        if not re.fullmatch(r"asset:[a-f0-9]{64}\.(png|webp)", image):
+            return None
+        return self.agent.setup.path.parent / "media-artwork" / image[6:]  # type: ignore[attr-defined]
 
     def film_for(self, client_id, title: str, year: str) -> str:
         """The index's identifier of the film a title and year name, "" when it holds none."""

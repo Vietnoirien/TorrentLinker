@@ -17,11 +17,14 @@ class MemberWorkspace:
             raise PermissionError("Your account does not have the Permission for this.")
 
     def search(self, actor: Actor, query: str) -> list[dict]:
-        self.require(actor, Permission.SEARCH)
-        # Tracker films are unrated. The existing Media visibility rule applies here too.
+        """Tracker Films by title, as the Films page lists them: no release is named."""
         if not query.strip() or not self.media.sees_tracker(actor):
             return []
-        return self.approval.choices(query[:200])
+        client = self.approval.client_id
+        page = self.media.tracker_films_listing(
+            client, self.media.setup(client), actor, q=query[:200], limit=60
+        )
+        return page["rows"]
 
     def queue(self, actor: Actor) -> list[dict]:
         self.require(actor, Permission.QUEUE)
@@ -65,9 +68,9 @@ def member_workspace_routes(app: FastAPI, requests, approval, media) -> None:
             raise HTTPException(403, str(error)) from error
 
     @app.get("/api/member-workspace/search")
-    @needs(Permission.SEARCH)
+    @needs(Permission.FILMS)
     def search(request: Request, q: str = Query("", max_length=200)) -> dict:
-        return read(request, Permission.SEARCH, lambda actor: workspace.search(actor, q))
+        return read(request, Permission.FILMS, lambda actor: workspace.search(actor, q))
 
     @app.get("/api/member-workspace/queue")
     @needs(Permission.QUEUE)

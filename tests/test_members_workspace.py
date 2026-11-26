@@ -66,21 +66,21 @@ def test_member_reads_only_their_accepted_downloads(server, monkeypatch):
     assert {"member-queue", "member-torrents"} <= set(browser.get("/api/shell").json()["pages"])
 
 
-def test_search_respects_media_visibility_and_uses_requests(server, monkeypatch):
+def test_search_finds_tracker_films_for_the_films_permission_alone(server, monkeypatch):
     app, browser = server
-    lea = member(app, "lea", Permission.FILMS, Permission.SEARCH, Permission.REQUEST)
+    lea = member(app, "lea", Permission.FILMS)
     calls = []
 
-    def choices(q):
-        calls.append(q)
-        return [{"hash": "a" * 40, "name": "Film", "size": 10, "score": 80}]
+    def listing(client, setup, actor, **query):
+        calls.append((actor.age_limit, query))
+        return {"rows": [{"id": "film-tmdb-1", "title": "Dune"}]}
 
-    monkeypatch.setattr(app.state.request_approval, "choices", choices)
+    monkeypatch.setattr(app.state.agent_service.media, "tracker_films_listing", listing)
     browser.post("/api/login", json={"login": "lea", "password": PASSWORD})
-    result = browser.get("/api/member-workspace/search?q=Film")
-    assert result.json()["rows"][0]["name"] == "Film"
-    assert calls == ["Film"]
+    # Neither Search nor Request is needed; the age limit is applied by the listing itself.
+    assert browser.get("/api/member-workspace/search?q=Dune").json()["rows"][0]["title"] == "Dune"
     app.state.accounts.set_media_limits(lea, "12", None)
-    assert browser.get("/api/member-workspace/search?q=Film").json() == {"rows": []}
-    assert calls == ["Film"]
+    browser.get("/api/member-workspace/search?q=Dune")
+    assert [age for age, _ in calls] == [None, 2] and calls[0][1]["q"] == "Dune"
+    assert browser.get("/api/member-workspace/search?q=").json() == {"rows": []}
     assert browser.get("/api/member-workspace/queue").status_code == 403
