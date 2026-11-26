@@ -224,6 +224,18 @@ the quota with a note). The spec as decided conflicts with that in several place
     A new glossary term is needed for the ask (proposed: **Household Ask**, "demande du
     foyer").
 
+## Decided at acceptance (owner, 2026-11-26)
+
+25. **The index fills on demand, where the user looks.** Opening Médias or "Sur le tracker"
+    starts the film index job in the background when it is behind (Catalogue sync, then
+    TMDB identification, throttled), without waiting for a full Media scan. The films on
+    screen that are not identified yet go first, then the newest, then the most shared,
+    then the rest. The page follows the index without reloading: new films join the rows
+    and the grid, identified posters and titles replace the plain ones in place, and the
+    scroll position and the chosen film never move. The Owner sees one small line
+    ("Identification des films : 1 240 / 87 000") on the landing; Members only see films
+    appear.
+
 ## Open questions
 
 None.
