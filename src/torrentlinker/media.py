@@ -23,6 +23,7 @@ from torrentlinker import media_artwork, media_tracks
 from torrentlinker.accounts import OWNER, OWNER_ACTOR, Actor, Permission
 from torrentlinker.domain import ContentKind
 from torrentlinker.tracker_films import TrackerFilms
+from torrentlinker.tracker_series import TrackerSeries
 
 log = logging.getLogger(__name__)
 VIDEO = {".mp4", ".m4v", ".mkv", ".webm", ".avi", ".mov", ".mpeg", ".mpg", ".ts", ".wmv"}
@@ -133,7 +134,7 @@ class UnfinishedMedia(ValueError):
     """A registered file belongs to a download or verification still in progress."""
 
 
-class MediaLibrary(TrackerFilms):
+class MediaLibrary(TrackerFilms, TrackerSeries):
     def __init__(self, agent, clock=time.monotonic):
         self.agent = agent
         self.clock = clock
@@ -178,6 +179,7 @@ class MediaLibrary(TrackerFilms):
         self.migrate_to_actors()
         self.create_ratings()
         self.create_films()
+        self.create_series()
         self.index_items()
 
     # What a listing narrows by, read out of each item's body so SQLite can index it. The
@@ -710,6 +712,7 @@ class MediaLibrary(TrackerFilms):
         if details not in {"limit", "rejected"}:
             self.tracker_refresh(client_id, setup, stop)
             self.films_refresh(client_id, setup, stop)
+            self.series_refresh(client_id, setup, stop)
         self.library_facts(client_id)
         self.prefetch_posters(client_id, stop, progress)
         if stop.is_set():

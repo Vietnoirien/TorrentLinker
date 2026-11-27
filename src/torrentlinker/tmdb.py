@@ -76,6 +76,11 @@ class Tmdb:
             raw={**data, "media_type": media_type},
         )
 
+    def tv_season(self, tmdb_id: str, season: int) -> dict[str, Any]:
+        """One season of a series in French: its episodes with their titles and synopses."""
+        data = self._get(f"/tv/{int(tmdb_id)}/season/{int(season)}", {"language": "fr-FR"})
+        return data if isinstance(data, dict) else {}
+
     def genre_list(self, media_type: str, language: str) -> list[dict[str, Any]]:
         """TMDb's genres of films (`movie`) or series (`tv`), as `{id, name}` in a language."""
         if media_type not in ("movie", "tv"):

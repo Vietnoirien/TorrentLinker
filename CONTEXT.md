@@ -200,6 +200,17 @@ _Avoid_: Free-text request, suggestion
 A Film with at least one seeded release on a Tracker, identified by its TMDb id when known and otherwise by its title and year; it carries a poster, synopsis, genres and Age Rating, and its releases, which Members never see. A Member never sees one already in the Library.
 _Avoid_: Tracker release (one torrent of a Tracker Film), suggestion
 
+**Tracker Series**:
+A series with at least one seeded release on a Tracker, identified by its TMDb TV id when known and otherwise by its title and year; it carries a poster, synopsis, genres, Age Rating, and its seasons and episodes as TMDb lists them. Its releases, which Members never see, are season packs, Intégrales and episodes.
+_Avoid_: Show, tracker release (one torrent)
+
+**Season Pack**:
+A release of one whole season of a Tracker Series, such as `S01`.
+
+**Intégrale**:
+A release of every season of a Tracker Series, or of several seasons (`INTEGRALE`, `COMPLETE`, `S01-S03`); it covers each season it contains.
+_Avoid_: Box set, collection
+
 **Household Ask**:
 A Viewer's ask to its account holder for a Tracker Film, allowed per Viewer by the holder; the holder accepts it into a Request of their own, or refuses it. A Viewer still never makes a Request.
 _Avoid_: Viewer Request
