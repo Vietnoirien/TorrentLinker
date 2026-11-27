@@ -60,6 +60,7 @@ def file_routes(
     seeds=lambda path: [],
     client_of=lambda client_id: None,
     rebalance=None,
+    link_root_of=lambda client_id: "",
 ) -> None:
     """`folders` gives the Library and Download Folders; `films(path)` counts a folder's films."""
     app.state.file_storage = storage
@@ -142,7 +143,9 @@ def file_routes(
         except StorageError as error:
             raise refuse(error) from error
 
-    tasks = Tasks(storage, followed=followed, seeds=seeds, client_of=client_of)
+    tasks = Tasks(
+        storage, followed=followed, seeds=seeds, client_of=client_of, link_root_of=link_root_of
+    )
     app.state.file_tasks = tasks
 
     @app.get("/api/files/browse")

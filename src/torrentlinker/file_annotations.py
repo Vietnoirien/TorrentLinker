@@ -13,19 +13,24 @@ def seeds_of(torrents: list[tuple[str, str, Any]]) -> list[tuple[Path, dict[str,
     """The content each torrent puts on disk (a file, or a folder), with who seeds it.
 
     `torrents` holds (client id, client name, Torrent)."""
-    found: dict[Path, dict[str, Any]] = {}
+    found: list[tuple[Path, dict[str, Any]]] = []
     for client_id, client_name, torrent in torrents:
-        for top in {Path(torrent.save_path) / Path(name).parts[0] for name in torrent.files}:
-            found.setdefault(
-                top,
-                {
-                    "client": client_name, "client_id": client_id, "hash": torrent.hash.lower(),
-                    "ratio": round(torrent.ratio, 2), "name": torrent.name,
-                    "save_path": str(torrent.save_path),
-                    "seeding": torrent.is_seeding, "verifying": "check" in torrent.state.lower(),
-                },
+        for top in sorted(
+            {Path(torrent.save_path) / Path(name).parts[0] for name in torrent.files}
+        ):
+            found.append(
+                (
+                    top,
+                    {
+                        "client": client_name, "client_id": client_id,
+                        "hash": torrent.hash.lower(), "ratio": round(torrent.ratio, 2),
+                        "name": torrent.name, "save_path": str(torrent.save_path),
+                        "seeding": torrent.is_seeding,
+                        "verifying": "check" in torrent.state.lower(),
+                    },
+                )
             )  # fmt: skip
-    return list(found.items())
+    return found
 
 
 def seeds_under(
@@ -50,9 +55,14 @@ def annotate(
     `films` holds Médias' video items under the folder: {id, path, title}."""
     for entry in entries:
         path = folder / entry["name"]
-        seed = next((info for top, info in seeds if _related(path, top)), None)
-        if seed is not None:
-            entry["seed"] = seed
+        related = [info for top, info in seeds if _related(path, top)]
+        if related:
+            entry["seed"] = related[0]
+            if len({i["hash"] for i in related}) > 1:  # the confirmation lists each of them
+                entry["seeds"] = [
+                    {"client": i["client"], "name": i["name"]}
+                    for i in {i["hash"]: i for i in related}.values()
+                ]
         inside = [f for f in films if Path(f["path"]).is_relative_to(path)]
         if inside and (not entry["dir"] or len(inside) == 1 or _one_film(inside)):
             entry["film"] = {"id": inside[0]["id"], "title": inside[0]["title"]}

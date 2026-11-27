@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import os
 import shutil
+import tempfile
 import threading
 import time
 import uuid
@@ -79,12 +80,14 @@ class Tasks:
         threaded: bool = True,
         followed: Callable[[Path, Path], Any] = lambda old, new: None,
         client_of: Callable[[str], Any] = lambda _: None,
+        link_root_of: Callable[[str], str] = lambda _: "",
     ) -> None:
         """`seeds(path)` gives the torrents whose files overlap a path, with the content each
         puts on disk; `client_of(id)` is that torrent's client (ADR-0029: a seeded file moves
         and renames through its client); `allowed(path)` is the actor's right to touch it."""
         self.storage, self.seeds, self.allowed, self.threaded = storage, seeds, allowed, threaded
         self.client_of = client_of
+        self.link_root_of = link_root_of  # a client id -> its Link Folder ("" when none)
         self.followed = followed  # settings and grants keyed by a path follow a moved folder
         self.tasks: dict[str, dict[str, Any]] = {}
         self._cancel: dict[str, threading.Event] = {}
@@ -260,6 +263,130 @@ class Tasks:
             raise StorageError(f"The Torrent Client {info['client']} is not reachable.")
         return top, info, client
 
+    # -- Files several torrents share (ADR-0029, rule 3, #222) -------------------------------
+
+    def _shared(self, kind: str, source: Path, target: Path, seeds, item, cancelled) -> None:
+        """Move or rename once, through the first torrent's client; every other torrent on the
+        same files is then re-pointed to the new place and rechecked, through symlinks in its
+        client's Link Folder when its names or folders differ. Any failure puts every torrent
+        back at its old place, still seeding."""
+        from torrentlinker.storage_moves import StorageMoveError
+
+        group = []
+        for top, info in seeds:
+            client = self.client_of(info["client_id"])
+            if client is None:
+                raise StorageError(f"The Torrent Client {info['client']} is not reachable.")
+            group.append((top, info, client))
+        top, info, client = group[0]
+        others = [self._plan_other(kind, source, target, group[0], g) for g in group[1:]]
+        item["torrents"] = [i["name"] for _, i, _ in group]
+        moved = False
+        done: list[tuple[Any, dict[str, Any], Path, Path | None]] = []
+        try:
+            try:
+                if kind == "rename":
+                    self._rename_in_client(source, target, info, client, item)
+                else:
+                    self._move_in_client(source, target, top, info, client, item, cancelled)
+            except StorageMoveError as error:
+                raise StorageError(str(error)) from error
+            moved = True
+            for other, other_info, where, links in others:
+                old = Path(other_info["save_path"])
+                done.append((other, other_info, old, links))
+                self._repoint_checked(other, other_info["hash"], where)
+            item["undo"] = None  # the others were re-pointed: undo would leave them behind
+            names = ", ".join(i["client"] for _, i, _, _ in others)
+            item["note"] = (
+                f"{len(group)} torrents partagent ces fichiers : tous continuent ({names})"
+            )
+        except BaseException:
+            for other, other_info, old, _links in reversed(done):
+                try:
+                    self._point(other, other_info["hash"], old)
+                    other.start(other_info["hash"])
+                except Exception:  # noqa: BLE001 - keep putting the others back
+                    pass
+            for _, _, _, links in others:
+                if links is not None:
+                    shutil.rmtree(links, ignore_errors=True)
+            if moved:
+                self._shared_back(kind, source, target, info, client)
+            raise
+
+    def _plan_other(self, kind, source: Path, target: Path, primary, member):
+        """Where another torrent of the group points after the move: (client, info, folder, the
+        links folder to remove on a rollback). Refused up front when a Link Folder is needed
+        and not set."""
+        from torrentlinker.storage_moves import refusal
+
+        _, first, _ = primary
+        _, info, client = member
+        torrent = client.torrent(info["hash"])
+        if torrent is None:
+            raise StorageError(f"{info['name']} is no longer in {info['client']}.")
+        if (why := refusal(torrent)) is not None:
+            raise StorageError(why)
+        same = (
+            kind == "move" and Path(info["save_path"]) == Path(first["save_path"]) == source.parent
+        )
+        if same:
+            return client, info, target.parent, None
+        root = self.link_root_of(info["client_id"])
+        if not root:
+            raise StorageError(
+                f"Dossier de liens requis : {info['name']} ({info['client']}) garde ses noms, "
+                "il faut un Dossier de liens pour ce client (Paramètres)."
+            )
+        links = Path(tempfile.mkdtemp(prefix="torrentlinker-", dir=root))
+        try:
+            for name in torrent.files:
+                old = Path(info["save_path"]) / name
+                rel = old.relative_to(source) if old != source else Path()
+                link = links / name
+                link.parent.mkdir(parents=True, exist_ok=True)
+                link.symlink_to(target / rel if str(rel) != "." else target)
+        except Exception:
+            shutil.rmtree(links, ignore_errors=True)
+            raise
+        return client, info, links, links
+
+    def _point(self, client, hash: str, folder: Path) -> None:
+        repoint = getattr(client, "repoint", None)
+        if repoint is not None:
+            data = getattr(client, "export_torrent", lambda h: None)(hash)
+            repoint(hash, str(folder), data)
+        else:
+            client.set_location(hash, str(folder))
+
+    def _repoint_checked(self, client, hash: str, folder: Path) -> None:
+        from torrentlinker.storage_moves import _wait
+
+        client.pause(hash)
+        self._point(client, hash, folder)
+        client.recheck(hash)
+        _wait(client, hash, lambda t: "checking" not in t.state.lower(), 600)
+        after = client.torrent(hash, with_files=False)
+        if after is None or after.progress < 1:
+            raise StorageError("The client does not find all the pieces at the new place.")
+        client.start(hash)
+
+    def _shared_back(self, kind, source: Path, target: Path, info, client) -> None:
+        from torrentlinker.storage_moves import move_torrent, rename_in_torrent
+
+        try:
+            save = Path(info["save_path"])
+            if kind == "rename":
+                rename_in_torrent(
+                    client, info["hash"], target.relative_to(save).as_posix(),
+                    source.relative_to(save).as_posix(),
+                )  # fmt: skip
+            else:
+                move_torrent(client, info["hash"], save)
+        except Exception:  # noqa: BLE001 - the original error is the one to report
+            pass
+
     def _unseed(self, source: Path, actor: str) -> None:
         """Trashing seeded files takes the torrent out of its client, without its data."""
         if not (seeds := self.seeds(source)):
@@ -272,6 +399,9 @@ class Tasks:
     def _seeded(self, kind: str, source: Path, target: Path, seeds, item, cancelled) -> None:
         from torrentlinker.storage_moves import StorageMoveError
 
+        seeds = list({info["hash"]: (top, info) for top, info in seeds}.values())
+        if len(seeds) > 1 and all(top == source for top, _ in seeds):
+            return self._shared(kind, source, target, seeds, item, cancelled)
         top, info, client = self._owner(source, seeds, kind)
         try:
             if kind == "rename":

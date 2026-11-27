@@ -25,6 +25,11 @@ const ago = (t) => {
   return say(`${Math.round(s / DAY)} d ago`, `il y a ${Math.round(s / DAY)} j`);
 };
 const tip = (en, french, label) => TLInfo.html(say(en, french), label);
+// "Dossier de liens requis : why" shows its title and keeps the why behind an ⓘ.
+const reasonHTML = (text) => {
+  const m = /^Dossier de liens requis : (.*)$/s.exec(text);
+  return m ? `${say("Link Folder required", "Dossier de liens requis")} ${TLInfo.html(m[1], say("Details", "Détails"))}` : esc(text);
+};
 const fail = (e) => TLToast.show(e.message, "bad");
 
 function purge(item) {
@@ -212,7 +217,9 @@ function seedNotes(f, paths, crossing) {
   const clients = [...new Set(seeded.map((e) => e.seed.client))].join(", ");
   const bytes = seeded.reduce((a, e) => a + (e.size || 0), 0);
   const speed = 150e6;
-  const row = (cls, line, en, french) => `<div class="note ${cls} row">${line} ${tip(en, french, say("Details", "Détails"))}</div>`;
+  const many = seeded.find((e) => e.seeds);
+  const list = many ? many.seeds.map((t) => `${t.name} (${t.client})`).join("\n") : "";
+  const row = (cls, line, en, french) => `<div class="note ${cls} row">${many ? `${many.seeds.length} ${say("torrents", "torrents")} · ` : ""}${line} ${tip(en + (many ? `\n\nTorrents concerned:\n${list}\nThe data moves once; each other torrent is re-pointed and rechecked, through its Link Folder if its names differ.` : ""), french + (many ? `\n\nTorrents concernés :\n${list}\nLes données bougent une seule fois ; chaque autre torrent est re-pointé et revérifié, par son Dossier de liens si ses noms diffèrent.` : ""), say("Details", "Détails"))}</div>`;
   if (f === "trash") return row("warn", say(`${seeded.length} shared (${esc(clients)}): leaves the client`, `${seeded.length} en partage (${esc(clients)}) : retiré du client`), "The torrent leaves the client without its data, as with Replace. To keep it, restore it from the trash, then point it again.", "Le torrent est retiré du client sans ses données, comme pour « Remplacer ». Pour le garder, restaurez-le depuis la corbeille puis re-pointez-le.");
   if (f === "rename") return row("", say(`Shared in <b>${esc(clients)}</b>: renamed in the client too`, `En partage dans <b>${esc(clients)}</b> : renommé aussi dans le client`), "The name is changed in the client (the torrent's path), not only on the disk.", "Le nom est changé dans le client (chemin du torrent), pas seulement sur le disque.");
   if (f === "copy") return row("", say(`Shared in <b>${esc(clients)}</b>: the copy is not shared`, `En partage dans <b>${esc(clients)}</b> : la copie n'est pas partagée`), "The torrent stays in place and keeps sharing the original.", "Le torrent reste en place et continue de partager l'original.");
@@ -249,7 +256,7 @@ function tasksHTML() {
   const rows = S.tasks.filter((o) => S.filter === "all" || (S.filter === "failed" ? o.state === "failed" : S.filter === "running" ? o.state === "pending" : o.state === "done"));
   const f = [["all", "All", "Toutes"], ["running", "Running", "En cours"], ["done", "Done", "Terminées"], ["failed", "Failed", "En échec"]];
   const queue = S.queue.map((t) => `<div class="card task ${t.state === "failed" ? "failed" : ""}"><div class="task-head"><b class="grow">${esc(t.kind)} · ${t.items.length}</b><span class="badge ${t.state === "done" ? "ok" : t.state === "failed" ? "bad" : ""}">${esc(t.state)}</span>${t.state === "running" || t.state === "queued" ? `<button data-cancel="${esc(t.id)}">${say("Cancel", "Annuler")}</button>` : ""}</div>
-    ${t.items.map((x, n) => `<div class="titem"><span class="nm">${esc(name(x.from))}${x.note ? `<small>${esc(x.note)}</small>` : ""}</span><div class="prog"><i style="width:${Math.round(x.progress * 100)}%"></i></div>${x.eta > 0 && x.state === "running" ? `<small>${say("about", "reste ~")} ${duration(x.eta)}</small>` : ""}<span>${x.verified ? `<span class="ver">✓ ${say("verified", "vérifié")}</span>` : ""}${x.undo && x.state === "done" ? `<button data-undoitem="${esc(t.id)}" data-n="${n}">${say("Undo", "Annuler")}</button>` : ""}${x.state === "undone" ? say("undone", "annulé") : ""}</span>${x.reason ? `<div class="reason">${esc(x.reason)}</div>` : ""}</div>`).join("")}
+    ${t.items.map((x, n) => `<div class="titem"><span class="nm">${esc(name(x.from))}${x.note ? `<small>${esc(x.note)}</small>` : ""}</span><div class="prog"><i style="width:${Math.round(x.progress * 100)}%"></i></div>${x.eta > 0 && x.state === "running" ? `<small>${say("about", "reste ~")} ${duration(x.eta)}</small>` : ""}<span>${x.verified ? `<span class="ver">✓ ${say("verified", "vérifié")}</span>` : ""}${x.undo && x.state === "done" ? `<button data-undoitem="${esc(t.id)}" data-n="${n}">${say("Undo", "Annuler")}</button>` : ""}${x.state === "undone" ? say("undone", "annulé") : ""}</span>${x.reason ? `<div class="reason">${reasonHTML(x.reason)}</div>` : ""}</div>`).join("")}
     <small>${esc(t.actor)} · ${when(t.created)}</small></div>`).join("");
   return `${queue ? `<div class="tasks" style="margin-bottom:16px">${queue}</div><h3>${say("Log", "Journal")}</h3>` : ""}<div class="filters">${f.map(([k, en, french]) => `<button data-filter="${k}" class="${S.filter === k ? "on" : ""}">${say(en, french)}</button>`).join("")}</div>
     <div class="tasks">${rows.map((o) => {
@@ -257,7 +264,7 @@ function tasksHTML() {
       return `<div class="card task ${o.state === "failed" ? "failed" : ""}"><div class="task-head"><b class="grow">${esc(say(...(KINDS[o.kind] || [o.kind, o.kind])))}${name ? ` · ${esc(name)}` : ""}</b>
         <span class="badge ${o.state === "done" ? "ok" : o.state === "failed" ? "bad" : ""}">${esc(say(...(STATES[o.state] || [o.state, o.state])))}</span>
         ${o.undoable ? `<button data-undo="${esc(o.id)}">${say("Undo", "Annuler")}</button>` : ""}</div>
-        <small>${esc(o.actor)} · ${when(o.started)}</small>${o.error ? `<div class="reason">${esc(o.error)}</div>` : ""}</div>`;
+        <small>${esc(o.actor)} · ${when(o.started)}</small>${o.error ? `<div class="reason">${reasonHTML(o.error)}</div>` : ""}</div>`;
     }).join("") || `<div class="empty">${say("No task for this filter.", "Aucune tâche pour ce filtre.")}</div>`}</div>`;
 }
 

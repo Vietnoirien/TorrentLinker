@@ -556,6 +556,7 @@ def create_app(
         seeds=lambda path: seeds_of_path(path),
         rebalance=lambda cards: rebalancing(cards),
         client_of=lambda client_id: for_client(client_id).setup.client(),
+        link_root_of=lambda client_id: service.settings.profile(client_id).reseed_link_root,
     )
     from torrentlinker.library_replace import Replacements
     from torrentlinker.web.replace import replace_routes
@@ -607,6 +608,7 @@ def create_app(
         lambda: service.settings.library_folders,
         seeds_of_path,
         lambda client_id: for_client(client_id).setup.client(),
+        lambda client_id: service.settings.profile(client_id).reseed_link_root,
     )
 
     def read_again(client_id: str) -> None:

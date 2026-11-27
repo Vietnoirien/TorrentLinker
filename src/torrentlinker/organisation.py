@@ -102,9 +102,12 @@ def example(template: str, kind: str) -> str:
 class Organisation:
     """Proposals for the Library Folders, from Médias' items."""
 
-    def __init__(self, storage, media, library_folders, seeds, client_of) -> None:
+    def __init__(
+        self, storage, media, library_folders, seeds, client_of, link_root_of=lambda _: ""
+    ) -> None:
         self.storage, self.media = storage, media
         self.library_folders, self.seeds, self.client_of = library_folders, seeds, client_of
+        self.link_root_of = link_root_of
 
     def template(self, folder: Path, kind: str) -> str:
         return self.storage.templates().get(str(folder), {}).get(kind) or DEFAULTS[kind]
@@ -205,8 +208,16 @@ class Organisation:
         found = seeds_under(top, seeds)
         if not found:
             return None, "", False
-        if len(found) > 1:
-            return found[0][1], "Several torrents share this folder.", False
+        shared = list({info["hash"]: info for _, info in found}.values())
+        if len(shared) > 1:
+            # Several torrents on the same files: the first renames them in its client, the
+            # others follow through their Link Folder (#222).
+            first = shared[0]
+            seed = {"client": first["client"], "hash": first["hash"], "ratio": first["ratio"],
+                    "native": True, "torrents": len(shared)}  # fmt: skip
+            if any(i.get("verifying") for i in shared):
+                return seed, "This torrent is being checked.", False
+            return seed, "", any(not self.link_root_of(i["client_id"]) for i in shared[1:])
         torrent_top, info = found[0]
         client = self.client_of(info["client_id"])
         native = client is not None and getattr(client, "repoint", None) is None
