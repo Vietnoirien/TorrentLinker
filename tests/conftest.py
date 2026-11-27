@@ -5,6 +5,9 @@ import os
 
 # Test windows and their dialogs never show on the user's screen, as in CI.
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+# The app follows the system language ("auto"): tests read English, as in CI, whatever the
+# developer's own locale. A test of another language sets it explicitly.
+os.environ["LC_ALL"] = "C.UTF-8"
 
 import keyring
 import pytest

@@ -166,6 +166,8 @@ def test_every_existing_route_without_a_declaration_is_the_owners(server):
         "/api/media/home",
         "/api/media/tracker-films",
         "/api/media/tracker-films/landing",
+        "/api/media/tracker-films/revision",
+        "/api/media/tracker-films/focus",
         "/api/media/tracker-films/{identifier}",
         "/api/media/items/{identifier}",
         "/api/media/items/{identifier}/stream",

@@ -1450,9 +1450,18 @@ class MediaLibrary(TrackerFilms):
         The rows are never changed after this: each step copies what it keeps
         (`{**row, ...}`) and filters into a new list, so handing out the same objects is safe.
         """
+        with self.lock:
+            # Which items are started or watched: what "continue" and "unwatched" filter on.
+            # It changes when one starts or ends, not with each second's position.
+            started = self.db.execute(
+                "SELECT count(*), coalesce(sum(watched), 0) FROM media_progress"
+                " WHERE client=? AND account=? AND viewer=? AND (position > 0 OR watched)",
+                (client_id, who["account"], who["viewer"]),
+            ).fetchone()
         key = (
             tuple(record["id"] for record in records),
             self.items_revision(client_id),
+            tuple(started),
             frozenset(registered),
             check,
             adult,
