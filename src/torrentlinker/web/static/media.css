@@ -545,3 +545,7 @@ dialog.ts-sheet { max-width: 560px; width: calc(100% - 24px); }
 .ts-sheet-form .media-row-note { margin: 0; }
 .ts-sheet-form h2 { margin: 0; }
 .ts-episode .ts-pill { justify-self: start; }
+
+.media-replace-toggle .info, .media-replace-step .info, .media-replace-dest .info { margin-left: 4px; }
+.media-replace-gear { text-decoration: none; font-size: 15px; margin-left: 4px; }
+.media-replace-dialog h2 { display: flex; gap: 8px; align-items: center; }

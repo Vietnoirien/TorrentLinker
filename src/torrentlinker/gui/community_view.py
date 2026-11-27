@@ -193,6 +193,8 @@ class BundledView(QWidget):
                             "base.css",
                             "toast.js",
                             "toast.css",
+                            "info.js",
+                            "info.css",
                             "community-items.js",
                             "community-items.css",
                             "transport.js",

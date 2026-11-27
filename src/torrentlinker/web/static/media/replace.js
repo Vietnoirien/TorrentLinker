@@ -15,6 +15,18 @@ function mediaReplaceSaveRule(rule) {
 // What Télécharger sends along: nothing for a film that is not being replaced.
 let mediaReplaceRefresh = null;
 const mediaReplaceBody = () => ({client_id: mediaClient(), replace: mediaReplaceOptions.replace, wait: mediaReplaceOptions.replace && mediaReplaceOptions.wait, rule: mediaReplaceOptions.rule});
+// The ⓘ info box (panel/info.js), as a node.
+function mediaReplaceTip(en, french) {
+  const holder = document.createElement("span");
+  holder.innerHTML = TLInfo.html(say(en, french));
+  return holder.firstChild;
+}
+// The library folder's own name, not its full path (the old release sits one level below it).
+function mediaReplaceFolder(path) {
+  const parts = String(path).split("/").filter(Boolean), node = element("b", parts.length > 1 ? parts[parts.length - 2] : parts[0] || path);
+  node.title = path;
+  return node;
+}
 const mediaReplaceNumber = value => String(value).replace(".", say(".", ","));
 function mediaReplaceSize(bytes) {
   const gb = bytes / 1e9;
@@ -29,38 +41,36 @@ function mediaReplaceRuleText(rule) {
   return parts.length === 2 ? parts.join(rule.combine === "all" ? say(" and ", " et ") : say(" or ", " ou ")) : parts[0];
 }
 function mediaReplaceSteps(run, seeds) {
-  const list = [["send", say("Sent to the client", "Envoyée au client")], ["download", say("Downloading the new version", "Téléchargement de la nouvelle version")],
-    ["done", say("Done: the new version plays, your watch state is kept", "Terminé : la nouvelle version joue, votre état de lecture est conservé")]];
-  if (run.replace && run.wait && seeds) list.push(["fin", say(`Old version ending its share (rule: ${mediaReplaceRuleText(run.rule)}): hidden from Media, visible in Torrents`, `Ancienne version en fin de partage (règle : ${mediaReplaceRuleText(run.rule)}) : cachée de Médias, visible dans Torrents`)]);
-  if (run.replace) list.push(["trash", say("Old version removed from the client, its files in the Trash (restorable for 7 days)", "Ancienne version retirée du client, ses fichiers à la corbeille (restaurables 7 jours)")]);
+  const list = [["send", say("Sent to the client", "Envoyée au client")], ["download", say("Downloading", "Téléchargement")],
+    ["done", say("Done", "Terminé"), say("The new version plays and your watch state is kept.", "La nouvelle version joue et votre état de lecture est conservé.")]];
+  if (run.replace && run.wait && seeds) list.push(["fin", say("Old version ending its share", "Ancienne version en fin de partage"), say(`Rule: ${mediaReplaceRuleText(run.rule)}. It is hidden from Media and stays visible in Torrents.`, `Règle : ${mediaReplaceRuleText(run.rule)}. Elle est cachée de Médias et reste visible dans Torrents.`)]);
+  if (run.replace) list.push(["trash", say("Old version in the Trash", "Ancienne version à la corbeille"), say("Removed from the client, its files can be restored for 7 days.", "Retirée du client, ses fichiers sont restaurables 7 jours.")]);
   return list;
 }
 function mediaReplaceToggle(id, on, label, hint, disabled) {
   const toggle = element("div", undefined, "media-replace-toggle");
   toggle.setAttribute("role", "switch"); toggle.tabIndex = 0; toggle.dataset.toggle = id;
   toggle.setAttribute("aria-checked", String(on)); toggle.setAttribute("aria-disabled", String(!!disabled));
-  const text = element("span"); text.append(label);
-  const small = element("small"); small.append(...hint); text.append(small);
+  const text = element("span"); text.append(label, " ", ...hint);
   toggle.append(element("span", undefined, "media-replace-switch"), text);
   return toggle;
 }
 function mediaReplaceRuleDialog(onSave) {
   const rule = mediaReplaceOptions.rule, dialog = element("dialog", undefined, "media-replace-dialog");
   const days = rule.hours % 24 === 0;
-  dialog.innerHTML = `<h2></h2><p></p>
+  dialog.innerHTML = `<h2></h2>
     <label class="rule"><input type="checkbox" id="mr-use-time"> <span></span>
       <input type="number" id="mr-amount" min="1" step="1"><select id="mr-unit"><option value="h"></option><option value="d"></option></select></label>
     <label class="rule"><input type="checkbox" id="mr-use-ratio"> <span></span><input type="number" id="mr-ratio" min="0.1" step="0.1"></label>
     <div class="combine" id="mr-combine-row"><span></span><select id="mr-combine"><option value="any"></option><option value="all"></option></select></div>
-    <p id="mr-none" hidden></p><div class="actions"></div>`;
+    <div id="mr-none" hidden></div><div class="actions"></div>`;
   const $$ = id => dialog.querySelector("#" + id);
-  dialog.querySelector("h2").textContent = say("End of sharing", "Fin du partage");
-  dialog.querySelector("p").textContent = say("When the replaced old version has finished sharing and may be removed.", "Quand l'ancienne version, remplacée, a fini son partage et peut être retirée.");
+  dialog.querySelector("h2").append(say("End of sharing", "Fin du partage"), " ", mediaReplaceTip("When the replaced old version has finished sharing and may be removed.", "Quand l'ancienne version, remplacée, a fini son partage et peut être retirée."));
   const labels = dialog.querySelectorAll("label.rule span"); labels[0].textContent = say("Shared at least", "Partagée au moins"); labels[1].textContent = say("Ratio of at least", "Ratio d'au moins");
   const [hours, daysOption] = $$("mr-unit").options; hours.textContent = say("hours", "heures"); daysOption.textContent = say("days", "jours");
   dialog.querySelector("#mr-combine-row span").textContent = say("It takes", "Il faut");
   const [any, all] = $$("mr-combine").options; any.textContent = say("either one", "l'un ou l'autre"); all.textContent = say("both", "les deux");
-  $$("mr-none").textContent = say("No condition ticked: the old version is removed as soon as the new one is complete.", "Aucune condition cochée : l'ancienne version est retirée dès que la nouvelle est complète.");
+  $$("mr-none").append(say("No wait", "Sans attente"), " ", mediaReplaceTip("No condition ticked: the old version is removed as soon as the new one is complete.", "Aucune condition cochée : l'ancienne version est retirée dès que la nouvelle est complète."));
   $$("mr-use-time").checked = rule.use_time; $$("mr-use-ratio").checked = rule.use_ratio;
   $$("mr-amount").value = days ? rule.hours / 24 : rule.hours; $$("mr-unit").value = days ? "d" : "h";
   $$("mr-ratio").value = rule.ratio; $$("mr-combine").value = rule.combine;
@@ -102,26 +112,28 @@ function mediaReplaceRender(box, context, run) {
   box.append(compare);
   const where = context.placement, dest = element("p", undefined, `media-replace-dest ${where?.fallback ? "warn" : ""}`);
   if (!where) dest.textContent = context.problem;
-  else if (where.fallback) {
-    dest.append(say(`Not enough room beside the old version (${mediaReplaceSize(where.beside_free)} free, ${mediaReplaceSize(context.new.size)} needed): the new version goes to the Download Folder, `, `Pas assez de place à côté de l'ancienne version (${mediaReplaceSize(where.beside_free)} libres, ${mediaReplaceSize(context.new.size)} nécessaires) : la nouvelle version ira dans le Dossier de téléchargement, `), element("b", where.folder), ` · ${mediaReplaceSize(where.free)} ${say("free", "libres")}.`);
-  } else dest.append(say("The new version downloads beside the old one: ", "La nouvelle version se télécharge à côté de l'ancienne : "), element("b", where.folder), ` · ${mediaReplaceSize(where.free)} ${say("free", "libres")}.`);
+  else if (where.fallback) dest.append(say("Downloaded in ", "Téléchargé dans "), mediaReplaceFolder(where.folder), " ", mediaReplaceTip(`Not enough room beside the old version (${mediaReplaceSize(where.beside_free)} free, ${mediaReplaceSize(context.new.size)} needed): the new version goes to the Download Folder (${mediaReplaceSize(where.free)} free).`, `Pas assez de place à côté de l'ancienne version (${mediaReplaceSize(where.beside_free)} libres, ${mediaReplaceSize(context.new.size)} nécessaires) : la nouvelle version va dans le Dossier de téléchargement (${mediaReplaceSize(where.free)} libres).`));
+  else dest.append(say("Downloaded in ", "Téléchargé dans "), mediaReplaceFolder(where.folder), " ", mediaReplaceTip(`The new version downloads beside the old one (${mediaReplaceSize(where.free)} free).`, `La nouvelle version se télécharge à côté de l'ancienne (${mediaReplaceSize(where.free)} libres).`));
   box.append(dest);
   const toggles = element("div", undefined, "media-replace-toggles");
   toggles.append(mediaReplaceToggle("replace", replace, say("Replace the old version", "Remplacer l'ancienne version"),
-    [old.seeding ? say("When the new one is complete, the old one leaves Media, then goes to the Trash.", "Quand la nouvelle est complète, l'ancienne quitte Médias puis part à la corbeille.") : say("It no longer shares: it goes to the Trash as soon as the new one is complete.", "Elle ne partage plus : elle part à la corbeille dès que la nouvelle est complète.")], started));
+    [old.seeding ? mediaReplaceTip("When the new one is complete, the old one leaves Media, then goes to the Trash.", "Quand la nouvelle est complète, l'ancienne quitte Médias puis part à la corbeille.") : mediaReplaceTip("It no longer shares: it goes to the Trash as soon as the new one is complete.", "Elle ne partage plus : elle part à la corbeille dès que la nouvelle est complète.")], started));
   if (old.seeding) {
-    const edit = button(say("Edit", "Modifier"), () => mediaReplaceRuleDialog(rule => { mediaReplaceSaveRule(rule); mediaReplaceRender(box, context, run); }), "media-replace-link");
+    const edit = button("⚙", () => mediaReplaceRuleDialog(rule => { mediaReplaceSaveRule(rule); mediaReplaceRender(box, context, run); }), "media-replace-link media-replace-gear");
+    edit.setAttribute("aria-label", say("Set the end of sharing", "Régler la fin du partage")); edit.title = say("Set", "Régler");
+    const rule = mediaReplaceRuleText(started ? run.rule : mediaReplaceOptions.rule);
     toggles.append(mediaReplaceToggle("wait", replace && wait, say("Wait for its sharing to end", "Attendre la fin de son partage"),
-      [`${say("Rule", "Règle")} : ${mediaReplaceRuleText(started ? run.rule : mediaReplaceOptions.rule)} · `, edit], started || !replace));
+      [mediaReplaceTip(`Rule: ${rule}. The old version keeps sharing until then.`, `Règle : ${rule}. L'ancienne version reste en partage jusque-là.`), edit], started || !replace));
   }
   box.append(toggles);
   if (started) {
     const list = mediaReplaceSteps(run, old.seeding);
     const at = {downloading: 1, "seeding-out": list.findIndex(([key]) => key === "fin"), done: list.length, "trash-failed": list.length - 1}[run.state] ?? 1;
     const timeline = element("div", undefined, "media-replace-timeline");
-    list.forEach(([key, text], index) => {
+    list.forEach(([key, text, why], index) => {
       const step = element("div", undefined, `media-replace-step ${index < at ? "done" : index === at ? "now" : ""}`);
       const label = element("span", text);
+      if (why) label.append(" ", mediaReplaceTip(why, why));
       if (key === "fin" && index === at) label.append(" ", button(say("See in Torrents", "Voir dans Torrents"), () => host("go", {view: "torrents"}), "media-replace-link"));
       if (key === "trash" && index <= at) label.append(" ", button(say("Restore", "Restaurer"), () => host("go", {view: "files", section: "trash"}), "media-replace-link"));
       if (run.error && index === at) label.append(" ", element("i", run.error));
