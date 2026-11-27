@@ -403,6 +403,19 @@ def create_app(
                 logger.warning("Stored posters could not be re-encoded; they still read.")
 
         threading.Thread(target=artwork_loop, daemon=True, name="artwork-webp").start()
+
+        def trash_loop() -> None:
+            """Purge what stayed in a Corbeille past its retention, once a day."""
+            while not shutdown.wait(30):
+                try:
+                    file_storage.purge_expired()
+                except Exception:  # noqa: BLE001 - a purge that fails is tried again tomorrow
+                    logger.warning("The trash could not be purged.", exc_info=True)
+                if shutdown.wait(86400):
+                    return
+
+        if monitor_verifications:
+            threading.Thread(target=trash_loop, daemon=True, name="trash-purge").start()
         if monitor_verifications:
             threading.Thread(target=catalogue_loop, daemon=True, name="catalogue-refresh").start()
             threading.Thread(
@@ -437,6 +450,12 @@ def create_app(
             accounts.close()
 
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
+    from torrentlinker.file_storage import FileStorage
+    from torrentlinker.web.files import file_routes
+
+    file_storage = FileStorage(directory, service.roots)
+    file_storage.reconcile()
+    file_routes(app, file_storage)
 
     def crash_response(request: Request, error: Exception) -> dict[str, Any]:
         return {"detail": error_message(error), "kind": type(error).__name__}
@@ -643,6 +662,7 @@ def create_app(
             "/static/search/view.html",
             "/static/feeds/view.html",
             "/static/torrents/view.html",
+            "/static/files/view.html",
             "/static/assistant/view.html",
             "/static/media/view.html",
             "/static/documentation/view.html",

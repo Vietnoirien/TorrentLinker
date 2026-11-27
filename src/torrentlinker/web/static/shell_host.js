@@ -21,7 +21,7 @@ const shellPages = [
   "torrents",
   "assistant",
   "media",
-  "queue",
+  "files",
   "requests",
   "notifications",
   "jobs",

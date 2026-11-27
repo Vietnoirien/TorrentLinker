@@ -1016,12 +1016,12 @@ iframe.has-open-dialog { position: relative; z-index: 3; }
 #workspace main :is(.view, .view section, .view div):has(:is(
   #documentation-frame, #settings-frame, #search-frame, #feeds-frame, #torrents-frame,
   #upload-frame, #reseed-frame, #catalogue-frame, #plan-frame, #seeding-frame,
-  #profile-frame, #community-frame, #assistant-frame, #media-frame
+  #profile-frame, #community-frame, #assistant-frame, #media-frame, #files-frame
 )) { display:flex; flex-direction:column; flex:1 1 auto; min-height:0; }
 :is(
   #documentation-frame, #settings-frame, #search-frame, #feeds-frame, #torrents-frame,
   #upload-frame, #reseed-frame, #catalogue-frame, #plan-frame, #seeding-frame,
-  #profile-frame, #community-frame, #assistant-frame, #media-frame
+  #profile-frame, #community-frame, #assistant-frame, #media-frame, #files-frame
 ) { flex:1 1 0; min-height:240px; }
 /* One bar above every page: the navigation toggle on the left, the work status on the right. */
 #workspace main > header { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; padding:0; margin-bottom:8px; }

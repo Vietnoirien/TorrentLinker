@@ -103,6 +103,19 @@ async function api() {
   return value.rows;
 }
 const details = (row) => openDetail(row);
+// The download queue is a tab of Search; the tabs give way to an open detail page.
+function renderSearchTabs() {
+  $("search-tabs").hidden = activePage === "details";
+  for (const tab of $("search-tabs").children) {
+    const on = tab.dataset.page === activePage;
+    tab.classList.toggle("selected", on);
+    tab.setAttribute("aria-selected", String(on));
+  }
+}
+$("search-tabs").onclick = (event) => {
+  const page = event.target.closest("button[data-page]")?.dataset.page;
+  if (page && page !== activePage) guard(() => request("navigate", { page }), event.target);
+};
 async function navigate(page) {
   if (page === "details" && selectedDetail) {
     selectDetail(selectedDetail);
@@ -113,6 +126,7 @@ async function navigate(page) {
   renderDetailTabs();
   $("results").hidden = page !== "search";
   $("queue").hidden = page !== "queue";
+  renderSearchTabs();
   hideHover();
   if (page === "queue") await loadQueue();
   else await loadSearchPage();

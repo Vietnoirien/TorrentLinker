@@ -58,11 +58,18 @@ const pages = {
   "member-torrents": ["My downloads", "Mes téléchargements", "Downloads from your accepted Requests.", "Les téléchargements de vos demandes acceptées."],
   notifications: ["Notifications", "Notifications", "Updates for your account.", "Les nouvelles de votre compte."],
   requests: ["Requests", "Demandes", "Review and answer Members’ Requests.", "Examinez les demandes des membres."],
+  // The download queue is a tab of Search: its page keeps the Search title.
   queue: [
-    "Download queue",
-    "File de téléchargement",
-    "Review downloads before sending them to a client.",
-    "Vérifiez les téléchargements avant de les envoyer à un client.",
+    "Search",
+    "Recherche",
+    "Search torrents and queue the ones you want to download.",
+    "Recherchez des torrents et ajoutez vos choix à la file de téléchargement.",
+  ],
+  files: [
+    "Files",
+    "Fichiers",
+    "Browse, move and tidy your files on every disk while keeping your seeds.",
+    "Parcourez, déplacez et rangez vos fichiers sur tous vos disques, en gardant vos partages.",
   ],
   jobs: [
     "Activity",
@@ -136,7 +143,7 @@ function render() {
       $("pages").dataset.signature = signature;
     }
     for (const button of $("pages").children) {
-      if (button.dataset.view === state.page)
+      if (button.dataset.view === (state.page === "queue" ? "search" : state.page))
         button.setAttribute("aria-current", "page");
       else button.removeAttribute("aria-current");
     }

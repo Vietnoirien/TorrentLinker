@@ -999,3 +999,8 @@ html[data-theme="dark"] button.release-score-pill.score-red {
   font-size: 12px;
   font-style: italic;
 }
+
+/* Search and its download queue, like the Torrents tabs */
+.tabs { display:flex; flex-wrap:wrap; gap:4px; align-items:center; margin:0 0 14px; border-bottom:1px solid var(--line); }
+.tabs button { border:0; border-radius:0; background:transparent; border-bottom:2px solid transparent; }
+.tabs button.selected { color:var(--accent); border-bottom-color:var(--accent); }

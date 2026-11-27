@@ -414,7 +414,7 @@ async function settingsSection(section, detail) {
 const viewTabs = {
   notifications: [], "member-assistant": [], "member-search": [], "member-queue": [], "member-torrents": [],
   torrents: [], zen: ["profile", "seeding", "plan", "catalogue", "community"], search: [],
-  feeds: [], queue: [], media: ["video", "music"], library: ["reseed", "cross", "items", "review", "folders", "activity"],
+  feeds: [], queue: [], files: [], media: ["video", "music"], library: ["reseed", "cross", "items", "review", "folders", "activity"],
   upload: ["local", "remote", "sources"], assistant: [], jobs: [], documentation: [], requests: [],
   setup: ["connections", "clients", "general", "library", "downloads", "paths", "matching", "release_score", "indexers", "zen", "interface", "companion", "assistant", "agents", "users", "account", "notifications", "community_site"],
 };

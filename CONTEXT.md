@@ -212,6 +212,23 @@ _Avoid_: Admin, moderator
 The minimum viewing age of a film or series on the French scale (Tous publics, −10, −12, −16, −18), from its metadata or set by the Owner or a Member allowed to edit it; a rating from another country is mapped to this scale. A Member's or Viewer's limit hides what is rated above it, and what has no rating yet.
 _Avoid_: Certification, PEGI, parental rating
 
+### Library storage
+
+**Corbeille**:
+The trash: one folder per disk under the storage roots, where Fichiers puts what it deletes (an instant rename). Each item remembers its original path, who trashed it and when, and can be restored; it is purged after the retention (7 days by default). Emptying it is the only way, with the torrent manager's delete, to remove data for good, and is Owner-only.
+_Avoid_: Recycle bin, deleted files
+
+**Tâche**:
+One file operation Fichiers runs or ran (move, rename, trash, restore, purge), journaled before it starts with who asked for it and, when it can, its undo. An interrupted one is reconciled at startup; each item ends verified, failed with a reason, or cancelled.
+_Avoid_: Job (the app's background jobs), transfer (between Torrent Clients)
+
+**Fichiers**:
+The sidebar page for files under the storage roots, with the tabs Explorateur, Disques, Organisation, Corbeille and Tâches. The download queue is no longer a page of its own but a tab of Recherche.
+_Avoid_: File manager, Files page
+
+**Gérer les fichiers**:
+The Member Permission to move, rename and trash files inside the Member's granted Library Folders. Emptying the Corbeille, Disques, settings and replacing a film stay with the Owner.
+
 ### Community Site
 
 **Community Site**:

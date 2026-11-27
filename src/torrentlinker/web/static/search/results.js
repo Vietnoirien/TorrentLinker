@@ -1174,6 +1174,10 @@ async function refreshQueueCount() {
   try {
     const rows = await api("queue");
     const queued = rows.length;
+    $("search-tab-queue").textContent = say(
+      `Download queue (${queued})`,
+      `File de téléchargement (${queued})`,
+    );
     $("search-queue-link").textContent = say(
       `Download queue (${queued})`,
       `File de téléchargement (${queued})`,
