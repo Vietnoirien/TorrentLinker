@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from torrentlinker.accounts import OWNER_ACTOR, WATCH, Actor, Permission
 from torrentlinker.library_replace import Placement
 from torrentlinker.media import VIDEO
-from torrentlinker.media_browser import films_revision, start_films_index
+from torrentlinker.media_browser import films_revision, start_films_index, start_series_index
 from torrentlinker.web.permissions import needs
 
 NOT_FOUND = "Media item not found."
@@ -454,6 +454,13 @@ def media_routes(app, agent, assistant):
     def series_scorer(chosen: str):
         return media.series_score(chosen)
 
+    @app.get("/api/media/tracker-series/revision")
+    @needs(Permission.SERIES, Permission.ANIME)
+    def series_revision(request: Request, client_id: str = "", scope: str = "series"):
+        series_scope(request, scope)
+        running = agent.jobs.running("series-index", target(request, client_id))
+        return media.series_revision_info(running, actor(request).owner)
+
     @app.get("/api/media/tracker-series/landing")
     @needs(Permission.SERIES, Permission.ANIME)
     def series_landing(request: Request, client_id: str = "", scope: str = "series"):
@@ -461,6 +468,7 @@ def media_routes(app, agent, assistant):
 
         series_scope(request, scope)
         chosen = target(request, client_id)
+        start_series_index(agent, chosen)
         return view.landing(view.catalogue(media, chosen, actor(request), scope))
 
     @app.get("/api/media/tracker-series")
@@ -479,6 +487,7 @@ def media_routes(app, agent, assistant):
 
         series_scope(request, scope)
         chosen = target(request, client_id)
+        start_series_index(agent, chosen)
         cards = view.catalogue(media, chosen, actor(request), scope)
         return view.grid(cards, genre, sort, q, offset, limit)
 

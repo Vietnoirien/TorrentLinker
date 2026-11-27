@@ -30,7 +30,7 @@
       const page = await request(scoped(`${name}?${query}`, scope), options);
       return {...page, rows: page.rows.map(asRow)};
     }
-    if (name === "media/tracker-films/revision") return {revision: 1, running: false, identified: 1, total: 1};
+    if (name === "media/tracker-films/revision") return request(scoped(`media/tracker-series/revision?${query}`, scope), options);
     if (name === "media/tracker-films/focus") return {};
     return null;
   }

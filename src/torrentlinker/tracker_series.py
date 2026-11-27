@@ -46,6 +46,8 @@ RUN_INTERVAL = 600
 IDENTIFY_BUDGET = 120.0
 IDENTIFY_PAUSE = 0.25
 NOT_FOUND_RETRY = 7 * 86400
+UNAVAILABLE_PAUSE = 60.0  # seconds before a page may start the index job again after TMDb failed
+LIMIT_PAUSE = 3600.0
 
 SEASON_RANGE = re.compile(
     r"\bsaisons?[ ._-]*(\d{1,2})[ ._-]*(?:a|à|to|-|&|et)[ ._-]*(\d{1,2})\b", re.IGNORECASE
@@ -154,6 +156,7 @@ class TrackerSeries(TrackerRows, AgeRatings):
     def create_series(self) -> None:
         self._series_generation = int(time.time())
         self._series_working = threading.Lock()  # one identification at a time
+        self._series_resting: dict[str, float] = {}
         with self.db:
             self.db.executescript("""
                 CREATE TABLE IF NOT EXISTS series_release
@@ -393,6 +396,74 @@ class TrackerSeries(TrackerRows, AgeRatings):
                     (key, json.dumps(time.time())),
                 )
         return status
+
+    # -- The index job, on demand (as the film index) ----------------------------------------
+
+    def _series_fresh(self, key: str) -> bool:
+        with self.lock:
+            saved = self.db.execute("SELECT body FROM media_options WHERE key=?", (key,)).fetchone()
+        return bool(saved) and time.time() - json.loads(saved[0]) < RUN_INTERVAL
+
+    def _series_stamp(self, key: str) -> None:
+        with self.lock, self.db:
+            self.db.execute(
+                "INSERT OR REPLACE INTO media_options VALUES (?,?)", (key, json.dumps(time.time()))
+            )
+
+    def series_progress(self) -> tuple[int, int]:
+        """(identified, total) series titles of the index."""
+        with self.lock:
+            total = self.db.execute(
+                "SELECT COUNT(DISTINCT tkey) FROM series_release WHERE tkey <> ''"
+            ).fetchone()[0]
+            identified = self.db.execute(
+                "SELECT COUNT(DISTINCT r.tkey) FROM series_release r JOIN series_title t"
+                " ON t.tkey = r.tkey WHERE t.tmdb <> ''"
+            ).fetchone()[0]
+        return identified, total
+
+    def series_behind(self, client_id, setup) -> bool:
+        """Whether the index needs its job: the Catalogues were not read for a while, or titles
+        wait for TMDb (which needs a key). Cheap; asked by every page that shows series."""
+        if time.monotonic() < self._series_resting.get(client_id, 0.0):
+            return False
+        if not self._series_fresh("series-sync:" + client_id):
+            return True
+        secrets = getattr(setup, "secrets", None)
+        if not (secrets.get("tmdb-api-key") if secrets is not None else ""):
+            return False
+        identified, total = self.series_progress()
+        return identified < total and not self._series_fresh("series-run:" + client_id)
+
+    def series_index_job(
+        self, client_id, setup, stop: threading.Event, progress, *, pause: float = IDENTIFY_PAUSE
+    ) -> str:
+        """The job a page starts: read the Catalogues, then identify until done."""
+        if not self._series_working.acquire(blocking=False):
+            return "busy"
+        try:
+            progress({"phase": "sync"})
+            self.series_sync(client_id, setup, stop)
+            self._series_stamp("series-sync:" + client_id)
+            status = self.series_identify(client_id, setup, stop, budget=float("inf"), pause=pause)
+            done, total = self.series_progress()
+            progress({"phase": "identify", "identified": done, "total": total})
+        finally:
+            self._series_working.release()
+        if status in {"complete", "off"}:
+            self._series_stamp("series-run:" + client_id)
+        elif status == "unavailable":
+            self._series_resting[client_id] = time.monotonic() + UNAVAILABLE_PAUSE
+        elif status == "limit":
+            self._series_resting[client_id] = time.monotonic() + LIMIT_PAUSE
+        return status
+
+    def series_revision_info(self, running: bool, owner: bool) -> dict[str, Any]:
+        """What the panel polls: changes whenever the index does. Only the Owner gets counts."""
+        answer: dict[str, Any] = {"revision": self._series_generation, "running": running}
+        if owner:
+            answer["identified"], answer["total"] = self.series_progress()
+        return answer
 
     # -- Reading the index ------------------------------------------------------------------
 

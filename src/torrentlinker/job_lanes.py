@@ -15,7 +15,7 @@ INTERACTIVE = frozenset(
     }
 )
 # The film index fills for hours, so it has its own worker: it must not hold up the batch lane.
-FILMS = frozenset({"films-index"})
+FILMS = frozenset({"films-index", "series-index"})
 BACKGROUND = frozenset(
     {"check-all", "reseed-all", "search-library", "plan", "catalogue", "reseed-workspace"}
 )

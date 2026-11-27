@@ -29,6 +29,22 @@ def start_films_index(agent, client) -> None:
         pass
 
 
+def start_series_index(agent, client) -> None:
+    """The same for the series index: submitted on a page's request, never run in it, and not
+    started twice (the job lane refuses a second one for the client)."""
+    media = agent.media
+    try:
+        setup = media.setup(client)
+        if media.series_behind(client, setup) and not agent.jobs.running("series-index", client):
+            agent.jobs.submit(
+                "series-index",
+                lambda stop, progress: media.series_index_job(client, setup, stop, progress),
+                client_id=client,
+            )
+    except ValueError:
+        pass
+
+
 def films_revision(agent, client, owner: bool) -> dict:
     running = agent.jobs.running("films-index", client)
     return agent.media.films_revision(client, running, owner)
