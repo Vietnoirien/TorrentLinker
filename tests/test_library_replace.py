@@ -161,3 +161,55 @@ def test_the_routes_are_the_owners_and_record_a_replacement(tmp_path: Path):
             "/api/media/replacements/placement", json={"folder": str(library), "size": 1}
         ).json()
         assert found["fallback"] is False
+
+
+def test_the_hidden_paths_are_the_old_files_waiting_for_their_share_to_end(world):
+    _, folder, _, replacements = world
+    start(replacements, folder, rule=FinRule(use_time=True, hours=48, use_ratio=False))
+    assert replacements.hidden_paths("default") == []  # still downloading
+    replacements.tick(Client([torrent(OLD, seeding_time=60), torrent(NEW)]), "default")
+    assert replacements.hidden_paths("default") == [folder / "Dune.2021.1080p.mkv"]
+
+
+def test_the_film_s_progress_and_playlists_follow_the_new_file(tmp_path: Path):
+    import json
+    import sqlite3
+    import threading
+    from types import SimpleNamespace
+
+    from torrentlinker.media import identity
+    from torrentlinker.media_replace import follow_replacement
+
+    db = sqlite3.connect(":memory:", check_same_thread=False)
+    db.row_factory = sqlite3.Row
+    db.executescript(
+        """
+        CREATE TABLE media_items (id TEXT, client TEXT, path TEXT);
+        CREATE TABLE media_progress (client TEXT, item TEXT, position REAL, duration REAL,
+            watched INTEGER, account TEXT, viewer TEXT, PRIMARY KEY(client,item,account,viewer));
+        CREATE TABLE media_playlists (id TEXT, client TEXT, items TEXT);
+        INSERT INTO media_items VALUES ('old', 'c', '/lib/old.mkv');
+        INSERT INTO media_progress VALUES ('c', 'old', 120, 7200, 1, 'owner', '');
+        INSERT INTO media_playlists VALUES ('p', 'c', '["x", "old", "y"]');
+        """
+    )
+    media = SimpleNamespace(db=db, lock=threading.RLock())
+    follow_replacement(media, "c", ["old"], [tmp_path / "new.mkv", tmp_path / "new.nfo"])
+    new = identity(str((tmp_path / "new.mkv").absolute()))
+    row = db.execute("SELECT * FROM media_progress").fetchall()
+    assert [(r["item"], r["position"], r["watched"]) for r in row] == [(new, 120, 1)]
+    assert json.loads(db.execute("SELECT items FROM media_playlists").fetchone()[0]) == [
+        "x", new, "y",
+    ]  # fmt: skip
+    assert db.execute("SELECT COUNT(*) FROM media_items").fetchone()[0] == 0
+
+
+def test_the_better_release_completing_tells_médias_before_the_old_one_leaves(world):
+    _, folder, _, replacements = world
+    start(replacements, folder, wait=False)
+    seen = []
+    replacements.on_complete = lambda client, run: seen.append(run["new_hash"])
+    replacements.tick(Client([torrent(OLD), torrent(NEW, progress=0.5)]), "default")
+    assert seen == []
+    replacements.tick(Client([torrent(OLD), torrent(NEW)]), "default")
+    assert seen == [NEW]

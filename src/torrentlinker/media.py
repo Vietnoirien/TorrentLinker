@@ -12,6 +12,7 @@ import secrets
 import sqlite3
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -147,6 +148,8 @@ class MediaLibrary(TrackerFilms, TrackerSeries):
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA synchronous=NORMAL")
         self.scanning: set[str] = set()
+        # Old releases a replaced film leaves while they finish seeding: not listed (#204).
+        self.hidden_paths: Callable[[str], list[Path]] = lambda client_id: []
         # The rows one listing builds, for the next listing of the same library to reuse.
         # A Media page asks for a dozen listings of the same items (home_rows), and each
         # one used to build a row for every record before filtering down to a screenful.
@@ -582,6 +585,7 @@ class MediaLibrary(TrackerFilms, TrackerSeries):
                     {"message": "Torrent Client unavailable; using last known download state."}
                 )
         incomplete = self.incomplete_paths(client_id)
+        hidden = [p.absolute() for p in self.hidden_paths(client_id)]
         enrichment = self.cached_metadata(client_id, target.observed)
         successful = []
         for folder in setup.settings.library_folders:
@@ -615,6 +619,8 @@ class MediaLibrary(TrackerFilms, TrackerSeries):
                         if partial_name:
                             extension = Path(path.stem).suffix.lower()
                         if extension not in VIDEO | AUDIO or path.is_symlink():
+                            continue
+                        if hidden and any(path.absolute().is_relative_to(h) for h in hidden):
                             continue
                         self.checked_path(client_id, str(path), base)
                         stat = path.stat()

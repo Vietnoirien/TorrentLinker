@@ -6,9 +6,10 @@ import re
 import secrets
 import threading
 import time
+from collections.abc import Callable
 from contextlib import nullcontext
 from dataclasses import asdict
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -103,6 +104,8 @@ class TorrentWorkspace:
     def __init__(self, setup, for_client, jobs=None):
         self.setup, self.for_client = setup, for_client
         self.jobs = jobs
+        # The old torrents of replaced films that end their share, with their rule (#204).
+        self.ending: Callable[[str], dict[str, dict[str, Any]]] = lambda client_id: {}
         self.lock = threading.RLock()
         self.updated: dict[str, float] = {}
         self.observed_at: dict[str, float] = {}
@@ -531,6 +534,7 @@ class TorrentWorkspace:
                     )
                 }
                 capabilities = self.capabilities(target.setup.client())
+                ending = self.ending(identifier)
                 for original in target.rows:
                     row = dict(original)
                     torrent = observed[row["hash"]]
@@ -544,6 +548,7 @@ class TorrentWorkspace:
                         seedtime=torrent.seeding_time / 86400,
                         key=identifier + ":" + row["hash"],
                         capabilities=capabilities,
+                        ending=ending.get(row["hash"].lower()),
                         observed_at=self.observed_at.get(identifier),
                     )
                     rows.append(row)

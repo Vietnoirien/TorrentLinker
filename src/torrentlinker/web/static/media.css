@@ -448,3 +448,50 @@ body.media-player-full #media-player-shell[data-kind="video"] { z-index: 89; }
 .films-release .media-tracker-facts, .films-release-actions { grid-column: 2; }
 .films-release-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .films-progress { margin: 0 0 8px; font-size: 0.85rem; }
+/* Replacing a library film with a better version (replace.js). */
+.media-replace { margin-top: 14px; max-width: 760px; border: 1px solid #ffffff2a; border-radius: 12px; padding: 12px 14px; background: #0006; backdrop-filter: blur(8px); font-size: 13px; color: inherit; }
+.media-replace > header { margin-bottom: 8px; font-weight: 700; }
+.media-replace-compare { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: stretch; }
+.media-replace-version { border: 1px solid #ffffff2a; border-radius: 9px; padding: 8px 10px; min-width: 0; }
+.media-replace-version.new { border-color: #80bdb6; }
+.media-replace-version b { display: block; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; opacity: .7; margin-bottom: 2px; }
+.media-replace-version .name { display: block; word-break: break-all; font-weight: 600; }
+.media-replace-version small { display: block; opacity: .75; }
+.media-replace-arrow { align-self: center; color: #80bdb6; font-size: 20px; }
+.media-replace-score { display: inline-block; padding: 0 6px; border-radius: 6px; background: #4ad39433; color: #4ad394; font-weight: 700; }
+.media-replace-score.low { background: #edbf7333; color: #edbf73; }
+.media-replace-seed { display: inline-flex !important; gap: 6px; align-items: center; }
+.media-replace-seed i { width: 8px; height: 8px; border-radius: 50%; background: #4ad394; }
+.media-replace-seed.off i { background: #98aab7; }
+.media-replace-dest { margin: 8px 0 0; opacity: .85; }
+.media-replace-dest.warn { color: #edbf73; opacity: 1; }
+.media-replace-toggles { display: grid; gap: 8px; margin-top: 10px; }
+.media-replace-toggle { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; user-select: none; }
+.media-replace-toggle[aria-disabled="true"] { opacity: .45; cursor: default; }
+.media-replace-switch { position: relative; flex: none; width: 36px; height: 20px; border-radius: 10px; background: #5a6a76; margin-top: 1px; transition: background .15s; }
+.media-replace-switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.media-replace-toggle[aria-checked="true"] .media-replace-switch { background: #80bdb6; }
+.media-replace-toggle[aria-checked="true"] .media-replace-switch::after { transform: translateX(16px); }
+.media-replace-toggle small { display: block; opacity: .75; }
+.media-replace-link { background: none; border: 0; padding: 0; color: #80bdb6; text-decoration: underline; cursor: pointer; font: inherit; }
+.media-replace-timeline { margin-top: 12px; padding-top: 10px; border-top: 1px solid #ffffff22; display: grid; gap: 6px; }
+.media-replace-step { display: flex; gap: 9px; opacity: .55; }
+.media-replace-step.done, .media-replace-step.now { opacity: 1; }
+.media-replace-step b { width: 16px; text-align: center; }
+.media-replace-step.done b { color: #4ad394; }
+.media-replace-step.now b { color: #edbf73; }
+.media-replace-note { margin: 8px 0 0; opacity: .8; }
+.media-replace-dialog { background: #202932; color: #e2e9ed; border: 1px solid #33404b; border-radius: 14px; padding: 20px; width: min(480px, 92vw); font: 14px/1.4 system-ui, sans-serif; }
+.media-replace-dialog::backdrop { background: #0009; }
+.media-replace-dialog h2 { margin: 0 0 4px; font-size: 19px; }
+.media-replace-dialog p { margin: 0 0 12px; opacity: .75; font-size: 13px; }
+.media-replace-dialog label.rule { display: flex; align-items: center; gap: 8px; margin: 9px 0; }
+.media-replace-dialog input[type=number], .media-replace-dialog select { padding: 6px 8px; border-radius: 8px; border: 1px solid #33404b; background: #26323c; color: inherit; font: inherit; }
+.media-replace-dialog input[type=number] { width: 80px; }
+.media-replace-dialog input[type=checkbox] { width: 17px; height: 17px; accent-color: #80bdb6; }
+.media-replace-dialog .combine { margin: 4px 0 0 25px; display: flex; gap: 8px; align-items: center; }
+.media-replace-dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.media-replace-dialog button { padding: 8px 14px; border-radius: 8px; border: 1px solid #33404b; background: #26323c; color: inherit; font: inherit; cursor: pointer; }
+.media-replace-dialog button.primary { background: #80bdb6; color: #102a2b; border: 0; font-weight: 700; }
+.media-replace-badge { display: inline-block; margin-left: 6px; padding: 2px 7px; border-radius: 6px; background: #edbf7333; color: #edbf73; font-size: 11px; font-weight: 600; }
+@media (max-width: 640px) { .media-replace-compare { grid-template-columns: 1fr; } .media-replace-arrow { transform: rotate(90deg); justify-self: center; } }

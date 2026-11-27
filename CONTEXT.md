@@ -240,6 +240,12 @@ _Avoid_: File manager, Files page
 **Gérer les fichiers**:
 The Member Permission to move, rename and trash files inside the Member's granted Library Folders. Emptying the Corbeille, Disques, settings and replacing a film stay with the Owner.
 
+**Remplacer l'ancienne version**:
+The Owner's option on a film of "Meilleures versions sur le tracker": the better release downloads beside the old one (or in the Download Folder when that disk lacks room above the 10 % margin) and, once complete, becomes the film's file in Médias with its watch state, progress and playlists. The old torrent then leaves the client without its data and its files go to the Corbeille.
+
+**Fin du partage**:
+The rule that lets a replaced release that still seeds finish its share first: a time and/or a ratio, either one or both. Meanwhile the old release is hidden from Médias and Torrents marks it "en fin de partage"; when the rule is met it is removed and its files are trashed.
+
 ### Community Site
 
 **Community Site**:

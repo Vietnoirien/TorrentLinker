@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from torrentlinker.accounts import OWNER_ACTOR, WATCH, Actor, Permission
+from torrentlinker.library_replace import Placement
 from torrentlinker.media import VIDEO
 from torrentlinker.media_browser import films_revision, start_films_index
 from torrentlinker.web.permissions import needs
@@ -25,6 +26,24 @@ NOT_FOUND = "Media item not found."
 class MediaClient(BaseModel):
     model_config = ConfigDict(extra="forbid")
     client_id: str = ""
+
+
+class FinRuleBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    use_time: bool = True
+    hours: float = Field(default=168.0, gt=0, le=24 * 3650)
+    use_ratio: bool = True
+    ratio: float = Field(default=1.0, gt=0, le=1000)
+    combine: Literal["any", "all"] = "any"
+
+
+class TrackerDownload(MediaClient):
+    """Télécharger on a better version: replace the library film, optionally after the
+    "Fin du partage" rule (Owner only, ignored for a Member)."""
+
+    replace: bool = False
+    wait: bool = False
+    rule: FinRuleBody = FinRuleBody()
 
 
 class SessionOpen(MediaClient):
@@ -408,13 +427,60 @@ def media_routes(app, agent, assistant):
             raise HTTPException(400, str(error)) from error
         return {"ok": True}
 
-    @app.post("/api/media/tracker/{infohash}/download")
-    def tracker_download(infohash: str, body: MediaClient):
+    @app.get("/api/media/tracker/{infohash}/replace")
+    def tracker_replace(infohash: str, request: Request, client_id: str = ""):
+        """What a better release would replace: the Owner's alone (#203)."""
         from torrentlinker.media_browser import tracker_hash
+        from torrentlinker.media_replace import replace_context
+
+        if not actor(request).owner:
+            return {"available": False}
+        target = client(client_id)
+        return replace_context(media, target, media.setup(target), tracker_hash(infohash))
+
+    @app.post("/api/media/tracker/{infohash}/download")
+    def tracker_download(infohash: str, body: TrackerDownload, request: Request):
+        from pathlib import Path
+
+        from torrentlinker.library_replace import FinRule
+        from torrentlinker.media_browser import tracker_hash
+        from torrentlinker.media_replace import old_item_ids, replace_context
 
         target = client(body.client_id)
+        infohash = tracker_hash(infohash)
         try:
-            return media.tracker_download(target, media.setup(target), tracker_hash(infohash))
+            setup = media.setup(target)
+            context: dict[str, Any] = (
+                replace_context(media, target, setup, infohash)
+                if actor(request).owner
+                else {"available": False}
+            )
+            folder = None
+            if context["available"]:
+                if not context["placement"]:
+                    raise ValueError(context["problem"])
+                folder = setup.path_under_root(context["placement"]["folder"])
+            sent = media.tracker_download(target, setup, infohash, folder)
+            if context["available"]:
+                found, who = context["old"], actor(request)
+                app.state.replacements.start(
+                    target,
+                    context["film"],
+                    new_hash=infohash,
+                    old_hash=found["hash"],
+                    old_paths=[Path(p) for p in found["paths"]],
+                    replace=body.replace,
+                    wait=body.replace and body.wait and found["seeding"],
+                    rule=FinRule.parse(body.rule.model_dump()),
+                    actor=who.viewer or who.account,
+                    where=Placement(
+                        Path(context["placement"]["folder"]),
+                        context["placement"]["fallback"],
+                        context["placement"]["reason"],
+                    ),
+                    old_items=old_item_ids(media, target, found["paths"]),
+                )
+            return sent
         except ValueError as error:
             raise HTTPException(400, str(error)) from error
 

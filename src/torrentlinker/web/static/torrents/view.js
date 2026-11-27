@@ -88,6 +88,15 @@ const count = (n) => n.toLocaleString(lang === "fr" ? "fr-FR" : "en-US");
 // The head box is ticked only while the selection is every torrent the filters match.
 const everyMatch = () => allMatching && snapshot.total > 0 && selected.size === snapshot.total;
 
+// A replaced film's old release, kept seeding until its "Fin du partage" rule is met (#204).
+function endingBadge(rule) {
+  if (!rule) return "";
+  const parts = [];
+  if (rule.use_time) parts.push(rule.hours % 24 === 0 ? `${rule.hours / 24} ${t("j", "d")}` : `${rule.hours} h`);
+  if (rule.use_ratio) parts.push(`ratio ${rule.ratio}`);
+  const text = !parts.length ? t("sans attente", "no wait") : parts.join(parts.length === 2 ? (rule.combine === "all" ? t(" et ", " and ") : t(" ou ", " or ")) : "");
+  return ` <span class="ending-badge">${t("en fin de partage", "ending its share")} · ${t("règle", "rule")} : ${escape(text)}</span>`;
+}
 function stateText(s) {
   return {
     seeding: t("En partage", "Seeding"),
@@ -142,7 +151,7 @@ function paint() {
             )}</tr></thead><tbody>${!slice.length ? `<tr><td colspan="${2 + Object.values(cols).filter(Boolean).length}" class="empty">${t("Aucun torrent pour ces filtres.", "No torrents match these filters.")}</td></tr>` : ""}${slice
             .map(
               (r) =>
-                `<tr class="${focus === r.id ? "active" : ""}"><td><input data-select="${escape(r.id)}" type="checkbox" ${selected.has(r.id) ? "checked" : ""} aria-label="${escape(r.name)}"></td><td class="name"><button class="link" data-open="${escape(r.id)}">${escape(r.name)}</button><br><small>${stateText(r.state)} · ${escape(r.category)}</small></td>${Object.entries(
+                `<tr class="${focus === r.id ? "active" : ""}"><td><input data-select="${escape(r.id)}" type="checkbox" ${selected.has(r.id) ? "checked" : ""} aria-label="${escape(r.name)}"></td><td class="name"><button class="link" data-open="${escape(r.id)}">${escape(r.name)}</button><br><small>${stateText(r.state)} · ${escape(r.category)}${endingBadge(r.raw.ending)}</small></td>${Object.entries(
                   cols,
                 )
                   .filter(([, v]) => v)

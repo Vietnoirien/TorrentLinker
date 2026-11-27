@@ -14,6 +14,7 @@ import re
 import threading
 import time
 from dataclasses import asdict
+from pathlib import Path
 from typing import Any
 
 from guessit import guessit
@@ -481,7 +482,9 @@ class TrackerRows:
             return None
         return self.agent.setup.path.parent / "media-artwork" / image[6:]  # type: ignore[attr-defined]
 
-    def tracker_enqueue(self, client_id, setup, infohash: str) -> dict[str, Any]:
+    def tracker_enqueue(
+        self, client_id, setup, infohash: str, folder: Path | None = None
+    ) -> dict[str, Any]:
         """Queue the suggested release, as Search does; nothing starts until the queue is sent."""
         from torrentlinker.catalogue_sync import download_url
         from torrentlinker.download_queue import enqueue
@@ -508,15 +511,17 @@ class TrackerRows:
             self._site_store(setup, site),
             indexer,
             candidate,
-            setup.verified_download_folder(category),
+            folder or setup.verified_download_folder(category),
         )
         return {"queued": bool(added), "title": best["name"]}
 
-    def tracker_download(self, client_id, setup, infohash: str) -> dict[str, Any]:
+    def tracker_download(
+        self, client_id, setup, infohash: str, folder: Path | None = None
+    ) -> dict[str, Any]:
         """Download now: queue the release, then send it to the client as Search's "Start" does."""
         from torrentlinker.web.operations import JobRequest
 
-        result = self.tracker_enqueue(client_id, setup, infohash)
+        result = self.tracker_enqueue(client_id, setup, infohash, folder)
         operations = self.agent.for_client(client_id)  # type: ignore[attr-defined]
         request = JobRequest(kind="send-queue", hashes=[infohash])
         job = self.agent.jobs.submit(  # type: ignore[attr-defined]

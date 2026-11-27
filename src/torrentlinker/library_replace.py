@@ -16,6 +16,7 @@ import sqlite3
 import threading
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -89,6 +90,9 @@ def placement(
 class Replacements:
     def __init__(self, directory: Path, storage: FileStorage, now=time.time) -> None:
         self.storage, self.now = storage, now
+        # Called once the better release is complete and the old one is to be replaced: Médias
+        # moves the watch state, progress and playlists to the new file.
+        self.on_complete: Callable[[Qbit, dict[str, Any]], None] | None = None
         self._lock = threading.RLock()
         self._db = sqlite3.connect(directory / "replacements.sqlite", check_same_thread=False)
         self._db.row_factory = sqlite3.Row
@@ -101,9 +105,13 @@ class Replacements:
                     replace INTEGER NOT NULL, wait INTEGER NOT NULL, rule TEXT NOT NULL,
                     actor TEXT NOT NULL, state TEXT NOT NULL, since REAL, started REAL NOT NULL,
                     destination TEXT NOT NULL DEFAULT '', reason TEXT NOT NULL DEFAULT '',
-                    error TEXT NOT NULL DEFAULT '');
+                    error TEXT NOT NULL DEFAULT '', old_items TEXT NOT NULL DEFAULT '[]');
                 """
             )
+            try:  # a store written before the films' items were recorded
+                self._db.execute("ALTER TABLE replacement ADD COLUMN old_items TEXT DEFAULT '[]'")
+            except sqlite3.OperationalError:
+                pass
 
     def start(
         self,
@@ -118,19 +126,21 @@ class Replacements:
         rule: FinRule,
         actor: str,
         where: Placement | None = None,
+        old_items: list[str] | None = None,
     ) -> str:
         """Record a better release being downloaded; `wait` only counts with `replace`."""
         identifier = uuid.uuid4().hex[:12]
         with self._lock, self._db:
             self._db.execute(
                 "INSERT INTO replacement (id, client, film, old_hash, new_hash, old_paths,"
-                " replace, wait, rule, actor, state, started, destination, reason)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?,'downloading',?,?,?)",
+                " replace, wait, rule, actor, state, started, destination, reason, old_items)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,'downloading',?,?,?,?)",
                 (
                     identifier, client, film, old_hash.lower(), new_hash.lower(),
                     json.dumps([str(p) for p in old_paths]), int(replace), int(replace and wait),
                     json.dumps(rule.__dict__), actor, self.now(),
                     str(where.folder) if where else "", where.reason if where else "",
+                    json.dumps(old_items or []),
                 ),
             )  # fmt: skip
         return identifier
@@ -143,6 +153,7 @@ class Replacements:
             "destination": row["destination"], "reason": row["reason"], "error": row["error"],
             "rule": json.loads(row["rule"]), "actor": row["actor"],
             "old_paths": json.loads(row["old_paths"]),
+            "old_items": json.loads(row["old_items"]),
         }  # fmt: skip
 
     def runs(self, client: str | None = None) -> list[dict[str, Any]]:
@@ -160,6 +171,15 @@ class Replacements:
             (client,),
         ).fetchall()
         return {r["film"] for r in rows}
+
+    def hidden_paths(self, client: str) -> list[Path]:
+        """The old files Médias no longer lists while they finish seeding."""
+        rows = self._db.execute(
+            "SELECT old_paths FROM replacement WHERE client=? AND replace=1"
+            " AND state='seeding-out'",
+            (client,),
+        ).fetchall()
+        return [Path(p) for r in rows for p in json.loads(r["old_paths"])]
 
     def ending(self, client: str) -> dict[str, dict[str, Any]]:
         """The old torrents Torrents marks "en fin de partage", with their rule."""
@@ -202,6 +222,8 @@ class Replacements:
             if not run["replace"]:
                 self._set(run["id"], "done")
                 return "done"
+            if self.on_complete is not None:
+                self.on_complete(client, run)
             old = client.torrent(run["old_hash"], with_files=False) if run["old_hash"] else None
             seeds = old is not None and old.state.lower() in SEEDING
             if not (run["wait"] and seeds):

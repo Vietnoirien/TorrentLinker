@@ -219,11 +219,15 @@ function mediaRenderFeature() {
     const queue = button(say("Download", "Télécharger"), () => guard(async () => {
       queue.disabled = true;
       try {
-        await api(`media/tracker/${encodeURIComponent(row.tracker.hash)}/download`, {});
+        const upgrade = row.tracker.own_score !== undefined;
+        await api(`media/tracker/${encodeURIComponent(row.tracker.hash)}/download`, upgrade ? mediaReplaceBody() : {});
         toast(say(`Sending ${row.tracker.name} to the client.`, `Envoi de ${row.tracker.name} au client.`));
+        if (upgrade) await mediaReplaceRefresh?.();
       } finally { queue.disabled = false; }
     }), "media-primary");
     actions.append(queue); content.append(actions); root.append(copy);
+    // A better version of a library film: the Owner may replace the old one (replace.js).
+    if (row.tracker.own_score !== undefined && typeof mediaReplaceCard === "function") mediaReplaceCard(row, actions, queue);
     return;
   }
   const play = mediaCanPreview(row) ? mediaPreviewAction(row, "media-primary") : button(row.position > 0 && !row.watched ? say("Resume", "Reprendre") : say("Play", "Lire"), () => mediaStart([row.id]), "media-primary"); play.disabled = row.available === false && !mediaCanPreview(row);

@@ -503,6 +503,31 @@ def create_app(
 
     agent_service = AgentService(agent_access, service, jobs, for_client)
     mcp_server, mcp_app = make_server(agent_service)
+
+    def replaced(client: Any, run: dict[str, Any]) -> None:
+        """The better release is complete: the film's watch state moves to its file."""
+        from torrentlinker.media_replace import follow_replacement
+        from torrentlinker.paths import PathMapper
+
+        new = client.torrent(run["new_hash"], with_files=True)
+        if new is None:
+            return
+        mapper = PathMapper(for_client(run["client"]).setup.settings.path_mappings)
+        base = Path(mapper.to_local(str(new.save_path)))
+        files = sorted(new.files, key=lambda name: -new.files[name])
+        follow_replacement(
+            agent_service.media, run["client"], run["old_items"], [base / name for name in files]
+        )
+        target = run["client"]
+        jobs.submit(
+            "media-scan",
+            lambda stop, progress: agent_service.media.scan(target, stop, progress),
+            client_id=target,
+        )
+
+    replacements.on_complete = replaced
+    agent_service.media.hidden_paths = replacements.hidden_paths
+    agent_service.torrents_workspace.ending = replacements.ending
     app.mount("/mcp", mcp_app)
     owner_routes(app, agent_access, service, agent_service)
     from torrentlinker.assistant.routes import routes as assistant_routes
