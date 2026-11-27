@@ -128,9 +128,11 @@ eval(process.argv[1] + process.argv[2] + process.argv[3] + process.argv[4] + `
       const parts=[view,...(tab?[tab]:[])];
       location.hash=routeFragment(parts);await settle();
       await enter();await settle();
-      assert.equal(state.view,view);
+      // A Member's "Films on the tracker" opens Médias' own "On the tracker" page.
+      assert.equal(state.view,view==='member-search'?'media':view);
       const canonical=view==='library' && ['items','review'].includes(tab)
-        ?['library','reseed']:view==='setup' && tab==='interface'?['setup','general']:parts;
+        ?['library','reseed']:view==='setup' && tab==='interface'?['setup','general']
+        :view==='member-search'?['media','video','tracker']:parts;
       assert.equal(location.hash,routeFragment(canonical));
     }
   }

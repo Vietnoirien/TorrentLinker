@@ -42,6 +42,9 @@ def settings_page(qtbot, tmp_path, settings=None, *, section="connections", show
             self.account_workspace = SimpleNamespace(
                 state=lambda: {"paired": False, "downloads": {}}
             )
+            from torrentlinker.companion_folder import ManagedCompanion
+
+            self.managed_companion = ManagedCompanion(tmp_path / "companion")
 
         def _export_diagnostics(self, parent):
             self.exports.append(parent)
