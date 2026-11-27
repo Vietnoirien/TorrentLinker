@@ -344,9 +344,21 @@ const TAB_TIPS = {
 const TABS = [["explorer", "Explorer", "Explorateur"], ["disks", "Disks", "Disques"], ["organisation", "Organisation", "Organisation"], ["trash", "Trash", "Corbeille"], ["tasks", "Tasks", "Tâches"]];
 // A Member with "Gérer les fichiers" gets Explorateur, Corbeille and Tâches, never Disques.
 const tabsFor = () => TABS.filter(([id]) => S.owner || !["disks", "organisation"].includes(id));
+// A render only replaces the page when something changed, and keeps where each list was scrolled:
+// a timer or a theme change must never move the page under a finger, nor drop a selection.
+let drawn = "";
 function render() {
   const tabs = tabsFor().map(([id, en, french]) => `<button data-tab="${id}" class="${S.tab === id ? "selected" : ""}">${say(en, french)}${id === "trash" && S.trash ? `<span class="badge count">${S.trash.disks.reduce((a, d) => a + d.items.length, 0)}</span>` : ""}</button>${S.tab === id && TAB_TIPS[id] ? `<span class="tabtip">${tip(...TAB_TIPS[id](), say("Help on this tab", "Aide sur cet onglet"))}</span>` : ""}`).join("");
-  $("app").innerHTML = `<nav class="tabs" role="tablist">${tabs}</nav>${S.tab === "trash" ? trashHTML() : S.tab === "disks" ? disksHTML() : S.tab === "organisation" ? orgHTML() : S.tab === "explorer" ? explorerHTML() : tasksHTML()}`;
+  const html = `<nav class="tabs" role="tablist">${tabs}</nav>${S.tab === "trash" ? trashHTML() : S.tab === "disks" ? disksHTML() : S.tab === "organisation" ? orgHTML() : S.tab === "explorer" ? explorerHTML() : tasksHTML()}`;
+  if (html !== drawn) {
+    const all = () => [...$("app").querySelectorAll("*")];
+    const scrolled = all().map((el, i) => [i, el.scrollTop, el.scrollLeft]).filter(([, top, left]) => top || left);
+    const page = [scrollX, scrollY];
+    $("app").innerHTML = drawn = html;
+    const now = all();
+    for (const [i, top, left] of scrolled) if (now[i]) { now[i].scrollTop = top; now[i].scrollLeft = left; }
+    scrollTo(...page);
+  }
   const toggle = document.querySelector('[data-k="orgtoggle"]');
   if (toggle) toggle.indeterminate = toggle.dataset.state === "some";
 }
@@ -582,4 +594,5 @@ load();
 window.addEventListener("files-environment", () => load());
 if (window.filesReady) window.filesReady();
 else bridge.then(() => window.filesReady?.());
-setInterval(() => { if (!document.hidden) load(); }, 15000);
+// Only Tâches follows running work by itself; the other tabs reload when opened or acted on.
+setInterval(() => { if (!document.hidden && S.tab === "tasks") load(); }, 15000);
