@@ -57,6 +57,10 @@ def test_compatible_playback_exposes_choices_and_streams_without_changing_origin
         assert choices.status_code == 200, choices.text
         assert choices.json()["qualities"] == ["original", "360", "480", "720", "1080"]
         assert choices.json()["audio"][0]["language"] == "fr"
+        # What a device needs to tell whether it plays the original as it is.
+        assert choices.json()["container"] == "matroska"
+        assert choices.json()["video_codec"] == "h264"
+        assert choices.json()["bit_depth"] == 8
         response = browser.get(
             endpoint + "/stream",
             params={
@@ -223,3 +227,16 @@ def test_the_sound_quality_copies_the_picture_and_converts_only_the_audio(monkey
     # A Member limited below the film's height gets no copy of its full picture.
     with pytest.raises(ValueError):
         command_of("sound", facts, limit=720)
+
+
+def test_the_container_and_bit_depth_are_named_as_a_device_asks_for_them():
+    from torrentlinker.media_conversion import _bit_depth, _container
+
+    assert _container("matroska,webm", Path("a.mkv")) == "matroska"
+    assert _container("matroska,webm", Path("a.WebM")) == "webm"
+    assert _container("mov,mp4,m4a,3gp,3g2,mj2", Path("a.mp4")) == "mp4"
+    assert _container("avi", Path("a.avi")) == "avi"
+    assert _bit_depth({"pix_fmt": "yuv420p10le"}) == 10
+    assert _bit_depth({"pix_fmt": "yuv420p"}) == 8
+    assert _bit_depth({"pix_fmt": "p010le"}) == 10
+    assert _bit_depth({"bits_per_raw_sample": "10"}) == 10

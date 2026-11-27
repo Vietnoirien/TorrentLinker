@@ -10,6 +10,7 @@ import functools
 import io
 import json
 import math
+import re
 import shutil
 import subprocess
 import threading
@@ -81,10 +82,32 @@ def inspect(path: Path) -> dict[str, Any]:
             "height": int(video.get("height", 0)),
             "hdr": video.get("color_transfer") in {"smpte2084", "arib-std-b67"},
             "video_codec": str(video.get("codec_name") or ""),
+            "bit_depth": _bit_depth(video),
+            "container": _container(str(data["format"].get("format_name") or ""), path),
             "sound": video.get("codec_name") in {"h264", "hevc"},
         }
     except (OSError, subprocess.SubprocessError, ValueError, KeyError, StopIteration):
         raise ValueError("Cannot inspect this video for compatible playback.") from None
+
+
+def _bit_depth(video: dict[str, Any]) -> int:
+    """Bits per colour sample: 10 for HDR and many HEVC releases, which fewer devices decode."""
+    # yuv420p10le, and the hardware layouts p010le / p016le.
+    found = re.search(r"p(\d{2})(?:le|be)$|^p0(\d{2})", str(video.get("pix_fmt") or ""))
+    if found:
+        return int(found.group(1) or found.group(2))
+    raw = str(video.get("bits_per_raw_sample") or "")
+    return int(raw) if raw.isdigit() else 8
+
+
+def _container(format_name: str, path: Path) -> str:
+    """The container as a browser names it: FFprobe calls Matroska and WebM alike."""
+    names = format_name.split(",")
+    if "matroska" in names:
+        return "webm" if path.suffix.lower() == ".webm" else "matroska"
+    if "mp4" in names or "mov" in names:
+        return "mp4"
+    return names[0]
 
 
 @functools.lru_cache(maxsize=512)

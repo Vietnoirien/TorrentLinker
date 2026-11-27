@@ -237,7 +237,7 @@ async function mediaLoad(id, position = null, paused = false, preview = null, re
   }
   mediaAudioChoice=0;
   if(!preview && row.kind==="video")mediaQuality=mediaQualityStart(mediaPlaybackFacts.get(id));
-  const converted=!preview && row.kind==="video" && mediaQuality!=="original" && (mediaPlaybackFacts.get(id)?.qualities.includes(mediaQuality) || mediaQuality==="sound" && mediaPlaybackFacts.get(id)?.sound);
+  const converted=!preview && row.kind==="video" && mediaQualityConverted(mediaPlaybackFacts.get(id), mediaQuality);
   if(converted)mediaStreamLoad(player,id,position ?? row.position ?? 0);
   else {player.src = preview ? mediaPreviewURL(preview.preview_id) : mediaURL(id); player.load();}
   $("media-player-shell").hidden = false;
@@ -267,15 +267,24 @@ async function mediaLoad(id, position = null, paused = false, preview = null, re
   mediaQueueRender(); return true;
 }
 async function mediaTryPlay(player = mediaPlayer()) {
+  const source = player.dataset.sourceToken;
   try { await player.play(); return true; }
-  catch (error) { if (error.name === "NotAllowedError") mediaStatus("Press Play in the player to continue playback."); else if (error.name !== "AbortError") mediaCodecError(); return false; }
+  catch (error) {
+    // A refusal from a source already replaced is that source's: the new one reports its own,
+    // so a late one never steps the quality down again.
+    if (player.dataset.sourceToken !== source) return false;
+    if (error.name === "NotAllowedError") mediaStatus("Press Play in the player to continue playback."); else if (error.name !== "AbortError") mediaCodecError(); return false; }
 }
 function mediaCodecError() {
   // A source that cannot play gives way to the best compatible quality below it, unasked.
   // While a switch is under way, it reports its own failure.
   if (mediaSwitching) return;
   if (!media.preview) {
-    const next = mediaQualityFallback(mediaPlaybackFacts.get(mediaPlayer().dataset.mediaId), mediaQuality, false);
+    const player = mediaPlayer(), facts = mediaPlaybackFacts.get(player.dataset.mediaId);
+    // A file this device could not read or decode is converted at once next time; a network
+    // failure teaches nothing.
+    if (!player.error || player.error.code >= 3) mediaDecodeLearn(facts, mediaQuality, false);
+    const next = mediaQualityFallback(facts, mediaQuality, false);
     if (next) { mediaChangeQuality({quality:next}).catch(() => mediaCodecShow()); return; }
   }
   mediaCodecShow();
@@ -520,7 +529,8 @@ $("media-video").addEventListener("playing", () => {
   const player = $("media-video"), source = player.dataset.sourceToken;
   setTimeout(() => {
     if (player.dataset.sourceToken !== source || mediaSwitching) return;
-    const next = mediaSilentSwitch(player, mediaPlaybackFacts.get(player.dataset.mediaId));
+    const facts = mediaPlaybackFacts.get(player.dataset.mediaId), next = mediaSilentSwitch(player, facts);
+    if (player.videoWidth) mediaDecodeLearn(facts, mediaQuality, !next);
     if (next) guard(() => mediaChangeQuality({quality: next}));
   }, 2000);
 });
