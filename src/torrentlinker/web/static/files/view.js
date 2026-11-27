@@ -72,7 +72,22 @@ function diskCard(d) {
     <div class="row"><b>${size(d.used)} ${say("used", "utilisés")}</b><span>·</span><b>${size(d.free)} ${say("free", "libres")} (${pct(d.free / d.total * 100)})</b>
       ${d.free <= 0 ? `<span class="badge bad">${say("full", "plein")}</span>` : ""}${d.below_margin ? `<span class="badge ${d.free <= 0 ? "bad" : "warn"}">${say("below the 10 % margin", "sous la marge de 10 %")} (${size(d.margin)})</span>` : `<span class="badge ok">${say("10 % margin kept", "marge de 10 % respectée")}</span>`}</div>
     ${d.below_margin ? `<div class="note warn">${d.free <= 0 ? say("This disk is full: no download will be placed on it.", "Ce disque est plein : plus aucun téléchargement n'y sera placé.") : say("This disk is below the margin: the placement rule avoids it.", "Ce disque est sous la marge : la règle de placement l'évite.")} ${size(Math.max(0, d.margin - d.free))} ${say("to free to get the margin back.", "à libérer pour retrouver la marge.")}</div>` : ""}${ro}
-    <dl class="kv"><dt>Films</dt><dd>${d.films} ${say(d.films === 1 ? "film" : "films", d.films === 1 ? "film" : "films")} ${say("in the Library Folders", "dans les dossiers de bibliothèque")}</dd></dl></article>`;
+    <dl class="kv"><dt>Films</dt><dd>${d.films} ${say(d.films === 1 ? "film" : "films", d.films === 1 ? "film" : "films")} ${say("in the Library Folders", "dans les dossiers de bibliothèque")}</dd>${smartHTML(d.health)}</dl></article>`;
+}
+function smartHTML(h) {
+  if (!h || h.unavailable) return `<dt>${say("Health", "Santé")}</dt><dd><span class="badge warn">${say("unknown", "inconnue")}</span> <small style="display:inline">${say("smartctl is not allowed and Scrutiny is not set (see above)", "smartctl n'est pas autorisé et Scrutiny n'est pas configuré (voir plus haut)")}</small></dd>`;
+  const status = h.status === "ok" ? `<span class="badge ok">SMART : OK</span>` : `<span class="badge bad">${say("Alert", "Alerte")} : ${h.reallocated ? `${h.reallocated} ${say("reallocated sectors", "secteurs réalloués")}` : say("SMART status failing", "état SMART en échec")}${h.pending ? `, ${h.pending} ${say("pending", "en attente")}` : ""}</span>`;
+  return `<dt>${say("Health", "Santé")}</dt><dd>${status}</dd><dt>${say("Temperature", "Température")}</dt><dd>${h.temperature ?? "—"} °C</dd><dt>${say("Hours", "Heures")}</dt><dd>${h.hours ?? "—"} h</dd><dt>Source</dt><dd>${h.source === "scrutiny" ? "Scrutiny" : "smartctl"}</dd>`;
+}
+const copyBtn = (text) => `<button data-k="copy" data-v="${esc(text)}">${say("Copy", "Copier")}</button>`;
+const code = (text) => `<div class="row" style="align-items:flex-start"><pre class="code grow">${esc(text)}</pre>${copyBtn(text)}</div>`;
+function healthHTML() {
+  const d = S.disks, any = d.disks.some((c) => c.health && !c.health.unavailable);
+  const hint = d.disks.length && !any && !d.scrutiny_url ? `<div class="note warn"><b>${say("smartctl is not allowed", "smartctl n'est pas autorisé")}</b> ${say("for this server: disk health is unknown. To allow it (read-only):", "pour ce serveur : la santé des disques est inconnue. Pour l'autoriser (lecture seule) :")}
+    ${code("# docker compose\nservices:\n  torrentlinker:\n    cap_add:\n      - SYS_RAWIO\n    devices:\n      - /dev/sda:/dev/sda\n      - /dev/sdb:/dev/sdb")}</div>` : "";
+  return `<section class="card sect"><div class="row between"><h3>${say("Disk health", "Santé des disques")}</h3></div>
+    <div class="row"><span>smartctl : <b>${any ? say("allowed", "autorisé") : say("not allowed", "non autorisé")}</b></span><span class="grow"></span>
+    <label class="row">Scrutiny (API) <input data-k="scr" value="${esc(d.scrutiny_url)}" placeholder="http://scrutiny:8080" style="width:260px"></label><button data-k="scrsave">${say("Save", "Enregistrer")}</button><button data-k="scrtest">${say("Test", "Tester")}</button></div>${hint}</section>`;
 }
 function missingCard(path) {
   return `<article class="card disk" style="border:1px dashed var(--warning);grid-column:1/-1"><div class="row between"><h3>${esc(path)}</h3><span class="badge warn">${say("missing from the container", "absent du conteneur")}</span></div>
@@ -104,7 +119,7 @@ function disksHTML() {
   return `<p class="muted hint">${say(
     "Each disk is mounted separately and identified by its device (st_dev). The Corbeille is counted apart.",
     "Chaque disque est monté séparément et identifié par son périphérique (st_dev). La corbeille est comptée à part.")}</p>
-    <div class="disks">${d.disks.map(diskCard).join("")}${d.missing.map(missingCard).join("")}</div>
+    ${healthHTML()}<div class="disks">${d.disks.map(diskCard).join("")}${d.missing.map(missingCard).join("")}</div>
     ${d.disks.length ? `<div style="height:14px"></div>${placementHTML()}` : `<div class="empty">${say("No storage folder is configured.", "Aucun dossier de stockage n'est configuré.")}</div>`}`;
 }
 async function place() {
@@ -172,6 +187,14 @@ document.addEventListener("click", async (e) => {
     try { const r = await api(`trash/${t.dataset.id}/restore`, {}); TLToast.show(say(`Restored to ${r.restored}.`, `Restauré dans ${r.restored}.`)); } catch (x) { fail(x); }
     load();
   } else if (t.dataset.k === "empty") confirmEmpty(t.dataset.d);
+  else if (t.dataset.k === "copy") { try { await navigator.clipboard.writeText(t.dataset.v); TLToast.show(say("Copied.", "Copié.")); } catch { TLToast.show(say("Copy is not allowed here.", "Copie impossible ici."), "bad"); } }
+  else if (t.dataset.k === "scrsave" || t.dataset.k === "scrtest") {
+    const url = document.querySelector('[data-k="scr"]').value;
+    try {
+      if (t.dataset.k === "scrsave") { await api("disks/scrutiny", { url }); TLToast.show(say("Scrutiny address saved.", "Adresse de Scrutiny enregistrée.")); load(); }
+      else { const r = await api("disks/scrutiny/test", { url }); TLToast.show(say(`Scrutiny answers: ${r.disks.length} disk(s).`, `Scrutiny répond : ${r.disks.length} disque(s).`)); }
+    } catch (x) { fail(x); }
+  }
 });
 document.addEventListener("change", async (e) => {
   if (e.target.dataset.k === "sim") { S.sim = Math.max(0.1, Number(e.target.value) || 4.2); await place(); render(); return; }

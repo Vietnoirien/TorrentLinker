@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import sqlite3
 import threading
@@ -93,7 +94,27 @@ class FileStorage:
     def set_retention_days(self, days: int) -> None:
         if not 1 <= days <= 365:
             raise StorageError("Keep the trash between 1 and 365 days.")
-        self._settings.write_text(json.dumps({"retention_days": days}), encoding="utf-8")
+        try:
+            current = json.loads(self._settings.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            current = {}
+        self._settings.write_text(json.dumps({**current, "retention_days": days}), encoding="utf-8")
+
+    def scrutiny_url(self) -> str:
+        try:
+            return str(json.loads(self._settings.read_text(encoding="utf-8")).get("scrutiny", ""))
+        except (OSError, ValueError, TypeError):
+            return ""
+
+    def set_scrutiny_url(self, url: str) -> None:
+        url = url.strip()
+        if url and not re.fullmatch(r"https?://[^\s/]+(:\d+)?(/\S*)?", url):
+            raise StorageError("Enter Scrutiny's address, for example http://scrutiny:8080.")
+        try:
+            current = json.loads(self._settings.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            current = {}
+        self._settings.write_text(json.dumps({**current, "scrutiny": url}), encoding="utf-8")
 
     # Disks ---------------------------------------------------------------------------
 

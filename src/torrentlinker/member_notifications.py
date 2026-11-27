@@ -33,8 +33,10 @@ EVENTS = (
     "cross-failed",
     "cross-review",
     "cross-orphan",
+    "disk",
 )
 OWNER_EVENTS = {
+    "disk",
     "margin",
     "invitation",
     "screen",

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from torrentlinker.disk_health import alert as health_alert
+from torrentlinker.disk_health import disk_health, scrutiny
 from torrentlinker.disk_report import disk_cards, place
 from torrentlinker.file_storage import FileStorage, StorageError
 
@@ -25,11 +28,17 @@ class Placement(BaseModel):
     together_with: str = Field(default="", max_length=4096)
 
 
+class Scrutiny(BaseModel):
+    url: str = Field(default="", max_length=300)
+
+
 class Retention(BaseModel):
     days: int = Field(ge=1, le=365)
 
 
-def file_routes(app: FastAPI, storage: FileStorage, folders=lambda: ([], []), films=None) -> None:
+def file_routes(
+    app: FastAPI, storage: FileStorage, folders=lambda: ([], []), films=None, notice=None
+) -> None:
     """`folders` gives the Library and Download Folders; `films(path)` counts a folder's films."""
     app.state.file_storage = storage
 
@@ -83,9 +92,43 @@ def file_routes(app: FastAPI, storage: FileStorage, folders=lambda: ([], []), fi
         except StorageError as error:
             raise refuse(error) from error
 
+    seen: dict[str, tuple[float, dict]] = {}
+
+    def health(roots: list[Path]) -> dict:
+        """Read at most every ten minutes: smartctl wakes a sleeping disk."""
+        key = str(roots[0])
+        if key in seen and time.monotonic() - seen[key][0] < 600:
+            return seen[key][1]
+        found = disk_health(roots, scrutiny_url=storage.scrutiny_url())
+        seen[key] = (time.monotonic(), found)
+        if (why := health_alert(found)) and notice is not None:
+            notice("disk", f"Disk alert: {roots[0]}", "failing", why, f"disk:{key}:{why}")
+        return found
+
     def cards() -> dict:
         library, downloads = folders()
-        return disk_cards(storage, library, downloads, films or (lambda _: 0))
+        report = disk_cards(storage, library, downloads, films or (lambda _: 0), health=health)
+        report["scrutiny_url"] = storage.scrutiny_url()
+        return report
+
+    @app.post("/api/files/disks/scrutiny")
+    def save_scrutiny(body: Scrutiny) -> dict:
+        try:
+            storage.set_scrutiny_url(body.url)
+        except StorageError as error:
+            raise refuse(error) from error
+        seen.clear()
+        return {"scrutiny_url": storage.scrutiny_url()}
+
+    @app.post("/api/files/disks/scrutiny/test")
+    def test_scrutiny(body: Scrutiny) -> dict:
+        import httpx
+
+        try:
+            known = scrutiny(body.url)
+        except (httpx.HTTPError, ValueError, OSError) as error:
+            raise HTTPException(409, f"Scrutiny does not answer: {error}") from error
+        return {"disks": sorted(known)}
 
     @app.get("/api/files/disks")
     def disks() -> dict:

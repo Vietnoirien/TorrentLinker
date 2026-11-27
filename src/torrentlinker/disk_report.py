@@ -88,6 +88,7 @@ def disk_cards(
     downloads: list[Path],
     films_in: Callable[[Path], int] = lambda _: 0,
     library_bytes: Callable[[Path], int] | None = None,
+    health: Callable[[list[Path]], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """One card per disk, and the configured folders the application cannot see."""
     cards: list[dict[str, Any]] = []
@@ -120,6 +121,7 @@ def disk_cards(
                 "partial": trash_partial,
                 "films": sum(films_in(f) for f in lib_folders),
                 "writable": disk.writable, "reason": disk.reason,
+                "health": health(list(disk.roots)) if health else {"unavailable": "disabled"},
             }
         )  # fmt: skip
     missing = sorted(

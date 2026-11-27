@@ -477,7 +477,7 @@ def create_app(
         chosen = [downloads.default, *downloads.by_category.values()]
         return library, [Path(p) for p in dict.fromkeys(chosen) if p]
 
-    file_routes(app, file_storage, storage_folders)
+    file_routes(app, file_storage, storage_folders, notice=lambda *a: owner_notice(*a))
     from torrentlinker.library_replace import Replacements
     from torrentlinker.web.replace import replace_routes
 
