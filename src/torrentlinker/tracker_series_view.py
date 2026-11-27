@@ -134,7 +134,13 @@ def grid(
         and (not needle or needle in plain(c["title"]))
     ]  # fmt: skip
     found.sort(key=SORTS.get(sort, SORTS["new"]))
-    return {"rows": [_public(c) for c in found[offset : offset + limit]], "total": len(found)}
+    more = offset + limit < len(found)
+    names = sorted({g for c in cards for g in c["genre"].split(", ") if g}, key=plain)
+    return {
+        "rows": [_public(c) for c in found[offset : offset + limit]], "total": len(found),
+        "has_more": more, "next_offset": offset + limit if more else None,
+        "filters": {"genres": names},
+    }  # fmt: skip
 
 
 def landing(cards: list[dict[str, Any]], limit: int = 20) -> dict[str, Any]:
@@ -142,7 +148,7 @@ def landing(cards: list[dict[str, Any]], limit: int = 20) -> dict[str, Any]:
     rows = []
     first = grid(cards, [], "shared", "", 0, limit)
     if first["rows"]:
-        rows.append({"key": "tracker", "title": "", "filters": {"tracker": "series"}, **first})
+        rows.append({**first, "key": "tracker", "title": "", "filters": {"tracker": "series"}})
     genres: dict[str, int] = {}
     for card in cards:
         for genre in filter(None, card["genre"].split(", ")):
@@ -160,7 +166,13 @@ def landing(cards: list[dict[str, Any]], limit: int = 20) -> dict[str, Any]:
     return {"rows": rows}
 
 
-def detail(media: Any, client_id: str, identifier: str, actor: Any) -> dict[str, Any]:
+def detail(
+    media: Any,
+    client_id: str,
+    identifier: str,
+    actor: Any,
+    scorer: Callable[..., Any] | None = None,
+) -> dict[str, Any]:
     """The series panel: its seasons, with what the Trackers hold and what the Library has.
     The Owner also gets the releases of each season and episode."""
     from torrentlinker.tracker_series import coverage
@@ -195,7 +207,7 @@ def detail(media: Any, client_id: str, identifier: str, actor: Any) -> dict[str,
             ],
         }  # fmt: skip
         if actor.owner:
-            row["releases"] = _releases(entry, n)
+            row["releases"] = _releases(entry, n, scorer)
         out.append(row)
     return {
         **_card(entry, owned, len(seasons)),
@@ -204,7 +216,9 @@ def detail(media: Any, client_id: str, identifier: str, actor: Any) -> dict[str,
     }
 
 
-def _releases(entry: dict[str, Any], season: int) -> list[dict[str, Any]]:
+def _releases(
+    entry: dict[str, Any], season: int, scorer: Callable[..., Any] | None = None
+) -> list[dict[str, Any]]:
     """The Owner's view of a season: its packs, the Intégrales that cover it and its episodes."""
     found = []
     for r in entry["releases"]:
@@ -219,6 +233,7 @@ def _releases(entry: dict[str, Any], season: int) -> list[dict[str, Any]]:
             continue
         found.append(
             {"hash": r["infohash"], "name": r["name"], "size": r["size"], "seeders": r["seeders"],
-             "tracker": r["tracker"], "kind": kind, "episode": r["episode"]}
+             "tracker": r["tracker"], "kind": kind, "episode": r["episode"],
+             **(scorer(r) if scorer else {})}
         )  # fmt: skip
     return sorted(found, key=lambda x: (x["kind"], x["episode"], -x["seeders"]))

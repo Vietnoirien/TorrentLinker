@@ -447,6 +447,19 @@ def media_routes(app, agent, assistant):
         if not found.owner and Permission(scope) not in found.permissions:
             raise HTTPException(403, "This is not allowed for your account.")
 
+    def series_scorer(chosen: str):
+        """ReleaseScore of a series release, by the Owner's profile."""
+        preferences = media.setup(chosen).settings.release_score
+
+        def score(release: dict) -> dict:
+            try:
+                found = media._score(preferences, release["name"], release["size"], {})
+            except Exception:  # noqa: BLE001 - an unreadable name has no score
+                return {}
+            return {"score": found.get("score"), "color": found.get("color", "")}
+
+        return score
+
     @app.get("/api/media/tracker-series/landing")
     @needs(Permission.SERIES, Permission.ANIME)
     def series_landing(request: Request, client_id: str = "", scope: str = "series"):
@@ -482,7 +495,7 @@ def media_routes(app, agent, assistant):
 
         chosen = target(request, client_id)
         try:
-            found = view.detail(media, chosen, identifier, actor(request))
+            found = view.detail(media, chosen, identifier, actor(request), series_scorer(chosen))
         except KeyError:
             raise HTTPException(404, "This series is not on the tracker.") from None
         series_scope(request, "anime" if found["series_kind"] == "anime" else "series")
