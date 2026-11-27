@@ -5,7 +5,7 @@ const fr = () => (parent.document.documentElement.lang || "fr") === "fr";
 const say = (en, french) => (fr() ? french : en);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const DAY = 86400;
-const S = { rebal: null, rebPick: null, orgOff: new Set(), org: null, orgScope: "", owner: true, tab: "explorer", panes: [{ path: "", entries: [], sel: new Set() }, { path: "", entries: [], sel: new Set() }], active: 0, roots: [], queue: [], tab0: "", disks: null, trash: null, tasks: [], filter: "all", busy: false, sim: 4.2 };
+const S = { rebal: null, rebPick: null, rebOpen: new Set(), orgOff: new Set(), org: null, orgScope: "", owner: true, tab: "explorer", panes: [{ path: "", entries: [], sel: new Set() }, { path: "", entries: [], sel: new Set() }], active: 0, roots: [], queue: [], tab0: "", disks: null, trash: null, tasks: [], filter: "all", busy: false, sim: 4.2 };
 
 // The panel has no network of its own: the host forwards each request to /api/files/.
 const bridge = window.TLPanel.connect("files", { asynchronous: true });
@@ -33,70 +33,77 @@ function purge(item) {
   return `<span class="badge">${say(`purged in ${n} d`, `purgée dans ${n} j`)}</span>`;
 }
 
+// Where an item came from, in plain words: the disk and the folder under it.
+function whereOf(d, from) {
+  const rel = from.startsWith(`${d.name}/`) ? from.slice(d.name.length + 1).split("/").filter(Boolean) : null;
+  if (rel) return rel.length > 1 ? `${d.name} · ${rel[0]}` : d.name;
+  const parts = from.split("/").filter(Boolean);
+  return parts.length > 1 ? parts[parts.length - 2] : from;
+}
+function trashSettingsHTML() {
+  return `<div class="row between"><h2>${say("Trash settings", "Réglages de la corbeille")}</h2><button class="quiet" data-close aria-label="${say("Close", "Fermer")}">✕</button></div>
+    <section class="sect"><div class="row"><h3>${say("Retention", "Conservation")}</h3>${tip("7 days by default. After that the trash is purged. The space it takes is counted apart in Disks.", "7 jours par défaut. Passé ce délai, la corbeille est purgée. L'espace qu'elle occupe est compté à part dans Disques.", say("Help on retention", "Aide sur la conservation"))}</div>
+      <label class="row">${say("Purge after", "Purger après")} <select data-k="ret">${[1, 3, 7, 14, 30].map((n) => `<option value="${n}" ${S.trash.retention_days === n ? "selected" : ""}>${n} ${say(n > 1 ? "days" : "day", n > 1 ? "jours" : "jour")}</option>`).join("")}</select></label></section>
+    <div class="dialog-foot"><button class="primary" data-close>${say("Close", "Fermer")}</button></div>`;
+}
 function trashHTML() {
   const t = S.trash;
   if (!t) return `<div class="empty">…</div>`;
   const sections = t.disks.map((d) => {
     const total = d.items.reduce((a, i) => a + i.size, 0);
-    const notice = d.writable ? "" : `<div class="note warn">${say(
-      `${esc(d.name)} is mounted read-only, so nothing can be trashed or restored there yet. ${esc(d.reason)} Make the folder writable (remove “:ro” from its volume in your compose file), then reload this page.`,
-      `${esc(d.name)} est monté en lecture seule : rien ne peut y être mis à la corbeille ni restauré pour l’instant. ${esc(d.reason)} Rendez le dossier modifiable (retirez « :ro » de son volume dans votre fichier compose), puis rechargez cette page.`)}</div>`;
+    const notice = d.writable ? "" : `<div class="note warn row">${say("Read-only", "Lecture seule")} ${tip(`${d.name} is mounted read-only, so nothing can be trashed or restored there yet. ${d.reason} Make the folder writable (remove “:ro” from its volume in your compose file), then reload this page.`, `${d.name} est monté en lecture seule : rien ne peut y être mis à la corbeille ni restauré pour l'instant. ${d.reason} Rendez le dossier modifiable (retirez « :ro » de son volume dans votre fichier compose), puis rechargez cette page.`, say("Details", "Détails"))}</div>`;
     return `<section class="sect"><h3>${say("Trash of", "Corbeille de")} ${esc(d.name)} <span class="badge">${size(total)}</span>
       ${S.owner && d.items.length ? `<button class="danger" data-k="empty" data-d="${esc(d.id)}">${say("Empty now", "Vider maintenant")}</button>` : ""}</h3>${notice}
-      <div class="panel">${d.items.length ? `<table class="list"><thead><tr><th>${say("Name", "Nom")}</th><th>${say("Original location", "Emplacement d'origine")}</th><th>${say("Deleted", "Supprimé")}</th><th class="num">${say("Size", "Taille")}</th><th>${say("Purge", "Purge")}</th><th></th></tr></thead><tbody>
-      ${d.items.map((i) => `<tr><td class="name">${esc(i.name)}${i.reason ? `<small>${esc(i.reason)}</small>` : ""}</td><td class="name" style="font-size:12.5px;color:var(--muted)">${esc(i.from)}</td>
+      <div class="panel">${d.items.length ? `<table class="list"><thead><tr><th>${say("Name", "Nom")}</th><th>${say("From", "D'où")}</th><th>${say("Deleted", "Supprimé")}</th><th class="num">${say("Size", "Taille")}</th><th>${say("Purge", "Purge")}</th><th></th></tr></thead><tbody>
+      ${d.items.map((i) => `<tr><td class="name">${esc(i.name)}${i.reason ? `<small>${esc(i.reason)}</small>` : ""}</td><td class="name" style="font-size:12.5px;color:var(--muted)" title="${esc(i.from)}">${esc(whereOf(d, i.from))}</td>
         <td>${esc(i.by)}<small>${ago(i.at)}</small></td><td class="num">${size(i.size)}</td><td>${purge(i)}</td>
         <td class="num"><button data-k="restore" data-id="${esc(i.id)}" ${d.writable ? "" : "disabled"}>${say("Restore", "Restaurer")}</button></td></tr>`).join("")}</tbody></table>`
-        : `<div class="empty">${say("This disk's trash is empty.", "La corbeille de ce disque est vide.")}</div>`}</div></section>`;
+        : `<div class="empty">${say("Trash empty.", "Corbeille vide.")}</div>`}</div></section>`;
   }).join("");
-  return `<p class="muted hint">${say(
-    "Deleting, in Files, always means moving to the trash. Each disk has its own: the move is instant.",
-    "Supprimer, dans Fichiers, veut toujours dire mettre à la corbeille. Chaque disque a la sienne : le déplacement est instantané.")}</p>
-    ${S.owner ? `<section class="card sect"><div class="row"><h3>${say("Retention", "Conservation")}</h3><label class="row">${say("Purge after", "Purger après")} <select data-k="ret">${[1, 3, 7, 14, 30].map((n) => `<option value="${n}" ${t.retention_days === n ? "selected" : ""}>${n} ${say(n > 1 ? "days" : "day", n > 1 ? "jours" : "jour")}</option>`).join("")}</select></label>
-      <small style="display:inline">${say("7 days by default.", "7 jours par défaut.")}</small></div></section>` : ""}${sections || `<div class="empty">${say("No storage folder is configured.", "Aucun dossier de stockage n'est configuré.")}</div>`}`;
+  return `${S.owner ? `<div class="row"><span class="grow"></span><button data-k="trashsettings" aria-label="${say("Trash settings", "Réglages de la corbeille")}" title="${say("Settings", "Réglages")}">⚙</button></div>` : ""}${sections || `<div class="empty">${say("No storage folder is configured.", "Aucun dossier de stockage n'est configuré.")}</div>`}`;
 }
 
 // ---- Disques --------------------------------------------------------------------------------
 const pct = (n) => `${Math.round(n)} %`;
+const detail = say("Details", "Détails");
 function diskCard(d) {
-  if (d.error) return `<article class="card disk"><h3>${esc(d.name)}</h3><div class="note warn">${esc(d.error)}</div></article>`;
+  if (d.error) return `<article class="card disk"><div class="row between"><h3>${esc(d.name)}</h3><span class="row"><span class="badge warn">${say("Unavailable", "Indisponible")}</span> ${TLInfo.html(d.error, detail)}</span></div></article>`;
   const seg = (v, c) => `<i class="${c}" style="width:${Math.max(0, v) / d.total * 100}%" title="${size(v)}"></i>`;
   const used = d.used / d.total * 100;
-  const ro = d.writable ? "" : `<div class="note warn">${say(
-    `This disk is mounted read-only (${esc(d.reason)}): the Corbeille, Fichiers and Organisation cannot work there until it is writable. Remove “:ro” from its volume in your compose file, then restart the container. TorrentLinker never formats or mounts a disk.`,
-    `Ce disque est monté en lecture seule (${esc(d.reason)}) : la corbeille, Fichiers et Organisation n'y fonctionneront pas tant qu'il ne sera pas modifiable. Retirez « :ro » de son volume dans votre fichier compose, puis redémarrez le conteneur. TorrentLinker ne formate ni ne monte jamais un disque.`)}</div>`;
-  return `<article class="card disk"><div class="row between"><h3>${esc(d.name)}</h3><span class="row"><span class="badge">${size(d.total)}</span></span></div>
-    <small>${d.roots.map(esc).join(", ")}</small>
+  const chip = d.free <= 0 ? `<span class="badge bad">${say("Full", "Plein")}</span>` : d.below_margin ? `<span class="badge warn">${say("Almost full", "Presque plein")}</span>` : `<span class="badge ok">${say("Enough room", "Place suffisante")}</span>`;
+  const left = size(Math.max(0, d.margin - d.free));
+  const chipTip = d.free <= 0 ? say(`This disk is full: no download is placed on it. ${left} to free to get the 10 % margin back. See the proposal below.`, `Ce disque est plein : plus aucun téléchargement n'y est placé. ${left} à libérer pour retrouver la marge de 10 %. Voir la proposition plus bas.`)
+    : d.below_margin ? say(`This disk is under the 10 % margin (${size(d.margin)}): the placement rule avoids it. ${left} to free to get it back. See the proposal below.`, `Ce disque est sous la marge de 10 % (${size(d.margin)}) : la règle de placement l'évite. ${left} à libérer pour la retrouver. Voir la proposition plus bas.`)
+    : say(`The 10 % free-space margin (${size(d.margin)}) is kept.`, `La marge de 10 % d'espace libre (${size(d.margin)}) est respectée.`);
+  const ro = d.writable ? "" : `<span class="badge warn">${say("Read-only", "Lecture seule")}</span> ${tip(`This disk is mounted read-only (${d.reason}): the Corbeille, Fichiers and Organisation cannot work there. Remove “:ro” from its volume in your compose file, then restart the container.`, `Ce disque est monté en lecture seule (${d.reason}) : la corbeille, Fichiers et Organisation n'y fonctionneront pas. Retirez « :ro » de son volume dans votre fichier compose, puis redémarrez le conteneur.`, detail)}`;
+  return `<article class="card disk"><div class="row between"><h3>${esc(d.name)}</h3><span class="row"><span class="badge">${size(d.total)}</span>${chip} ${TLInfo.html(chipTip, detail)}${ro}</span></div>
     <div><div class="bar stack" title="${say("10 % margin marked", "Marge de 10 % marquée")}">${seg(d.library, "c-lib")}${seg(d.downloads, "c-dl")}${seg(d.trash, "c-tr")}${seg(d.other, "c-ot")}</div>
       <div class="bar" style="margin-top:6px;height:6px"><i class="${used > 99.5 ? "bad" : used > 90 ? "warn" : ""}" style="width:${Math.min(100, used)}%"></i><u style="left:90%"></u></div></div>
-    <div class="legend"><span><b class="c-lib"></b>${say("Library", "Médiathèque")} ${size(d.library)}</span><span><b class="c-dl"></b>${say("Downloads", "Téléchargements")} ${size(d.downloads)}</span><span><b class="c-tr"></b>${say("Trash", "Corbeille")} ${size(d.trash)}</span><span><b class="c-ot"></b>${say("Other data", "Autres données")} ${size(d.other)}</span></div>
-    <div class="row"><b>${size(d.used)} ${say("used", "utilisés")}</b><span>·</span><b>${size(d.free)} ${say("free", "libres")} (${pct(d.free / d.total * 100)})</b>
-      ${d.free <= 0 ? `<span class="badge bad">${say("full", "plein")}</span>` : ""}${d.below_margin ? `<span class="badge ${d.free <= 0 ? "bad" : "warn"}">${say("below the 10 % margin", "sous la marge de 10 %")} (${size(d.margin)})</span>` : `<span class="badge ok">${say("10 % margin kept", "marge de 10 % respectée")}</span>`}</div>
-    ${d.below_margin ? `<div class="note warn">${d.free <= 0 ? say("This disk is full: no download will be placed on it.", "Ce disque est plein : plus aucun téléchargement n'y sera placé.") : say("This disk is below the margin: the placement rule avoids it.", "Ce disque est sous la marge : la règle de placement l'évite.")} ${size(Math.max(0, d.margin - d.free))} ${say("to free to get the margin back.", "à libérer pour retrouver la marge.")}</div>` : ""}${ro}
-    <dl class="kv"><dt>Films</dt><dd>${d.films} ${say(d.films === 1 ? "film" : "films", d.films === 1 ? "film" : "films")} ${say("in the Library Folders", "dans les dossiers de bibliothèque")}</dd>${smartHTML(d.health)}</dl></article>`;
+    <div class="legend"><span><b class="c-lib"></b>${say("Library", "Médiathèque")} ${size(d.library)}</span><span><b class="c-dl"></b>${say("Downloads", "Téléchargements")} ${size(d.downloads)}</span><span><b class="c-tr"></b>${say("Trash", "Corbeille")} ${size(d.trash)}</span><span><b class="c-ot"></b>${say("Other", "Autres")} ${size(d.other)}</span></div>
+    <div class="row"><b>${size(d.used)} ${say("used", "utilisés")}</b><span>·</span><b>${size(d.free)} ${say("free", "libres")} (${pct(d.free / d.total * 100)})</b></div>
+    <dl class="kv"><dt>Films</dt><dd>${d.films}</dd>${smartHTML(d.health)}</dl></article>`;
 }
 function smartHTML(h) {
-  if (!h || h.unavailable) return `<dt>${say("Health", "Santé")}</dt><dd><span class="badge warn">${say("unknown", "inconnue")}</span> <small style="display:inline">${say("smartctl is not allowed and Scrutiny is not set (see above)", "smartctl n'est pas autorisé et Scrutiny n'est pas configuré (voir plus haut)")}</small></dd>`;
-  const status = h.status === "ok" ? `<span class="badge ok">SMART : OK</span>` : `<span class="badge bad">${say("Alert", "Alerte")} : ${h.reallocated ? `${h.reallocated} ${say("reallocated sectors", "secteurs réalloués")}` : say("SMART status failing", "état SMART en échec")}${h.pending ? `, ${h.pending} ${say("pending", "en attente")}` : ""}</span>`;
-  return `<dt>${say("Health", "Santé")}</dt><dd>${status}</dd><dt>${say("Temperature", "Température")}</dt><dd>${h.temperature ?? "—"} °C</dd><dt>${say("Hours", "Heures")}</dt><dd>${h.hours ?? "—"} h</dd><dt>Source</dt><dd>${h.source === "scrutiny" ? "Scrutiny" : "smartctl"}</dd>`;
+  if (!h || h.unavailable) return `<dt>${say("Health", "Santé")}</dt><dd><span class="badge warn">${say("Unknown", "Inconnue")}</span> ${tip("smartctl is not allowed and Scrutiny is not set. See the ⚙ settings of this tab.", "smartctl n'est pas autorisé et Scrutiny n'est pas configuré. Voir les réglages ⚙ de cet onglet.", detail)}</dd>`;
+  const sectors = h.reallocated ? say(`${h.reallocated} reallocated sectors`, `${h.reallocated} secteurs réalloués`) : say("SMART status failing", "état SMART en échec");
+  const status = h.status === "ok" ? `<span class="badge ok">${say("Good", "Bon état")}</span>` : `<span class="badge bad">${say("Alert", "Alerte")}</span> ${tip(`${sectors}${h.pending ? `, ${h.pending} ${say("pending", "en attente")}` : ""}: ${say("the disk is wearing out. Think of replacing it.", "le disque s'use. Pensez à le remplacer.")}`, say("Why the alert", "Pourquoi l'alerte"), detail)}`;
+  return `<dt>${say("Health", "Santé")}</dt><dd>${status}</dd><dt>${say("Temperature", "Température")}</dt><dd>${h.temperature ?? "—"} °C</dd><dt>${say("Age", "Âge")}</dt><dd>${h.hours ?? "—"} ${say("h of use", "h d'utilisation")}</dd>`;
 }
 const copyBtn = (text) => `<button data-k="copy" data-v="${esc(text)}">${say("Copy", "Copier")}</button>`;
 const code = (text) => `<div class="row" style="align-items:flex-start"><pre class="code grow">${esc(text)}</pre>${copyBtn(text)}</div>`;
-function healthHTML() {
+function disksSettingsHTML() {
   const d = S.disks, any = d.disks.some((c) => c.health && !c.health.unavailable);
-  const hint = d.disks.length && !any && !d.scrutiny_url ? `<div class="note warn"><b>${say("smartctl is not allowed", "smartctl n'est pas autorisé")}</b> ${say("for this server: disk health is unknown. To allow it (read-only):", "pour ce serveur : la santé des disques est inconnue. Pour l'autoriser (lecture seule) :")}
-    ${code("# docker compose\nservices:\n  torrentlinker:\n    cap_add:\n      - SYS_RAWIO\n    devices:\n      - /dev/sda:/dev/sda\n      - /dev/sdb:/dev/sdb")}</div>` : "";
-  return `<section class="card sect"><div class="row between"><h3>${say("Disk health", "Santé des disques")}</h3></div>
-    <div class="row"><span>smartctl : <b>${any ? say("allowed", "autorisé") : say("not allowed", "non autorisé")}</b></span><span class="grow"></span>
-    <label class="row">Scrutiny (API) <input data-k="scr" value="${esc(d.scrutiny_url)}" placeholder="http://scrutiny:8080" style="width:260px"></label><button data-k="scrsave">${say("Save", "Enregistrer")}</button><button data-k="scrtest">${say("Test", "Tester")}</button></div>${hint}</section>`;
+  return `<div class="row between"><h2>${say("Disk settings", "Réglages des disques")}</h2><button class="quiet" data-close aria-label="${say("Close", "Fermer")}">✕</button></div>
+    <section class="sect"><div class="row"><h3>Scrutiny</h3>${tip("Address of Scrutiny's API, which gives the health of the disks it knows. Leave empty to not use it.", "Adresse de l'API de Scrutiny, qui fournit la santé des disques qu'il connaît. Laissez vide pour ne pas l'utiliser.", say("Help on Scrutiny", "Aide sur Scrutiny"))}</div>
+      <div class="row"><input data-k="scr" value="${esc(d.scrutiny_url)}" placeholder="http://scrutiny:8080" style="width:260px" aria-label="${say("Scrutiny address", "Adresse de Scrutiny")}"><button data-k="scrsave">${say("Save", "Enregistrer")}</button><button data-k="scrtest">${say("Test", "Tester")}</button></div></section>
+    <section class="sect"><div class="row"><h3>smartctl</h3><span class="badge ${any ? "ok" : "warn"}">${any ? say("Allowed", "Autorisé") : say("Not allowed", "Non autorisé")}</span>${tip(any ? "smartctl reads the disks' health, read-only." : "smartctl is not allowed for this server: disk health is unknown" + (d.scrutiny_url ? ", Scrutiny gives it for the disks it knows" : "") + ". To allow it (read-only), add this to the compose file.", any ? "smartctl lit la santé des disques en lecture seule." : "smartctl n'est pas autorisé pour ce serveur : la santé des disques est inconnue" + (d.scrutiny_url ? ", Scrutiny la fournit pour les disques qu'il connaît" : "") + ". Pour l'autoriser (lecture seule), ajoutez ceci au fichier compose.", say("Help on smartctl", "Aide sur smartctl"))}</div>
+      ${any ? "" : code("# docker compose\nservices:\n  torrentlinker:\n    cap_add:\n      - SYS_RAWIO\n    devices:\n      - /dev/sda:/dev/sda\n      - /dev/sdb:/dev/sdb")}</section>
+    <div class="dialog-foot"><button class="primary" data-close>${say("Close", "Fermer")}</button></div>`;
 }
 function missingCard(path) {
-  return `<article class="card disk" style="border:1px dashed var(--warning);grid-column:1/-1"><div class="row between"><h3>${esc(path)}</h3><span class="badge warn">${say("missing from the container", "absent du conteneur")}</span></div>
-    <div class="note warn">${say(
-      `This folder is set in Settings but TorrentLinker cannot see it. If the disk is mounted on the machine, one step is left, which you do yourself: add the volume to the container and restart it. TorrentLinker never partitions or formats a disk.`,
-      `Ce dossier est défini dans les paramètres mais TorrentLinker ne le voit pas. Si le disque est monté sur la machine, il reste une seule étape, à faire vous-même : ajouter le volume au conteneur, puis le redémarrer. TorrentLinker ne partitionne ni ne formate jamais un disque.`)}</div>
-    <div><b>${say("In the compose file", "Dans le fichier compose")}</b>, <code>volumes</code> :<pre class="code">services:\n  torrentlinker:\n    volumes:\n      - ${esc(path)}:${esc(path)}</pre></div>
-    <div><b>${say("Then restart", "Puis redémarrer")}</b> :<pre class="code">docker compose up -d</pre></div></article>`;
+  return `<article class="card disk" style="border:1px dashed var(--warning);grid-column:1/-1"><div class="row between"><h3>${esc(path)}</h3><span class="row"><span class="badge warn">${say("Missing from the container", "Absent du conteneur")}</span> ${tip("This folder is set in Settings but TorrentLinker cannot see it. If the disk is mounted on the machine, one step is left, which you do yourself: add the volume to the container, then restart it. TorrentLinker never partitions or formats a disk.", "Ce dossier est défini dans les paramètres mais TorrentLinker ne le voit pas. Si le disque est monté sur la machine, il reste une seule étape, à faire vous-même : ajouter le volume au conteneur, puis le redémarrer. TorrentLinker ne partitionne ni ne formate jamais un disque.", detail)}</span></div>
+    <div><b>${say("Compose file", "Fichier compose")}</b>${code(`services:\n  torrentlinker:\n    volumes:\n      - ${path}:${path}`)}</div>
+    <div><b>${say("Restart", "Redémarrer")}</b>${code("docker compose up -d")}</div></article>`;
 }
 const WHY = {
   "most-free": ["the disk with the most free space above the margin", "le disque qui a le plus de place libre au-dessus de la marge"],
@@ -105,44 +112,40 @@ const WHY = {
   none: ["no disk has room above the margin", "aucun disque n'a de place au-dessus de la marge"],
 };
 function placementHTML() {
-  const d = S.disks;
-  const answer = S.placed ? `<div class="note ${S.placed.disk ? "" : "warn"}">${say(`This ${S.sim} GB download would go to`, `Ce téléchargement de ${S.sim} Go irait sur`)} <b>${esc(S.placed.name || "—")}</b> : ${esc(say(...WHY[S.placed.why]))}.
-    ${d.disks.filter((c) => !c.error).map((c) => `<div><small>${esc(c.name)} : ${size(c.usable)} ${say("usable above the margin", "utilisables au-dessus de la marge")}</small></div>`).join("")}</div>` : "";
-  return `<section class="card sect"><div class="row between"><h3>${say("Placement rule", "Règle de placement")}</h3></div>
-    <p><b>${say("“Keep together, otherwise the freest disk.”", "« Garder ensemble, sinon le disque le plus libre. »")}</b> ${say(
-      "A film's versions and a series' episodes stay on the disk they already share. Otherwise the download goes to the disk with the most free space above the 10 % margin. Replace and the downloads use it.",
-      "Les versions d'un film et les épisodes d'une série restent sur le disque qu'ils partagent déjà. Sinon, le téléchargement va sur le disque qui a le plus de place libre au-dessus de la marge de 10 %. Remplacer et les téléchargements l'utilisent.")}</p>
-    <div class="sim"><div class="row"><label>${say("Next download size (GB)", "Taille du prochain téléchargement (Go)")}<input type="number" min="0.1" step="0.1" value="${S.sim}" data-k="sim" style="width:100px"></label></div>${answer}</div></section>`;
+  const d = S.disks, p = S.placed;
+  const why = p ? `${say(...WHY[p.why])}. ${d.disks.filter((c) => !c.error).map((c) => `${c.name} : ${size(c.usable)} ${say("usable above the margin.", "utilisables au-dessus de la marge.")}`).join(" ")}` : "";
+  return `<section class="card sect"><div class="row"><h3>${say("Placement rule", "Règle de placement")}</h3>${tip("Keep together, otherwise the freest disk. A film's versions and a series' episodes stay on the disk they already share. Otherwise the download goes to the disk with the most free space above the 10 % margin.", "Garder ensemble, sinon le disque le plus libre. Les versions d'un film et les épisodes d'une série restent sur le disque qu'ils partagent déjà. Sinon, le téléchargement va sur le disque qui a le plus de place libre au-dessus de la marge de 10 %.", say("Help on the placement rule", "Aide sur la règle de placement"))}</div>
+    ${p ? `<div class="row"><b>${say("Next download", "Prochain téléchargement")} → ${esc(p.name || "—")}</b>${TLInfo.html(why, detail)}</div>` : ""}
+    <div class="sim"><div class="row"><label>${say("Size (GB)", "Taille (Go)")}<input type="number" min="0.1" step="0.1" value="${S.sim}" data-k="sim" style="width:100px"></label></div></div></section>`;
 }
 // ---- Rebalance: films from a disk under the margin to one with room ---------------------------
 function rebalanceHTML() {
   const r = S.rebal;
   if (!r) return "";
-  if (r.state === "balanced") return `<section class="card sect"><h3>${say("Rebalance", "Rééquilibrer")}</h3><p class="muted">${say("No disk is under the 10 % margin.", "Aucun disque n'est sous la marge de 10 %.")}</p></section>`;
-  if (r.state === "no-room") return `<section class="card sect"><h3>${say("Rebalance", "Rééquilibrer")}</h3><p class="muted">${say("Every disk is under the margin: there is nowhere to move films to.", "Tous les disques sont sous la marge : aucun endroit où déplacer des films.")}</p></section>`;
-  if (r.state === "no-folder") return `<section class="card sect"><h3>${say("Rebalance", "Rééquilibrer")}</h3><p class="muted">${say(`${esc(r.target.name)} has room but no Library Folder: add one in Settings to move films there.`, `${esc(r.target.name)} a de la place mais aucun dossier de bibliothèque : ajoutez-en un dans Paramètres pour y déplacer des films.`)}</p></section>`;
-  let total = 0, count = 0;
+  const title = `<h3>${say("Rebalance", "Rééquilibrer")}</h3>`;
+  const line = (text, en, french) => `<section class="card sect"><div class="row">${title}<span class="muted">${text}</span>${tip(en, french, detail)}</div></section>`;
+  if (r.state === "balanced") return line(say("Nothing to do", "Rien à faire"), "No disk is under the 10 % margin.", "Aucun disque n'est sous la marge de 10 %.");
+  if (r.state === "no-room") return line(say("Nowhere to move to", "Nulle part où déplacer"), "Every disk is under the margin: there is nowhere to move films to.", "Tous les disques sont sous la marge : aucun endroit où déplacer des films.");
+  if (r.state === "no-folder") return line(`${esc(r.target.name)}: ${say("no library folder", "pas de dossier de bibliothèque")}`, `${r.target.name} has room but no Library Folder: add one in Settings to move films there.`, `${r.target.name} a de la place mais aucun dossier de bibliothèque : ajoutez-en un dans Paramètres pour y déplacer des films.`);
   const blocks = r.sources.map((b) => {
     const picked = b.films.filter((f) => S.rebPick.has(f.path)), bytes = picked.reduce((a, f) => a + f.size, 0);
-    total += bytes; count += picked.length;
-    const missing = b.disk.margin - b.disk.free;
-    return `<div class="sect"><p><b>${esc(b.disk.name)}</b> ${b.disk.free <= 0 ? say("is full", "est plein") : say("is almost full", "est presque plein")} (${size(b.disk.free)} ${say("free", "libres")}, ${say("10 % margin", "marge de 10 %")} = ${size(b.disk.margin)}). ${picked.length ? say(`Moving ${picked.length} film(s) (${size(bytes)}) to ${esc(r.target.name)} would free ${size(bytes)}.`, `Déplacer ${picked.length} film(s) (${size(bytes)}) vers ${esc(r.target.name)} libérerait ${size(bytes)}.`) : say("Tick films to move.", "Cochez des films à déplacer.")}
-      ${bytes < missing ? `<small>${say(`The margin needs ${size(missing)}: the rest is outside the Library Folders, TorrentLinker does not touch it.`, `La marge demanderait ${size(missing)} : ce qui reste est hors des dossiers de bibliothèque, TorrentLinker n'y touche pas.`)}</small>` : ""}</p>
-      <div class="panel"><table class="list"><tbody>${b.films.map((f) => `<tr><td style="width:30px"><input type="checkbox" data-k="reb" data-p="${esc(f.path)}" ${S.rebPick.has(f.path) ? "checked" : ""}></td>
-        <td style="width:40px">${icon({ film: { id: f.id }, dir: true })}</td><td class="name">${esc(f.title)}<small>${esc(f.name)}</small></td><td class="num">${size(f.size)}</td>
-        <td>${f.seed ? `<span class="badge ok">▲ ${esc(f.seed.client)} · ratio ${String(f.seed.ratio).replace(".", fr() ? "," : ".")}</span>` : ""}</td></tr>`).join("")}</tbody></table></div></div>`;
+    const missing = b.disk.margin - b.disk.free, open = S.rebOpen.has(b.disk.name);
+    const en = `${b.disk.name} is ${b.disk.free <= 0 ? "full" : "almost full"} (${size(b.disk.free)} free, 10 % margin = ${size(b.disk.margin)}). Each shared film is moved by its client, which keeps sharing, then the original is removed after verification. Copy between disks of about ${duration(bytes / r.speed)}.${bytes < missing ? ` The margin needs ${size(missing)}: the rest is outside the Library Folders, TorrentLinker does not touch it.` : ""}`;
+    const french = `${b.disk.name} ${b.disk.free <= 0 ? "est plein" : "est presque plein"} (${size(b.disk.free)} libres, marge de 10 % = ${size(b.disk.margin)}). Chaque film en partage est déplacé par son client, qui continue de partager, puis l'original est supprimé après vérification. Copie entre disques d'environ ${duration(bytes / r.speed)}.${bytes < missing ? ` La marge demanderait ${size(missing)} : le reste est hors des dossiers de bibliothèque, TorrentLinker n'y touche pas.` : ""}`;
+    const label = picked.length ? say(`Free ${b.disk.name}: ${picked.length} film(s), ${size(bytes)} → ${r.target.name}`, `Libérer ${b.disk.name} : ${picked.length} film${picked.length > 1 ? "s" : ""}, ${size(bytes)} → ${r.target.name}`) : say(`Free ${b.disk.name}: no film chosen`, `Libérer ${b.disk.name} : aucun film choisi`);
+    return `<div class="sect" style="margin:0 0 8px"><div class="row"><b>${esc(label)}</b>${tip(en, french, detail)}<span class="grow"></span>
+      <button data-k="rebview" data-d="${esc(b.disk.name)}" aria-expanded="${open}">${open ? say("Hide", "Masquer") : say("View", "Voir")}</button><button class="primary" data-k="rebgo" data-d="${esc(b.disk.name)}" ${picked.length ? "" : "disabled"}>${say("Start", "Lancer")}</button></div>
+      ${open ? `<div class="panel" style="margin-top:8px"><table class="list"><tbody>${b.films.map((f) => `<tr><td style="width:30px"><input type="checkbox" data-k="reb" data-p="${esc(f.path)}" ${S.rebPick.has(f.path) ? "checked" : ""}></td>
+        <td style="width:40px">${icon({ film: { id: f.id }, dir: true })}</td><td class="name">${esc(f.title)}</td><td class="num">${size(f.size)}</td>
+        <td>${f.seed ? `<span class="badge ok">▲ ${esc(f.seed.client)}</span>` : ""}</td></tr>`).join("")}</tbody></table></div>` : ""}</div>`;
   }).join("");
-  return `<section class="card sect"><div class="row between"><h3>${say("Proposal: rebalance to", "Proposition : rééquilibrer vers")} ${esc(r.target.name)}</h3></div>${blocks}
-    <div class="note">${count} film(s) · ${size(total)} · ${say("a copy between disks of about", "copie entre disques d'environ")} ${duration(total / r.speed)}. ${say("Each shared film is moved <b>by its client</b>, which keeps sharing, then the original is removed after verification.", "Chaque film en partage est déplacé <b>par son client</b>, qui continue de partager, puis l'original est supprimé après vérification.")}</div>
-    <div class="row"><button class="primary" data-k="rebgo" ${count ? "" : "disabled"}>${say(`Move ${count} film(s) to ${esc(r.target.name)}`, `Déplacer ${count} film(s) vers ${esc(r.target.name)}`)}</button><small>${say("The moves open in Tasks; you can undo them.", "Les déplacements s'ouvrent dans Tâches, vous pouvez les annuler.")}</small></div></section>`;
+  return `<section class="card sect"><div class="row">${title}${tip("Moves films from the almost full disks to the disk with room. The moves open in Tasks; you can undo them.", "Déplace des films des disques presque pleins vers le disque qui a de la place. Les déplacements s'ouvrent dans Tâches, vous pouvez les annuler.", say("Help on rebalancing", "Aide sur le rééquilibrage"))}</div>${blocks}</section>`;
 }
 function disksHTML() {
   const d = S.disks;
   if (!d) return `<div class="empty">…</div>`;
-  return `<p class="muted hint">${say(
-    "Each disk is mounted separately and identified by its device (st_dev). The Corbeille is counted apart.",
-    "Chaque disque est monté séparément et identifié par son périphérique (st_dev). La corbeille est comptée à part.")}</p>
-    ${healthHTML()}<div class="disks">${d.disks.map(diskCard).join("")}${d.missing.map(missingCard).join("")}</div>
+  return `<div class="row"><h3>${say("Disks", "Disques")}</h3><span class="grow"></span><button data-k="disksettings" aria-label="${say("Disk settings", "Réglages des disques")}" title="${say("Settings", "Réglages")}">⚙</button></div>
+    <div style="height:10px"></div><div class="disks">${d.disks.map(diskCard).join("")}${d.missing.map(missingCard).join("")}</div>
     ${d.disks.length ? `<div style="height:14px"></div>${placementHTML()}${rebalanceHTML()}` : `<div class="empty">${say("No storage folder is configured.", "Aucun dossier de stockage n'est configuré.")}</div>`}`;
 }
 async function place() {
@@ -363,7 +366,7 @@ function confirmEmpty(disk) {
   const d = $("dialog"), item = S.trash.disks.find((x) => x.id === disk);
   const n = item.items.length, total = item.items.reduce((a, i) => a + i.size, 0);
   d.innerHTML = `<h2>${say("Empty the trash of", "Vider la corbeille de")} ${esc(item.name)} ?</h2>
-    <p>${say(`${n} item(s), ${size(total)}, will be deleted for good. This cannot be undone.`, `${n} élément(s), ${size(total)}, seront supprimés définitivement. Cette action est irréversible.`)}</p>
+    <p class="row"><b>${say("Deleted for good.", "Suppression définitive.")}</b> ${n} ${say("item(s)", "élément(s)")} · ${size(total)} ${tip("This cannot be undone.", "Cette action est irréversible.", say("Details", "Détails"))}</p>
     <div class="dialog-foot"><button id="no" autofocus>${say("Cancel", "Annuler")}</button><button id="yes" class="primary danger">${say("Empty now", "Vider maintenant")}</button></div>`;
   d.showModal();
   d.onclick = async (e) => {
@@ -383,12 +386,12 @@ document.addEventListener("click", async (e) => {
   if (t.dataset.cancel) { try { await api(`tasks/${t.dataset.cancel}/cancel`, {}); } catch (x) { fail(x); } return load(); }
   if (t.dataset.undoitem) { try { await api(`tasks/${t.dataset.undoitem}/undo/${t.dataset.n}`, {}); TLToast.show(say("Undone.", "Annulé.")); } catch (x) { fail(x); } return load(); }
   if (t.dataset.k === "reb") { S.rebPick.has(t.dataset.p) ? S.rebPick.delete(t.dataset.p) : S.rebPick.add(t.dataset.p); return render(); }
+  if (t.dataset.k === "rebview") { S.rebOpen.has(t.dataset.d) ? S.rebOpen.delete(t.dataset.d) : S.rebOpen.add(t.dataset.d); return render(); }
+  if (t.dataset.k === "trashsettings") return openSettings(trashSettingsHTML);
+  if (t.dataset.k === "disksettings") return openSettings(disksSettingsHTML);
   if (t.dataset.k === "rebgo") {
-    try { const r = await api("rebalance/apply", { paths: [...S.rebPick] }); TLToast.show(say(`${r.queued} film(s) queued: follow them in Tasks.`, `${r.queued} film(s) lancé(s) : suivez-les dans Tâches.`)); S.rebPick = null; S.tab = "tasks"; render(); } catch (x) { fail(x); }
-    return load();
-  }
-  if (t.dataset.k === "auto") {
-    try { await api("organisation/auto", { folder: t.dataset.f, on: t.getAttribute("aria-checked") !== "true" }); } catch (x) { fail(x); }
+    const block = S.rebal.sources.find((b) => b.disk.name === t.dataset.d), paths = block.films.filter((f) => S.rebPick.has(f.path)).map((f) => f.path);
+    try { const r = await api("rebalance/apply", { paths }); TLToast.show(say(`${r.queued} film(s) queued: follow them in Tasks.`, `${r.queued} film(s) lancé(s) : suivez-les dans Tâches.`)); S.rebPick = null; S.tab = "tasks"; render(); } catch (x) { fail(x); }
     return load();
   }
   if (t.dataset.k === "orgsettings") return openSettings(orgSettingsHTML);
