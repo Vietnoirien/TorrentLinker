@@ -1,0 +1,7 @@
+/* The ⓘ info box (info.js): one short sentence beside a control, the explanation behind the button. */
+.info { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; border-radius: 50%; font: italic 700 12px/1 Georgia, serif; color: var(--accent); background: var(--tint); border: 1px solid var(--line); flex: none; cursor: pointer; vertical-align: middle; }
+.info[aria-expanded=true] { border-color: var(--accent); }
+.tip { position: fixed; z-index: 2147483000; max-width: min(320px, calc(100vw - 16px)); padding: 10px 12px; background: var(--panel); color: var(--text); border: 1px solid var(--accent); border-radius: 9px; box-shadow: 0 12px 40px #0006; font-size: 13px; line-height: 1.4; display: grid; gap: 8px; }
+.tip[hidden] { display: none; }
+.tip span { white-space: pre-line; }
+.tip button { justify-self: start; padding: 4px 10px; }

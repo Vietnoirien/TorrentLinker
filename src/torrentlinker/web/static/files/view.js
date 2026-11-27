@@ -24,6 +24,7 @@ const ago = (t) => {
   if (s < 2 * DAY) return say(`${Math.round(s / 3600)} h ago`, `il y a ${Math.round(s / 3600)} h`);
   return say(`${Math.round(s / DAY)} d ago`, `il y a ${Math.round(s / DAY)} j`);
 };
+const tip = (en, french, label) => TLInfo.html(say(en, french), label);
 const fail = (e) => TLToast.show(e.message, "bad");
 
 function purge(item) {
@@ -188,8 +189,7 @@ function paneHTML(i) {
 }
 function explorerHTML() {
   const none = !S.panes[S.active].sel.size ? "disabled" : "";
-  return `<p class="muted hint">${say("Move, copy, rename and trash files no torrent uses. Moves run in the background in Tasks; each item is verified.", "Déplacez, copiez, renommez et mettez à la corbeille les fichiers qu'aucun torrent n'utilise. Les opérations s'exécutent en arrière-plan dans Tâches ; chaque élément est vérifié.")}</p>
-    <div class="panes">${paneHTML(0)}${paneHTML(1)}</div>
+  return `<div class="panes">${paneHTML(0)}${paneHTML(1)}</div>
     <div class="fkeys"><button data-f="rename" ${none}><kbd>F2</kbd>${say("Rename", "Renommer")}</button><button data-f="copy" ${none}><kbd>F5</kbd>${say("Copy", "Copier")}</button><button data-f="move" ${none}><kbd>F6</kbd>${say("Move", "Déplacer")}</button>
       <button data-f="mkdir"><kbd>F7</kbd>${say("New folder", "Nouveau dossier")}</button><button data-f="trash" class="danger" ${none}><kbd>Suppr</kbd>${say("Move to the trash", "Mettre à la corbeille")}</button></div>`;
 }
@@ -209,12 +209,13 @@ function seedNotes(f, paths, crossing) {
   const clients = [...new Set(seeded.map((e) => e.seed.client))].join(", ");
   const bytes = seeded.reduce((a, e) => a + (e.size || 0), 0);
   const speed = 150e6;
-  if (f === "trash") return `<div class="note warn">${say(`${seeded.length} item(s) are shared (${clients}): the torrent leaves the client <b>without its data</b>, as with Replace.`, `${seeded.length} élément(s) sont en partage (${clients}) : le torrent est retiré du client <b>sans ses données</b>, comme pour « Remplacer ».`)}</div>`;
-  if (f === "rename") return `<div class="note">${say(`Shared in <b>${esc(clients)}</b>: the name is changed <b>in the client</b> (the torrent's path), not only on the disk.`, `En partage dans <b>${esc(clients)}</b> : le nom est changé <b>dans le client</b> (chemin du torrent), pas seulement sur le disque.`)}</div>`;
-  if (f === "copy") return `<div class="note">${say("The torrent stays in place and keeps sharing the original; the copy is not shared.", "Le torrent reste en place et continue de partager l'original ; la copie n'est pas partagée.")}</div>`;
-  return `<div class="note">${say(`Shared in <b>${esc(clients)}</b>: the move goes through the client, which keeps sharing. `, `En partage dans <b>${esc(clients)}</b> : le déplacement passe par le client, qui continue de partager. `)}${crossing
-    ? say(`<b>Copy</b> of ${size(bytes)}, about ${duration(bytes / speed)}, checked before the original leaves.`, `<b>Copie</b> de ${size(bytes)}, environ ${duration(bytes / speed)}, vérifiée avant que l'original parte.`)
-    : say("<b>Instant move</b> (same disk).", "<b>Déplacement instantané</b> (même disque).")}</div>`;
+  const row = (cls, line, en, french) => `<div class="note ${cls} row">${line} ${tip(en, french, say("Details", "Détails"))}</div>`;
+  if (f === "trash") return row("warn", say(`${seeded.length} shared (${esc(clients)}): leaves the client`, `${seeded.length} en partage (${esc(clients)}) : retiré du client`), "The torrent leaves the client without its data, as with Replace. To keep it, restore it from the trash, then point it again.", "Le torrent est retiré du client sans ses données, comme pour « Remplacer ». Pour le garder, restaurez-le depuis la corbeille puis re-pointez-le.");
+  if (f === "rename") return row("", say(`Shared in <b>${esc(clients)}</b>: renamed in the client too`, `En partage dans <b>${esc(clients)}</b> : renommé aussi dans le client`), "The name is changed in the client (the torrent's path), not only on the disk.", "Le nom est changé dans le client (chemin du torrent), pas seulement sur le disque.");
+  if (f === "copy") return row("", say(`Shared in <b>${esc(clients)}</b>: the copy is not shared`, `En partage dans <b>${esc(clients)}</b> : la copie n'est pas partagée`), "The torrent stays in place and keeps sharing the original.", "Le torrent reste en place et continue de partager l'original.");
+  return row("", say(`Shared in <b>${esc(clients)}</b>: ${crossing ? `copy of ${size(bytes)}, about ${duration(bytes / speed)}` : "instant move"}`, `En partage dans <b>${esc(clients)}</b> : ${crossing ? `copie de ${size(bytes)}, environ ${duration(bytes / speed)}` : "déplacement instantané"}`),
+    crossing ? "The move goes through the client, which keeps sharing. The copy is checked before the original leaves." : "The move goes through the client, which keeps sharing.",
+    crossing ? "Le déplacement passe par le client, qui continue de partager. La copie est vérifiée avant que l'original parte." : "Le déplacement passe par le client, qui continue de partager.");
 }
 function operate(f, drop) {
   // A drop names its own items and destination; otherwise the other pane is the destination.
@@ -222,12 +223,12 @@ function operate(f, drop) {
   const list = from.map((p) => `<div class="dlg-item"><span>${esc(name(p))}</span></div>`).join("");
   if (f === "mkdir") return ask(`<h2>${say("New folder", "Nouveau dossier")}</h2><input type="text" placeholder="${say("Name", "Nom")}" style="width:100%">`, ({ text }) => text && submit("mkdir", [{ from: `${here.path}/${text}` }]));
   if (f === "rename") return ask(`<h2>${say("Rename", "Renommer")}</h2><input type="text" value="${esc(name(from[0]))}" style="width:100%">${seedNotes("rename", from)}`, ({ text }) => text && submit("rename", [{ from: from[0], to: `${here.path}/${text}` }]));
-  if (f === "trash") return ask(`<h2>${say("Move to the trash", "Mettre à la corbeille")} ?</h2><p>${say("Nothing is deleted: each disk's trash keeps it for the retention delay and you can restore it.", "Rien n'est supprimé : la corbeille de chaque disque le garde pendant le délai de conservation et vous pouvez le restaurer.")}</p><div class="dlg-list">${list}</div>${seedNotes("trash", from)}`, () => submit("trash", from.map((x) => ({ from: x }))));
+  if (f === "trash") return ask(`<h2>${say("Move to the trash", "Mettre à la corbeille")}</h2><p class="row">${from.length} ${say("item(s)", "élément(s)")} ${tip("Nothing is deleted: each disk's trash keeps it for the retention delay and you can restore it.", "Rien n'est supprimé : la corbeille de chaque disque le garde pendant le délai de conservation et vous pouvez le restaurer.", say("Details", "Détails"))}</p><div class="dlg-list">${list}</div>${seedNotes("trash", from)}`, () => submit("trash", from.map((x) => ({ from: x }))));
   if (!there.path) return TLToast.show(say("Open a destination in the other pane first.", "Ouvrez d'abord une destination dans l'autre panneau."), "bad");
   const crossing = rootOf(here.path) !== rootOf(there.path);
-  const note = f === "move" && crossing ? say("Between disks this is a copy: the source goes to the trash only after the copy is verified.", "Entre deux disques, c'est une copie : la source n'est mise à la corbeille qu'une fois la copie vérifiée.") : f === "move" ? say("On the same disk this is instant.", "Sur le même disque, c'est instantané.") : say("The copy is verified.", "La copie est vérifiée.");
+  const note = f === "move" && crossing ? say("Between disks: a copy", "Entre deux disques : une copie") + " " + tip("The source goes to the trash only after the copy is verified.", "La source n'est mise à la corbeille qu'une fois la copie vérifiée.", say("Details", "Détails")) : f === "move" ? say("Same disk: instant", "Même disque : instantané") : say("Copy, then checked", "Copie, puis vérifiée");
   const choices = [["skip", "Ignorer", "Skip"], ["replace", "Remplacer (l'ancien va à la corbeille)", "Replace (the old one goes to the trash)"], ["rename", "Renommer", "Rename"], ["keep-one", "Garder un seul (fichiers identiques)", "Keep one (identical files)"]];
-  ask(`<h2>${f === "move" ? say("Move", "Déplacer") : say("Copy", "Copier")} ${from.length} ${say("item(s) to", "élément(s) vers")} ${esc(there.path)}</h2><div class="dlg-list">${list}</div><div class="note">${note}</div>${seedNotes(f, from, crossing)}
+  ask(`<h2>${f === "move" ? say("Move", "Déplacer") : say("Copy", "Copier")} ${from.length} ${say("item(s) to", "élément(s) vers")} ${esc(there.path)}</h2><div class="dlg-list">${list}</div><div class="note row">${note}</div>${seedNotes(f, from, crossing)}
     <p class="muted">${say("If a name is already taken:", "Si un nom existe déjà :")}</p>${choices.map(([v, french, en], n) => `<label class="row"><input type="radio" name="c" value="${v}" ${n === 0 ? "checked" : ""}> ${say(en, french)}</label>`).join("")}`, ({ conflict }) => submit(f, from.map((x) => ({ from: x, to: there.path })), conflict));
 }
 async function submit(kind, items, conflict = "skip") {
@@ -301,11 +302,17 @@ function autoHTML() {
       <small>${a.on ? say("When a download finishes, the release is renamed with its Library Folder's template, then <b>moved where the placement rule picks</b>, still sharing: the client follows it. Everything is in Tasks and can be undone.", "À la fin d'un téléchargement, la version est renommée avec le modèle de sa bibliothèque puis <b>déplacée vers l'endroit que choisit la règle de placement</b>, sans cesser de partager : le client la suit. Tout est dans Tâches et annulable.") : say("Off: finished downloads stay where they are.", "Désactivé : les téléchargements terminés restent où ils sont.")}</small></span></div></div>`).join("") || `<p class="muted">${say("No Download Folder is configured.", "Aucun dossier de téléchargement n'est configuré.")}</p>`}</div>`;
 }
 
+const TAB_TIPS = {
+  explorer: () => ["Click to select (Ctrl for several), double-click to open, drag from one pane to the other, right-click for the menu. Moves run in the background in Tasks; each item is verified.", "Cliquez pour sélectionner (Ctrl pour plusieurs), double-clic pour ouvrir, glissez d'un panneau à l'autre, clic droit pour le menu. Les opérations s'exécutent en arrière-plan dans Tâches ; chaque élément est vérifié."],
+  tasks: () => ["Files' operations run here, in the background: you can close the browser. Each item is verified, nothing fails silently. The log keeps who, what and when; a finished move or rename can be undone.", "Les opérations de Fichiers s'exécutent ici, en arrière-plan : vous pouvez fermer le navigateur. Chaque élément est vérifié, rien n'échoue en silence. Le journal garde qui, quoi et quand ; chaque déplacement ou renommage terminé peut être annulé."],
+  disks: () => ["Each disk is mounted separately. The trash is counted apart. Health alerts come from smartctl or Scrutiny (settings ⚙).", "Chaque disque est monté séparément. La corbeille est comptée à part. Les alertes de santé viennent de smartctl ou de Scrutiny (réglages ⚙)."],
+  trash: () => ["Deleting, in Files, always means moving to the trash. Each disk has its own: the move is instant.", "Supprimer, dans Fichiers, veut toujours dire mettre à la corbeille. Chaque disque a la sienne : le déplacement est instantané."],
+};
 const TABS = [["explorer", "Explorer", "Explorateur"], ["disks", "Disks", "Disques"], ["organisation", "Organisation", "Organisation"], ["trash", "Trash", "Corbeille"], ["tasks", "Tasks", "Tâches"]];
 // A Member with "Gérer les fichiers" gets Explorateur, Corbeille and Tâches, never Disques.
 const tabsFor = () => TABS.filter(([id]) => S.owner || !["disks", "organisation"].includes(id));
 function render() {
-  const tabs = tabsFor().map(([id, en, french]) => `<button data-tab="${id}" class="${S.tab === id ? "selected" : ""}">${say(en, french)}${id === "trash" && S.trash ? `<span class="badge count">${S.trash.disks.reduce((a, d) => a + d.items.length, 0)}</span>` : ""}</button>`).join("");
+  const tabs = tabsFor().map(([id, en, french]) => `<button data-tab="${id}" class="${S.tab === id ? "selected" : ""}">${say(en, french)}${id === "trash" && S.trash ? `<span class="badge count">${S.trash.disks.reduce((a, d) => a + d.items.length, 0)}</span>` : ""}</button>${S.tab === id && TAB_TIPS[id] ? `<span class="tabtip">${tip(...TAB_TIPS[id](), say("Help on this tab", "Aide sur cet onglet"))}</span>` : ""}`).join("");
   $("app").innerHTML = `<nav class="tabs" role="tablist">${tabs}</nav>${S.tab === "trash" ? trashHTML() : S.tab === "disks" ? disksHTML() : S.tab === "organisation" ? orgHTML() : S.tab === "explorer" ? explorerHTML() : tasksHTML()}`;
 }
 async function load() {

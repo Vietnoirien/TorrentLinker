@@ -68,8 +68,8 @@ const pages = {
   files: [
     "Files",
     "Fichiers",
-    "Browse, move and tidy your files on every disk while keeping your seeds.",
-    "Parcourez, déplacez et rangez vos fichiers sur tous vos disques, en gardant vos partages.",
+    "",
+    "",
   ],
   jobs: [
     "Activity",
