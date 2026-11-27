@@ -346,6 +346,18 @@ class RtorrentApi:
     def rename_file(self, hash: str, old: str, new: str) -> None:
         raise RtorrentError("rTorrent cannot rename files inside a torrent")
 
+    def repoint(
+        self, hash: str, save_path: str, data: bytes | None = None, folder: str | None = None
+    ) -> None:
+        """Point a stopped torrent at `save_path`, where its files already are. rTorrent keeps
+        a multi-file torrent's own folder as its directory; `folder` is that folder's name
+        when it was renamed on disk."""
+        key = hash.upper()
+        if int(self._call("d.is_multi_file", key)):
+            name = folder or str(self._call("d.name", key))
+            save_path = str(PurePosixPath(save_path) / name)
+        self._call("d.directory.set", key, save_path)
+
     def set_file_priority(self, hash: str, indexes: list[int], priority: int) -> None:
         """Priority 0 leaves the files out, as in qBittorrent; any other is rTorrent's normal."""
         key = hash.upper()

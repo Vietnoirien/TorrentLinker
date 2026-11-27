@@ -423,6 +423,29 @@ class UtorrentApi:
     def recheck(self, hash: str) -> None:
         self._action("recheck", hash)
 
+    def repoint(
+        self, hash: str, save_path: str, data: bytes | None = None, folder: str | None = None
+    ) -> None:
+        """Point a stopped torrent at `save_path`, where its files already are. The Web UI
+        cannot change an added torrent's folder, so the registration (never the data) is
+        removed and added again stopped; the old registration comes back when that fails."""
+        if folder is not None:
+            raise self._error("µTorrent cannot follow a renamed torrent folder")
+        if data is None:
+            raise self._error(
+                "µTorrent can only be pointed at another folder from the torrent's own file"
+            )
+        old = self.torrent(hash, with_files=False)
+        if old is None:
+            raise self._error("Torrent no longer exists in µTorrent")
+        tags = sorted(old.tags)
+        self.remove(hash)
+        try:
+            self._add_stopped(data, save_path, tags, reseed=False)
+        except Exception:
+            self._add_stopped(data, str(old.save_path), tags, reseed=False)
+            raise
+
     def pause(self, hash: str) -> None:
         self._action("stop", hash)
 

@@ -311,6 +311,10 @@ class TransmissionApi:
             }
             current[i] = wanted
 
+    def set_location(self, hash: str, save_path: str) -> None:
+        """Transmission moves the torrent's data itself, to `save_path`."""
+        self._call("torrent-set-location", ids=[hash], location=save_path, move=True)
+
     def set_file_priority(self, hash: str, indexes: list[int], priority: int) -> None:
         """Priority 0 leaves the files out, as in qBittorrent; any other wants them."""
         key = "files-unwanted" if priority == 0 else "files-wanted"

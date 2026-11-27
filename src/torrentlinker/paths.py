@@ -204,6 +204,14 @@ class MappedQbit:
             raise ValueError("This Torrent Client cannot update an existing location.")
         relocate(hash, self._mapper.to_qbit(save_path))
 
+    def repoint(
+        self, hash: str, save_path: str, data: bytes | None = None, folder: str | None = None
+    ) -> None:
+        relocate = getattr(self._inner, "repoint", None)
+        if relocate is None:
+            raise ValueError("This Torrent Client cannot be pointed at another folder.")
+        relocate(hash, self._mapper.to_qbit(save_path), data, folder)
+
     def piece_states(self, hash: str) -> list[int]:
         return self._inner.piece_states(hash)
 

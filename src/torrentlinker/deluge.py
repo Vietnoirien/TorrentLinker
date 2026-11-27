@@ -341,6 +341,10 @@ class DelugeApi:
         index = next(f["index"] for f in files if f["path"] == old)
         self._call("core.rename_files", hash, [[index, new]])
 
+    def set_location(self, hash: str, save_path: str) -> None:
+        """Deluge moves the torrent's data itself, to `save_path`."""
+        self._call("core.move_storage", [hash], save_path)
+
     def set_file_priority(self, hash: str, indexes: list[int], priority: int) -> None:
         """qBittorrent's priority 0 skips a file, as in Deluge; any other is Deluge's normal."""
         status = self._call("core.get_torrent_status", hash, ["file_priorities"])
