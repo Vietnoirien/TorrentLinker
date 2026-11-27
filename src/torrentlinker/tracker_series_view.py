@@ -11,6 +11,7 @@ under a limit.
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable
 from typing import Any
 
@@ -237,3 +238,103 @@ def _releases(
              **(scorer(r) if scorer else {})}
         )  # fmt: skip
     return sorted(found, key=lambda x: (x["kind"], x["episode"], -x["seeders"]))
+
+
+def _scores(
+    entry: dict[str, Any], scorer: Callable[[dict[str, Any]], dict[str, Any]] | None
+) -> dict:
+    return {
+        r["infohash"]: ((scorer(r) if scorer else {}).get("score") or 0) for r in entry["releases"]
+    }
+
+
+def preselect(
+    entry: dict[str, Any],
+    seasons: list[int],
+    scorer: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+    order: list[str] | None = None,
+    season_count: int = 0,
+) -> dict[str, Any]:
+    """What the Approver gets pre-selected for these asked seasons: the best season pack of
+    each (ReleaseScore, then Tracker order, then seeders: ADR-0025), or an Intégrale instead when
+    it covers them all, scores better than their packs, and the asked seasons make up at least
+    half of it (ADR-0030)."""
+    scores, order = _scores(entry, scorer), order or []
+
+    def best(found: list[dict[str, Any]]) -> dict[str, Any] | None:
+        ranked = sorted(
+            found,
+            key=lambda r: (
+                -scores[r["infohash"]],
+                order.index(r["tracker"]) if r["tracker"] in order else len(order),
+                -r["seeders"],
+            ),
+        )
+        return ranked[0] if ranked else None
+
+    packs = {
+        n: best([r for r in entry["releases"] if r["pack"] == "season" and n in r["seasons"]])
+        for n in seasons
+    }
+    covering = [
+        r for r in entry["releases"]
+        if r["pack"] == "complete" and (not r["seasons"] or set(seasons) <= set(r["seasons"]))
+    ]  # fmt: skip
+    integrale = best(covering)
+    if integrale is not None and seasons:
+        have = [scores[p["infohash"]] for p in packs.values() if p]
+        average = sum(have) / len(have) if have else 0
+        total = len(integrale["seasons"]) or season_count or len(seasons)
+        if (None in packs.values() or scores[integrale["infohash"]] > average) and (
+            len(seasons) * 2 >= total
+        ):
+            return {
+                "integrale": True, "hashes": [integrale["infohash"]], "size": integrale["size"],
+                "per_season": {n: integrale for n in seasons},
+            }  # fmt: skip
+    chosen = [p for p in packs.values() if p]
+    return {"integrale": False, "hashes": [p["infohash"] for p in chosen],
+            "size": sum(p["size"] for p in chosen), "per_season": packs}  # fmt: skip
+
+
+def quote(media: Any, client_id: str, identifier: str, seasons: list[int], actor: Any) -> dict:
+    """The size an ask for these seasons would count, and whether an Intégrale is behind it."""
+    panel = detail(media, client_id, identifier, actor)
+    entry = next(e for e in media.series_index() if e["id"] == identifier)
+    askable = {s["n"] for s in panel["seasons"] if s["askable"]}
+    chosen = sorted(set(seasons) & askable)
+    scorer = media.series_score(client_id)
+    found = preselect(entry, chosen, scorer, media.series_order(client_id), len(panel["seasons"]))
+    return {"seasons": chosen, "size": found["size"], "integrale": found["integrale"]}
+
+
+SERIES_FILM = re.compile(r"^((?:tv|title|release)-[0-9a-f]+):(\d+)$")
+
+
+def split_key(film: str | None) -> tuple[str, int] | None:
+    """A season Request's key is its series and season: `tv-95396:2`."""
+    found = SERIES_FILM.match(film or "")
+    return (found.group(1), int(found.group(2))) if found else None
+
+
+def approver_choices(
+    media: Any, client_id: str, key: str, pending: list[int], scorer: Any, order: list[str]
+) -> dict[str, Any] | None:
+    """What the Approver sees for a season Request: the packs and Intégrales covering the
+    season, and the pre-selected one, chosen for every season pending together."""
+    parsed = split_key(key)
+    entry = next((e for e in media.series_index() if parsed and e["id"] == parsed[0]), None)
+    if entry is None or parsed is None:
+        return None
+    season = parsed[1]
+    count = len(_seasons(media, entry["tmdb"]))
+    chosen = preselect(entry, sorted({*pending, season}), scorer, order, count)
+    pick = chosen["per_season"].get(season)
+    found = []
+    for r in _releases(entry, season, scorer):
+        if r["kind"] != "episode":
+            found.append(r)
+    return {
+        "releases": found, "preselected": pick["infohash"] if pick else "",
+        "series_id": entry["id"], "season": season,
+    }  # fmt: skip

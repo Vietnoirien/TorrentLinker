@@ -140,6 +140,89 @@
     return originalSelect(row);
   };
 
+
+  // ---- the Member: where a series stands, the request sheet (#216) ---------------------------
+  const asking = s => (typeof requests === "undefined" ? [] : requests.rows).filter(r => r.film?.startsWith(`${s.tseries}:`) && !["refused", "cancelled", "expired"].includes(r.state));
+  const seasonOfAsk = r => Number(r.film.split(":")[1]);
+  TS.status = (s, season) => {
+    if (owner()) return null;
+    return asking(s).some(r => seasonOfAsk(r) === season.n) ? [say("Requested", "Demandée"), "asked"] : null;
+  };
+  TS.actions = (s, copy, actions) => {
+    if (owner()) return;
+    const mine = asking(s), seasons = mine.map(seasonOfAsk).sort((a, b) => a - b);
+    if (mine.length) {
+      const first = mine[0], [label, tone] = requestState(first), line = element("div", undefined, "media-request-state");
+      const said = first.answer ? `${first.answered_by || say("The owner", "Le propriétaire")} : « ${first.answer} »` : "";
+      line.append(element("span", label, `media-poster-badge ${tone}`), element("span", `${seasonsText(seasons).replace(/^./, c => c.toUpperCase())} · ${first.state === "pending" ? say(`asked ${mediaAge(first.created)}`, `demandé ${mediaAge(first.created)}`) : ""}${said ? ` · ${said}` : ""}`, "media-quota"));
+      copy.append(line);
+      const waiting = mine.filter(r => r.state === "pending");
+      if (waiting.length) actions.append(button(say("Cancel the Request", "Annuler la demande"), async () => { for (const r of waiting) await requestCancel(r); await requestsLoad(); mediaRenderFeature(); }, "media-secondary"));
+    }
+    if (requestPermission("request")) {
+      const left = s.seasons.filter(x => x.askable && !seasons.includes(x.n));
+      if (left.length) actions.prepend(button(mine.length ? say("Ask for other seasons", "Demander d'autres saisons") : say("Ask the owner", "Demander au propriétaire"), () => askSheet(s), "media-primary"));
+      else if (!mine.length) copy.append(element("p", say("No season can be asked for yet.", "Aucune saison ne peut être demandée pour l'instant."), "media-quota"));
+    }
+    copy.append(actions);
+  };
+  async function quoteOf(s, seasons) {
+    if (!seasons.length) return {size: 0, integrale: false};
+    return api(`media/tracker-series/${encodeURIComponent(s.tseries)}/quote`, {client_id: mediaClient(), seasons});
+  }
+  function askSheet(s) {
+    const dialog = $("media-wish"), form = element("form", undefined, "ts-sheet-form");
+    dialog.classList.add("ts-sheet"); dialog.onclose = () => dialog.classList.remove("ts-sheet");
+    form.method = "dialog";
+    const asked = asking(s).map(seasonOfAsk), all = s.seasons.filter(x => x.askable && !asked.includes(x.n)).map(x => x.n), picked = new Set(), checks = new Map();
+    form.append(element("h2", s.title), element("p", say("Tick the seasons you want. The owner picks the releases.", "Cochez les saisons voulues. Le propriétaire choisit les releases."), "media-row-note"));
+    const whole = element("input"); whole.type = "checkbox"; whole.disabled = all.length < 1;
+    const wholeLabel = element("label", undefined, "ts-check ts-whole");
+    wholeLabel.append(whole, element("strong", say("Whole series", "Toute la série")), element("span", say(`${all.length} season${all.length > 1 ? "s" : ""} available`, `${all.length} saison${all.length > 1 ? "s" : ""} disponible${all.length > 1 ? "s" : ""}`), "ts-count"));
+    form.append(wholeLabel);
+    const list = element("ul", undefined, "ts-sheet-seasons");
+    for (const season of s.seasons) {
+      const line = element("li"), label = element("label", undefined, "ts-check"), box = element("input"); box.type = "checkbox";
+      const can = all.includes(season.n);
+      box.disabled = !can; checks.set(season.n, box);
+      const note = season.owned ? say("In the Library", "Dans la médiathèque") : asked.includes(season.n) ? say("Already requested", "Déjà demandée")
+        : season.state === "episodes" ? say("Episodes only, no pack", "Épisodes seulement, pas de pack") : season.state === "none" ? say("Not on the tracker", "Pas sur le tracker") : kindOf(season)[0];
+      label.append(box, element("strong", say(`Season ${season.n}`, `Saison ${season.n}`)), element("span", say(`${season.count} episodes`, `${season.count} épisodes`), "ts-count"), element("span", note, `ts-pill ${can ? "ok" : season.owned ? "own" : asked.includes(season.n) ? "asked" : "eps"}`));
+      if (!can) label.classList.add("off");
+      box.onchange = () => { box.checked ? picked.add(season.n) : picked.delete(season.n); sync(); };
+      line.append(label); list.append(line);
+    }
+    form.append(list);
+    const quota = element("div", undefined, "ts-quota"), actions = element("div", undefined, "media-feature-actions");
+    const send = element("button", say("Send the Request", "Envoyer la demande"), "media-primary"); send.type = "submit";
+    actions.append(send, button(say("Cancel", "Annuler"), () => dialog.close(), "media-secondary"));
+    form.append(quota, actions);
+    whole.onchange = () => { for (const n of all) { checks.get(n).checked = whole.checked; whole.checked ? picked.add(n) : picked.delete(n); } sync(); };
+    let version = 0;
+    async function sync() {
+      const mine = ++version, chosen = [...picked].sort((a, b) => a - b);
+      whole.checked = all.length > 0 && chosen.length === all.length;
+      send.disabled = !chosen.length;
+      let quote = {size: 0};
+      try { quote = await quoteOf(s, chosen); } catch { /* the server checks again */ }
+      if (mine !== version) return;
+      const blocked = requestBlocked(quote.size);
+      quota.replaceChildren(requestQuotaLine(quote.size));
+      if (chosen.length) quota.append(element("p", say(`This Request counts ${requestSize(quote.size)} of your quota, the packs the owner would pre-select. A bigger choice costs you nothing more.`, `Cette demande compte ${requestSize(quote.size)} sur votre quota, d'après les packs que le propriétaire aurait pré-sélectionnés. Un choix plus gros ne vous coûte rien de plus.`), "ts-note"));
+      send.disabled = !!blocked || !chosen.length; send.title = blocked;
+    }
+    sync();
+    form.onsubmit = event => {
+      event.preventDefault();
+      guard(async () => {
+        await api("requests/series", {client_id: mediaClient(), series: s.tseries, seasons: [...picked].sort((a, b) => a - b)});
+        dialog.close(); toast(say(`Request sent for ${s.title}`, `Demande envoyée pour ${s.title}`));
+        await requestsLoad(); mediaRenderFeature(); mediaRenderHome(); await mediaRenderEpisodes(media.selected);
+      });
+    };
+    dialog.replaceChildren(form); dialog.showModal();
+  }
+
   const open = new Set();  // "id:n" of the seasons unfolded
   TS.open = open;
   const kindOf = season => season.state === "pack" ? [say("Full pack", "Pack complet"), "ok"]

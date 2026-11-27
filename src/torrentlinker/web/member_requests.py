@@ -22,6 +22,11 @@ class TrackerRequest(BaseModel):
     film: str = Field(pattern=r"^[a-z]+-[0-9a-f]{1,16}$")
 
 
+class SeriesRequest(BaseModel):
+    series: str = Field(pattern=r"^(tv|title|release)-[0-9a-f]{1,40}$")
+    seasons: list[int] = Field(max_length=100)
+
+
 class Wish(BaseModel):
     title: str = Field(max_length=200)
     year: str = Field(default="", max_length=4)
@@ -80,6 +85,54 @@ def request_routes(app: FastAPI, requests: Requests, media, household_asks) -> N
             return refused(error)
         except ValueError as error:
             raise HTTPException(409, str(error)) from error
+
+    @app.post("/api/requests/series")
+    @needs(Permission.REQUEST)
+    def ask_series(body: SeriesRequest, request: Request):
+        """A Request for chosen seasons of a Tracker Series: one per season, shared with the
+        Members asking for the same season and charged as a film is (ADR-0030). The Member
+        never names a release, and never asks for an episode."""
+        from torrentlinker import tracker_series_view as view
+
+        found, client = actor(request), approval.client_id
+        try:
+            panel = view.detail(media, client, body.series, found)
+        except KeyError:
+            raise HTTPException(404, "This series is not on the tracker.") from None
+        if not found.holds(
+            Permission.ANIME if panel["series_kind"] == "anime" else Permission.SERIES
+        ):
+            raise HTTPException(403, "This is not allowed for your account.")
+        asked = view.quote(media, client, body.series, body.seasons, found)
+        if not asked["seasons"]:
+            raise HTTPException(409, "None of these seasons can be asked for.")
+        each = -(-asked["size"] // len(asked["seasons"]))  # an Intégrale's size is split
+        entry = next(e for e in media.series_index() if e["id"] == body.series)
+        packs = view.preselect(
+            entry, asked["seasons"], media.series_score(client), media.series_order(client),
+            len(panel["seasons"]),
+        )["per_season"]  # fmt: skip
+        made, failed = [], ""
+        for n in asked["seasons"]:
+            size = each if asked["integrale"] else int(packs[n]["size"])
+            try:
+                made.append(
+                    requests.ask_film(
+                        found.account,
+                        FilmAsk(f"{body.series}:{n}", f"{panel['title']} · saison {n}",
+                                str(panel["year"]), size),
+                    )
+                )  # fmt: skip
+            except CapReached as error:
+                if not made:
+                    return refused(error)
+                failed = str(error)
+                break
+            except ValueError as error:  # already asked for this season
+                failed = str(error)
+        if not made:
+            raise HTTPException(409, failed)
+        return {"requests": made}
 
     # Household Asks (decision 24): a Viewer asks its account holder, who answers.
 
@@ -180,7 +233,25 @@ def request_routes(app: FastAPI, requests: Requests, media, household_asks) -> N
         for row in rows:
             row["score"] = None
             row["releases"] = []
-            if row["film"]:
+            from torrentlinker import tracker_series_view as view
+
+            if view.split_key(row["film"]):
+                pending = [
+                    p[1]
+                    for r in rows
+                    if r["state"] == "pending"
+                    and (p := view.split_key(r["film"]))
+                    and p[0] == view.split_key(row["film"])[0]  # type: ignore[index]
+                ]
+                found = view.approver_choices(
+                    media, client, row["film"], pending, media.series_score(client),
+                    media.series_order(client),
+                )  # fmt: skip
+                if found:
+                    row.update(
+                        found, below_threshold=False, in_library=False, film_id=found["series_id"]
+                    )
+            elif row["film"]:
                 # The film's grouped releases, the pre-selected first: the Approver chooses.
                 try:
                     film = media.tracker_film_detail(
@@ -240,6 +311,23 @@ def request_routes(app: FastAPI, requests: Requests, media, household_asks) -> N
         if not row["film"] or row["infohash"]:
             return ""
         client = approval.client_id
+        from torrentlinker import tracker_series_view as view
+
+        if view.split_key(row["film"]):
+            siblings = [
+                p[1]
+                for r in requests.review(group=False)
+                if r["state"] == "pending"
+                and (p := view.split_key(r["film"]))
+                and p[0] == view.split_key(row["film"])[0]  # type: ignore[index]
+            ]
+            found = view.approver_choices(
+                media, client, row["film"], siblings, media.series_score(client),
+                media.series_order(client),
+            )  # fmt: skip
+            if not found or not found["preselected"]:
+                raise ValueError("This season has no pack now. Refuse it or wait.")
+            return str(found["preselected"])
         try:
             found = media.tracker_film_detail(client, media.setup(client), OWNER_ACTOR, row["film"])
         except KeyError:

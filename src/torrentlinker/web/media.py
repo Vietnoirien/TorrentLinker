@@ -86,6 +86,10 @@ class FilmRematch(MediaClient):
     tmdb: str = Field(pattern=r"^\d{1,9}$")
 
 
+class SeriesSeasons(MediaClient):
+    seasons: list[int] = Field(max_length=100)
+
+
 class FilmFocus(MediaClient):
     films: list[Annotated[str, Field(max_length=80)]] = Field(max_length=200)
 
@@ -448,17 +452,7 @@ def media_routes(app, agent, assistant):
             raise HTTPException(403, "This is not allowed for your account.")
 
     def series_scorer(chosen: str):
-        """ReleaseScore of a series release, by the Owner's profile."""
-        preferences = media.setup(chosen).settings.release_score
-
-        def score(release: dict) -> dict:
-            try:
-                found = media._score(preferences, release["name"], release["size"], {})
-            except Exception:  # noqa: BLE001 - an unreadable name has no score
-                return {}
-            return {"score": found.get("score"), "color": found.get("color", "")}
-
-        return score
+        return media.series_score(chosen)
 
     @app.get("/api/media/tracker-series/landing")
     @needs(Permission.SERIES, Permission.ANIME)
@@ -487,6 +481,19 @@ def media_routes(app, agent, assistant):
         chosen = target(request, client_id)
         cards = view.catalogue(media, chosen, actor(request), scope)
         return view.grid(cards, genre, sort, q, offset, limit)
+
+    @app.post("/api/media/tracker-series/{identifier}/quote")
+    @needs(Permission.SERIES, Permission.ANIME)
+    def series_quote(identifier: str, body: SeriesSeasons, request: Request):
+        """What asking for these seasons counts against a Member's quota: the size of what the
+        Approver would have pre-selected, never its releases."""
+        from torrentlinker import tracker_series_view as view
+
+        chosen = target(request, body.client_id)
+        try:
+            return view.quote(media, chosen, identifier, body.seasons, actor(request))
+        except KeyError:
+            raise HTTPException(404, "This series is not on the tracker.") from None
 
     @app.get("/api/media/tracker-series/{identifier}")
     @needs(Permission.SERIES, Permission.ANIME)

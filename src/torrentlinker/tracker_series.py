@@ -482,3 +482,39 @@ class TrackerSeries(TrackerRows, AgeRatings):
         if not re.fullmatch(r"asset:[a-f0-9]{64}\.(png|webp)", image):
             return None
         return self.agent.setup.path.parent / "media-artwork" / image[6:]  # type: ignore[attr-defined]
+
+    def series_release_entry(self, infohash: str) -> dict[str, Any] | None:
+        """A series release as the download queue reads a tracker suggestion: the release, and
+        its series' title and year as facts."""
+        with self.lock:
+            row = self.db.execute(
+                "SELECT * FROM series_release WHERE infohash=? LIMIT 1", (infohash,)
+            ).fetchone()
+        if row is None:
+            return None
+        release = {
+            "hash": row["infohash"], "name": row["name"], "size": row["size"],
+            "seeders": row["seeders"], "category": row["category"], "tracker": row["tracker"],
+            "download_url": row["download_url"] or "",
+        }  # fmt: skip
+        return {
+            "title": row["title"], "year": row["year"],
+            "facts": {"title": row["title"], "year": row["year"]}, "releases": [release],
+            "release": release,
+        }  # fmt: skip
+
+    def series_score(self, client_id):
+        """ReleaseScore of a series release by the Owner's profile (0 when unreadable)."""
+        preferences = self.setup(client_id).settings.release_score  # type: ignore[attr-defined]
+
+        def score(release: dict[str, Any]) -> dict[str, Any]:
+            try:
+                found = self._score(preferences, release["name"], release["size"], {})
+            except Exception:  # noqa: BLE001 - an unreadable name has no score
+                return {}
+            return {"score": found.get("score"), "color": found.get("color", "")}
+
+        return score
+
+    def series_order(self, client_id) -> list[str]:
+        return list(self.setup(client_id).settings.tracker_order)  # type: ignore[attr-defined]

@@ -437,6 +437,10 @@ class TrackerRows:
         found = self.film_release(infohash)  # type: ignore[attr-defined]
         if found is not None:
             return found
+        # A season pack, Intégrale or episode of a Tracker Series.
+        series = self.series_release_entry(infohash)  # type: ignore[attr-defined]
+        if series is not None:
+            return series
         raise ValueError("This tracker release is no longer suggested.")
 
     def tracker_poster_entries(self, client_id) -> list[dict[str, Any]]:

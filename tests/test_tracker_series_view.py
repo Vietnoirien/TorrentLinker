@@ -127,3 +127,41 @@ def test_the_landing_has_the_tracker_row_then_a_row_per_genre(media):
         view.catalogue(media, "c", member(), "series"), ["Drame"], "title", "unr", 0, 10
     )
     assert titles(page["rows"]) == ["Unrated"] and page["total"] == 1
+
+
+def scored(points):
+    return lambda r: {"score": points.get(r["infohash"], 0)}
+
+
+def show(releases):
+    return entry("a", "Show", releases)
+
+
+def test_the_integrale_is_preselected_only_when_it_covers_scores_better_and_is_half_asked():
+    packs = [release(f"p{n}", "season", (n,)) for n in (1, 2, 3, 4)]
+    integ = release("big", "complete", (1, 2, 3, 4), seeders=1)
+    entry_ = show([*packs, integ])
+    scores = scored({"p1": 70, "p2": 70, "p3": 70, "p4": 70, "big": 90})
+    # Two of four asked: half of it, covers, better: the Intégrale.
+    found = view.preselect(entry_, [1, 2], scores, [])
+    assert found["integrale"] and found["hashes"] == ["big"]
+    # One of four is under half: the season pack, though the Intégrale scores better.
+    one = view.preselect(entry_, [1], scores, [])
+    assert not one["integrale"] and one["hashes"] == ["p1"]
+    # It must also score better than the packs.
+    worse = view.preselect(entry_, [1, 2], scored({"p1": 95, "p2": 95, "big": 90}), [])
+    assert not worse["integrale"] and worse["hashes"] == ["p1", "p2"]
+
+
+def test_ties_go_to_the_tracker_order_then_to_the_seeders():
+    a = release("a", "season", (1,), seeders=5, tracker="tr4ker")
+    b = release("b", "season", (1,), seeders=9, tracker="tr4ker")
+    c = release("c", "season", (1,), seeders=1, tracker="c411")
+    scores = scored({"a": 80, "b": 80, "c": 80})
+    assert view.preselect(show([a, b, c]), [1], scores, ["c411", "tr4ker"])["hashes"] == ["c"]
+    assert view.preselect(show([a, b]), [1], scores, ["c411", "tr4ker"])["hashes"] == ["b"]
+
+
+def test_a_season_request_key_names_its_series_and_season():
+    assert view.split_key("tv-95396:2") == ("tv-95396", 2)
+    assert view.split_key("film-ab12") is None and view.split_key(None) is None
