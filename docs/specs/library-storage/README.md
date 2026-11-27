@@ -100,6 +100,7 @@ Data for the new screens is served by `serve.py` as `storage.json` (and `poster-
 ## Organisation, reworked (2026-11-27, after first use)
 The first version picked a folder and renamed in place; the owner could not move the library to the new disk with it, and mixing Download Folders into its picker was confusing. Decisions:
 - Organisation is where **folder roles** and **links** are set. A folder (Library or Download Folder, or any folder under the storage roots) is either an **organised library** (the app names and places everything in it: e.g. /library/Films, /library/Séries), a **provenance** (an old library folder or a download folder whose content goes to an organised library), or left alone.
+- A provenance's destination is **Automatique** by default: the app picks the organised library per item, by kind and then the placement rule (with the item's other versions or episodes, else the library with most room). It can be fixed to one organised library instead.
 - A **link** joins a provenance to the organised libraries. It routes by kind: films to the films library, series and episodes to the series library, anime to an anime library when there is one.
 - Each link has **Ranger** (move and rename what is there now, after a summary: items, size, time, every torrent keeps seeding) and an **Auto** toggle (each new arrival too; on by default for a download folder, off for an old library folder).
 - Moving and renaming to the Jellyfin layout happen in one pass; seeded files through their client (ADR-0029).
