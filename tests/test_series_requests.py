@@ -116,6 +116,8 @@ def test_following_a_series_asks_for_each_new_pack_and_notifies_the_member(serve
 def test_anime_series_are_listed_only_in_the_anime_tab_under_the_anime_permission(server):
     app, browser = server
     media = app.state.agent_service.media
+    # The index is seeded by hand: a fresh sync keeps the landing from rebuilding it.
+    media._series_stamp("series-sync:default")
     with media.lock, media.db:
         media.db.execute(
             "INSERT OR REPLACE INTO series_release (tracker, infohash, name, size, seeders,"
