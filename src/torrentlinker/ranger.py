@@ -188,14 +188,14 @@ class Board:
         return self._root(path)
 
     def disks(self) -> list[dict[str, Any]]:
+        """Each storage root with its space (roots on one device share the numbers)."""
         found = []
-        for disk in self.storage.disks():
+        for root in self.storage.roots:
             try:
-                u = usage(disk.roots[0])
+                u = usage(root)
             except OSError:
                 continue
-            found.append({"name": disk.name, "total": u.total, "used": u.used, "free": u.free,
-                          "writable": disk.writable})  # fmt: skip
+            found.append({"name": str(root), "total": u.total, "used": u.used, "free": u.free})
         return found
 
     def folders(self) -> list[dict[str, Any]]:

@@ -244,10 +244,16 @@ The sidebar page for files under the storage roots, with the tabs Explorateur, D
 _Avoid_: File manager, Files page
 
 **Organisation**:
-The Fichiers tab that renames the library to a Jellyfin layout (`Titre (Année) [tmdbid-N]/Titre (Année) [tmdbid-N].ext` for a film, `Série (Année)/Saison 01/Série S01E01.ext` for a series) from a naming template per Library Folder and kind, editable with tokens and a live example. It shows a current → proposed diff; only the rows the Owner confirms are applied, as Tâches. A seeded release is renamed inside its Torrent Client; a row its client cannot follow is flagged "nécessite un Dossier de liens" and skipped.
+The Fichiers tab where the Owner sets **folder roles** and links, drawn as a board: provenances on the left, organised libraries on the right. A folder is an **Organised library**, a **Provenance** or ignored ("Choisir les dossiers"). Moving and renaming to the Jellyfin layout (`Titre (Année) [tmdbid-N]/Titre (Année) [tmdbid-N].ext` for a film, `Série (Année)/Saison 01/Série S01E01.ext` for a series, from a template per library and kind behind ⚙) happen in one pass, as Tâches.
 
-**Ranger automatiquement**:
-An option of each Download Folder, off by default: when a download that started while it was on finishes, the release is renamed with the template of the Library Folder the placement rule picks, then moved there through its Torrent Client, still seeding. A client that cannot rename inside a torrent leaves it where it is. Everything shows in Tâches and can be undone.
+**Organised library**:
+A Library Folder the app names and places everything in (for example /library/Films and /library/Séries). It is of a kind (films, series or both).
+
+**Provenance**:
+A folder whose content goes to an organised library: an old Library Folder or a Download Folder. Its destination is **Automatique** (each item by kind, then the placement rule) or pinned to one library, by drag, tap or select. **Ranger** shows a summary first (destinations per kind, items, size, time, torrents re-pointed, links via the Link Folder, example renames), then queues a batch kept on disk that resumes after a restart. A seeded file moves through its client and a file several torrents share follows ADR-0029. Items with no recognisable title are **À vérifier**: never moved before the Owner gives a title or keeps them as they are. When an old Library Folder provenance is emptied, its organised libraries replace it in Paramètres and Member grants follow.
+
+**Auto**:
+A switch of each provenance (on for a Download Folder, off for an old library; the old per-Download-Folder "Ranger automatiquement" switches are kept): each release that finishes in it after Auto was on is ranged like Ranger does.
 
 **Gérer les fichiers**:
 The Member Permission to move, rename and trash files inside the Member's granted Library Folders. Emptying the Corbeille, Disques, settings and replacing a film stay with the Owner.

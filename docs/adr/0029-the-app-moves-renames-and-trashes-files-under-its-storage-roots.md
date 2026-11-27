@@ -33,6 +33,8 @@ This amends ADR-0004. The app may move, rename and trash files and create folder
    - A Member with the new "Gérer les fichiers" Permission may move, rename and trash files inside their granted Library Folders.
    - Only the Owner may empty the trash, change disks, settings and placement rules, and replace a film.
 
+8. **Ranging is one pass** (#223). Organisation moves and renames each item to its library's template as one Tâche item: the files are renamed inside their own folder (through the client when seeded), then moved to the library, and a failure puts every name back. The batch is kept on disk and resumes after a restart. Nothing moves in a request handler, and an item with no recognisable title is never moved.
+
 ## Considered Options
 
 - **Keep ADR-0004, organize only with links** (a clean tree of hardlinks or symlinks beside the originals): rejected. Hardlinks never cross disks, the library would show two trees, and the Owner asked for a real file manager.
