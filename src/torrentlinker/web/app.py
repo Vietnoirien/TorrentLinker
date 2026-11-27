@@ -470,7 +470,14 @@ def create_app(
 
     file_storage = FileStorage(directory, service.roots)
     file_storage.reconcile()
-    file_routes(app, file_storage)
+
+    def storage_folders() -> tuple[list[Path], list[Path]]:
+        library = [Path(f.path) for f in service.settings.library_folders]
+        downloads = service.settings.download_folders
+        chosen = [downloads.default, *downloads.by_category.values()]
+        return library, [Path(p) for p in dict.fromkeys(chosen) if p]
+
+    file_routes(app, file_storage, storage_folders)
     from torrentlinker.library_replace import Replacements
     from torrentlinker.web.replace import replace_routes
 

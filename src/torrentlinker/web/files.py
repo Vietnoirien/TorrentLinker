@@ -7,6 +7,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from torrentlinker.disk_report import disk_cards, place
 from torrentlinker.file_storage import FileStorage, StorageError
 
 
@@ -19,11 +20,17 @@ class Emptying(BaseModel):
     disk: str = Field(default="", max_length=40)
 
 
+class Placement(BaseModel):
+    size: int = Field(ge=0)
+    together_with: str = Field(default="", max_length=4096)
+
+
 class Retention(BaseModel):
     days: int = Field(ge=1, le=365)
 
 
-def file_routes(app: FastAPI, storage: FileStorage) -> None:
+def file_routes(app: FastAPI, storage: FileStorage, folders=lambda: ([], []), films=None) -> None:
+    """`folders` gives the Library and Download Folders; `films(path)` counts a folder's films."""
     app.state.file_storage = storage
 
     def who(request: Request) -> str:
@@ -75,3 +82,16 @@ def file_routes(app: FastAPI, storage: FileStorage) -> None:
             return {"restored": storage.undo(identifier, who(request))}
         except StorageError as error:
             raise refuse(error) from error
+
+    def cards() -> dict:
+        library, downloads = folders()
+        return disk_cards(storage, library, downloads, films or (lambda _: 0))
+
+    @app.get("/api/files/disks")
+    def disks() -> dict:
+        return cards()
+
+    @app.post("/api/files/disks/placement")
+    def placement(body: Placement) -> dict:
+        together = Path(body.together_with) if body.together_with else None
+        return place(cards()["disks"], body.size, together)

@@ -15,7 +15,7 @@ window.addEventListener("message", async (e) => {
   const m = e.data;
   if (m?.type === "files-ready") { filesEnvironment(); return; }
   if (m?.type !== "files-request") return;
-  const allowed = /^(trash|trash\/empty|trash\/retention|trash\/[0-9a-f]{12}\/restore|journal|journal\/[0-9a-f]{32}\/undo)$/;
+  const allowed = /^(disks|disks\/placement|trash|trash\/empty|trash\/retention|trash\/[0-9a-f]{12}\/restore|journal|journal\/[0-9a-f]{32}\/undo)$/;
   try {
     if ($("workspace").hidden) throw Error("Sign in first.");
     if (!allowed.test(m.path)) throw Error("Unknown file action.");
