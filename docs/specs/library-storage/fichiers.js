@@ -706,15 +706,17 @@ function paintTasks() {
 const TABS = [["explorer", "Explorateur", false], ["disks", "Disques", true], ["organisation", "Organisation", true], ["trash", "Corbeille", false], ["tasks", "Tâches", false]];
 function tabsHTML() {
   const active = S.tasks.filter(t => t.state === "running" || t.state === "queued").length;
-  return TABS.filter(([, , owner]) => !(S.member && owner)).map(([id, label]) =>
-    `<button data-tab="${id}" class="${S.tab === id ? "selected" : ""}">${label}${id === "tasks" && active ? `<span class="badge count">${active}</span>` : ""}${id === "trash" ? `<span class="badge count">${S.trash.filter(t => !S.member || t.from.includes("/Films/")).length}</span>` : ""}</button>${S.tab === id && TAB_TIPS[id] && FX.tipBtn ? `<span class="tabtip">${FX.tipBtn(TAB_TIPS[id](), "Aide sur cet onglet")}</span>` : ""}`).join("");
+  return TABS.filter(([, , owner]) => !(S.member && owner)).map(([id, label]) => {
+    const tid = id === "organisation" && S.orgVariant ? S.orgVariant : id;
+    return `<button data-tab="${tid}" class="${S.tab === tid ? "selected" : ""}">${label}${id === "tasks" && active ? `<span class="badge count">${active}</span>` : ""}${id === "trash" ? `<span class="badge count">${S.trash.filter(t => !S.member || t.from.includes("/Films/")).length}</span>` : ""}</button>${S.tab === id && TAB_TIPS[id] && FX.tipBtn ? `<span class="tabtip">${FX.tipBtn(TAB_TIPS[id](), "Aide sur cet onglet")}</span>` : ""}`;
+  }).join("");
 }
 function refreshTabs() { const t = $("tabs"); if (t) t.innerHTML = tabsHTML(); }
 function render() {
   const app = $("app");
-  if (S.member && ["disks", "organisation"].includes(S.tab)) S.tab = "explorer";
+  if (S.member && ["disks", "organisation", "orgA", "orgB"].includes(S.tab)) S.tab = "explorer";
   const scroll = document.querySelector(".files")?.scrollTop || 0;
-  const view = { explorer: explorerHTML, tasks: tasksHTML, disks: () => FX.disksHTML(), trash: () => FX.trashHTML(), organisation: () => FX.orgHTML() }[S.tab]();
+  const view = { explorer: explorerHTML, tasks: tasksHTML, disks: () => FX.disksHTML(), trash: () => FX.trashHTML(), organisation: () => FX.orgHTML(), orgA: () => FX.orgAHTML(), orgB: () => FX.orgBHTML() }[S.tab]();
   app.innerHTML = `<div class="row between"><nav class="tabs" id="tabs">${tabsHTML()}</nav>
       <span class="row"><span class="badge-preview">Aperçu</span>${S.member ? `<span class="badge warn">Vue membre · Gérer les fichiers</span>` : ""}</span></div>
     <div id="view">${view}</div>`;

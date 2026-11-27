@@ -4,7 +4,7 @@
 // To add one: put its file in this folder and add its id to SCREENS.
 (() => {
   // Loaded in this order (nav.js before the screens that use LSNav); the first one registered opens.
-  const SCREENS = ["replace", "nav", "explorer", "tasks", "disks", "trash", "organisation", "links"];
+  const SCREENS = ["replace", "nav", "explorer", "tasks", "disks", "trash", "organisation", "org-a", "org-b", "links"];
   const BASE = "/library-storage-preview/";
   const registry = new Map();
   let current = "";
