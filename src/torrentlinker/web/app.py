@@ -429,31 +429,17 @@ def create_app(
                         logger.warning("A replacement could not be followed.", exc_info=True)
 
         def auto_tidy_loop() -> None:
-            """Tidy the downloads that finished in a Download Folder with the option on."""
-            from torrentlinker.disk_report import disk_cards
-
+            """Range the downloads that finished in a provenance with Auto on."""
             while not shutdown.wait(60):
-                if not any(file_storage.auto_tidy().values()):
-                    continue
                 try:
-                    library, downloads = storage_folders()
-                    cards = disk_cards(file_storage, library, downloads, library_bytes=lambda f: 0)
+                    roots = board.auto_roots()
+                    if not roots:
+                        continue
                     for profile in service.settings.client_profiles:
-                        if not profile.enabled:
-                            continue
-                        target = for_client(profile.id)
-                        native = getattr(target.setup.client(), "repoint", None) is None
-                        auto_tidy.tick(
-                            profile.id,
-                            list(target.observed),
-                            native,
-                            downloads,
-                            service.settings.library_folders,
-                            cards["disks"],
-                            organisation.template,
-                        )
+                        if profile.enabled:
+                            auto_tidy.tick(profile.id, list(for_client(profile.id).observed), roots)
                 except Exception:  # noqa: BLE001 - tried again a minute later
-                    logger.warning("Auto-tidy could not run.", exc_info=True)
+                    logger.warning("Auto could not run.", exc_info=True)
 
         if monitor_verifications:
             threading.Thread(target=auto_tidy_loop, daemon=True, name="auto-tidy").start()
@@ -602,14 +588,7 @@ def create_app(
     from torrentlinker.organisation import Organisation
     from torrentlinker.web.organisation import organisation_routes
 
-    organisation = Organisation(
-        file_storage,
-        agent_service.media,
-        lambda: service.settings.library_folders,
-        seeds_of_path,
-        lambda client_id: for_client(client_id).setup.client(),
-        lambda client_id: service.settings.profile(client_id).reseed_link_root,
-    )
+    organisation = Organisation(file_storage)
 
     def read_again(client_id: str) -> None:
         from torrentlinker.web.operations import JobRequest, Operations
@@ -621,20 +600,33 @@ def create_app(
             lambda _: None,
         )
 
-    auto_tidy = AutoTidy(
-        directory,
-        file_storage,
-        lambda kind, items, actor: app.state.file_tasks.submit(kind, items, actor, "skip"),
-        read_again,
-    )
-    organisation_routes(
-        app,
+    from torrentlinker.path_follow import register_library, replace_library
+    from torrentlinker.ranger import Board, RangerQueue
+
+    board = Board(
         file_storage,
         organisation,
-        lambda: service.settings.default_client_id,
+        agent_service.media,
+        lambda: service.settings.library_folders,
         lambda: storage_folders()[1],
-        auto_tidy,
+        seeding,
+        lambda client_id: for_client(client_id).setup.client(),
+        lambda: service.settings.default_client_id,
+        lambda client_id: service.settings.profile(client_id).reseed_link_root,
+        lambda path, kind: register_library(service, path, kind),
+        lambda old, new: replace_library(service, accounts, old, new),
     )
+    ranger = RangerQueue(directory, board, lambda: app.state.file_tasks)
+    app.state.file_tasks.planner = ranger.planner
+
+    def read_clients(ids: list[str]) -> None:
+        for client_id in ids:
+            read_again(client_id)
+
+    app.state.file_tasks.refresh = read_clients
+    auto_tidy = AutoTidy(directory, lambda label, actor, rows: ranger.enqueue(label, actor, rows))
+    organisation_routes(app, file_storage, board, ranger)
+    ranger.resume()
     replacements.on_complete = replaced
     agent_service.media.hidden_paths = replacements.hidden_paths
     agent_service.torrents_workspace.ending = replacements.ending

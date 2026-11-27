@@ -1,24 +1,18 @@
-"""Organisation: rename the library to a Jellyfin layout, one proposal per release (ADR-0029, #211).
+"""Organisation's naming: the Jellyfin layout, from a template per organised library (ADR-0029).
 
-A template per Library Folder and kind (films, series) names where each video goes:
+A template per library and kind (film, series) names where each video goes:
 `Titre (Année) [tmdbid-N]/Titre (Année) [tmdbid-N].ext` for a film, and
-`Série (Année)/Saison 01/Série S01E01.ext` for a series. A proposal is only a preview: the
-Owner confirms rows, and each confirmed row becomes rename tasks, so a seeded file is renamed
-inside its Torrent Client. A row the client cannot follow is flagged "needs a Link Folder" and
-skipped.
+`Série (Année)/Saison 01/Série S01E01.ext` for a series. The board (`ranger.py`) uses it to
+move and rename each item in one pass.
 """
 
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
 from typing import Any
 
 from guessit import guessit
-
-from torrentlinker.file_annotations import seeds_under
-from torrentlinker.media import VIDEO
 
 TOKENS = (
     "{titre}", "{année}", "{tmdbid}", "{résolution}", "{codec}", "{source}", "{langue}",
@@ -100,138 +94,10 @@ def example(template: str, kind: str) -> str:
 
 
 class Organisation:
-    """Proposals for the Library Folders, from Médias' items."""
+    """The naming templates, one per organised library and kind."""
 
-    def __init__(
-        self, storage, media, library_folders, seeds, client_of, link_root_of=lambda _: ""
-    ) -> None:
-        self.storage, self.media = storage, media
-        self.library_folders, self.seeds, self.client_of = library_folders, seeds, client_of
-        self.link_root_of = link_root_of
+    def __init__(self, storage) -> None:
+        self.storage = storage
 
     def template(self, folder: Path, kind: str) -> str:
         return self.storage.templates().get(str(folder), {}).get(kind) or DEFAULTS[kind]
-
-    def _items(self, client_id: str, folder: Path) -> list[tuple[Path, dict[str, Any]]]:
-        prefix = str(folder.absolute()).rstrip("/") + "/"
-        with self.media.lock:
-            rows = self.media.db.execute(
-                "SELECT path, body FROM media_items WHERE client=? AND substr(path, 1, ?) = ?",
-                (client_id, len(prefix), prefix),
-            ).fetchall()
-        found = []
-        for row in rows:
-            body = json.loads(row["body"])
-            if body.get("kind") == "video" and Path(row["path"]).suffix.lower() in VIDEO:
-                found.append((Path(row["path"]), body))
-        return found
-
-    def folders(self, client_id: str) -> list[dict[str, Any]]:
-        """Each Library Folder with its templates, examples and proposals."""
-        cards = []
-        for entry in self.library_folders():
-            folder = Path(entry.path)
-            releases = self._releases(client_id, folder)
-            kinds = {"movie": ["film"], "series": ["series"]}.get(str(entry.kind.value), None)
-            kinds = kinds or sorted({r["kind"] for r in releases}) or ["film"]
-            cards.append(
-                {
-                    "path": str(folder), "name": folder.name,
-                    "templates": [
-                        {"kind": k, "template": self.template(folder, k), "default": DEFAULTS[k],
-                         "error": template_error(self.template(folder, k)),
-                         "example": example(self.template(folder, k), k)}
-                        for k in kinds
-                    ],
-                    "rows": [r for r in releases if r["kind"] in kinds],
-                }
-            )  # fmt: skip
-        return cards
-
-    def _releases(self, client_id: str, folder: Path) -> list[dict[str, Any]]:
-        tops: dict[str, list[tuple[Path, dict[str, Any]]]] = {}
-        for path, body in self._items(client_id, folder):
-            tops.setdefault(path.relative_to(folder).parts[0], []).append((path, body))
-        seeds = self.seeds(folder)
-        return [
-            self._release(folder, name, sorted(items, key=lambda x: str(x[0])), seeds)
-            for name, items in sorted(tops.items(), key=lambda kv: kv[0].casefold())
-        ]
-
-    def _release(self, folder: Path, name: str, items, seeds) -> dict[str, Any]:
-        top = folder / name
-        series = any(body.get("series") for _, body in items)
-        kind = "series" if series else "film"
-        template = self.template(folder, kind)
-        error = template_error(template)
-        maps: list[dict[str, str]] = []
-        if not error:
-            for index, (path, body) in enumerate(items):
-                segments = fill(template, facts_of(body, path.name))
-                if len(items) > 1 and not series:
-                    segments[-1] += f" - part{index + 1}"
-                segments[-1] += path.suffix.lower()
-                target = folder.joinpath(*segments)
-                maps.append({"from": str(path), "to": str(target)})
-            if kind == "film" and len(items) == 1 and top.is_dir():
-                maps.extend(self._extras(top, items[0][0], Path(maps[0]["to"])))
-        # What is already right needs no rename.
-        maps = [m for m in maps if m["from"] != m["to"]]
-        seed, problem, link = self._seed(top, maps, seeds)
-        return {
-            "key": name, "kind": kind, "current": name,
-            "title": items[0][1].get("series") or items[0][1].get("title") or name,
-            "proposed": (Path(maps[0]["to"]).relative_to(folder).as_posix() if maps else ""),
-            "more": max(0, len(items) - 1) if series else 0,
-            "same": not maps and not error, "error": error, "maps": maps,
-            "seed": seed, "needs_link": link, "problem": problem,
-        }  # fmt: skip
-
-    @staticmethod
-    def _extras(top: Path, video: Path, target: Path) -> list[dict[str, str]]:
-        """A film's subtitles and notes follow it, under its new name."""
-        found = []
-        for other in sorted(top.rglob("*")):
-            if other == video or other.is_dir() or other.suffix.lower() not in SIDECARS:
-                continue
-            if other.stem.startswith(video.stem):
-                suffix = other.name[len(video.stem) :]
-                found.append(
-                    {"from": str(other), "to": str(target.with_name(target.stem + suffix))}
-                )
-            else:
-                found.append({"from": str(other), "to": str(target.parent / other.name)})
-        return found
-
-    def _seed(self, top: Path, maps, seeds) -> tuple[dict[str, Any] | None, str, bool]:
-        """The torrent seeding a release, and why or whether it can be renamed."""
-        found = seeds_under(top, seeds)
-        if not found:
-            return None, "", False
-        shared = list({info["hash"]: info for _, info in found}.values())
-        if len(shared) > 1:
-            # Several torrents on the same files: the first renames them in its client, the
-            # others follow through their Link Folder (#222).
-            first = shared[0]
-            seed = {"client": first["client"], "hash": first["hash"], "ratio": first["ratio"],
-                    "native": True, "torrents": len(shared)}  # fmt: skip
-            if any(i.get("verifying") for i in shared):
-                return seed, "This torrent is being checked.", False
-            return seed, "", any(not self.link_root_of(i["client_id"]) for i in shared[1:])
-        torrent_top, info = found[0]
-        client = self.client_of(info["client_id"])
-        native = client is not None and getattr(client, "repoint", None) is None
-        seed = {"client": info["client"], "hash": info["hash"], "ratio": info["ratio"],
-                "native": native}  # fmt: skip
-        if info.get("verifying"):
-            return seed, "This torrent is being checked.", False
-        save = Path(info["save_path"])
-        for move in maps:
-            new, old = Path(move["to"]), Path(move["from"])
-            if not new.is_relative_to(save):
-                return seed, "The new name leaves the torrent's own folder.", False
-            if not native:
-                before, after = old.relative_to(save).parts, new.relative_to(save).parts
-                if len(before) != len(after) or before[1:] != after[1:]:
-                    return seed, "", True
-        return seed, "", False

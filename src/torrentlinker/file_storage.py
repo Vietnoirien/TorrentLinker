@@ -140,20 +140,41 @@ class FileStorage:
         self._settings.write_text(json.dumps({**current, "templates": templates}), encoding="utf-8")
 
     def auto_tidy(self) -> dict[str, bool]:
-        """The Download Folders that tidy a finished download by themselves (off by default)."""
+        """The old per-Download-Folder "Ranger automatiquement" switches (#212), read once to
+        migrate them into the provenance links (#223)."""
         try:
             found = json.loads(self._settings.read_text(encoding="utf-8")).get("auto_tidy", {})
         except (OSError, ValueError, TypeError):
             return {}
         return {k: bool(v) for k, v in found.items()} if isinstance(found, dict) else {}
 
-    def set_auto_tidy(self, folder: str, on: bool) -> None:
+    # Organisation's board: roles, provenance links, fixed titles (#223) -------------------
+
+    def board(self) -> dict[str, Any]:
+        """`roles` {path: lib|prov|none}; `links` {provenance: {to, auto}} (`to` is an organised
+        library, empty for Automatique); `titles` {item path: fixed title}; `kept` the items the
+        Owner keeps as they are; `swapped` {old Library Folder: its organised libraries}."""
         try:
-            current = json.loads(self._settings.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            current = {}
-        chosen = {**current.get("auto_tidy", {}), folder: on}
-        self._settings.write_text(json.dumps({**current, "auto_tidy": chosen}), encoding="utf-8")
+            found = json.loads(self._settings.read_text(encoding="utf-8")).get("board", {})
+        except (OSError, ValueError, TypeError):
+            found = {}
+        found = found if isinstance(found, dict) else {}
+        return {
+            "roles": dict(found.get("roles", {})), "links": dict(found.get("links", {})),
+            "titles": dict(found.get("titles", {})), "kept": list(found.get("kept", [])),
+            "swapped": dict(found.get("swapped", {})),
+        }  # fmt: skip
+
+    def update_board(self, change) -> None:
+        """Apply `change(board)` to the board and save it."""
+        with self._lock:
+            try:
+                current = json.loads(self._settings.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                current = {}
+            board = self.board()
+            change(board)
+            self._settings.write_text(json.dumps({**current, "board": board}), encoding="utf-8")
 
     # Disks ---------------------------------------------------------------------------
 

@@ -11,6 +11,7 @@ cancelled. A finished move or rename can be undone.
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import shutil
 import tempfile
@@ -23,6 +24,7 @@ from typing import Any
 
 from torrentlinker.file_storage import FileStorage, StorageError
 
+logger = logging.getLogger(__name__)
 CHUNK = 1024 * 1024
 CONFLICTS = ("skip", "replace", "rename", "keep-one")
 
@@ -71,6 +73,19 @@ def _identical(a: Path, b: Path) -> bool:
     return digest(a) == digest(b)
 
 
+class _Mirror(dict):  # type: ignore[type-arg]
+    """A step of an item: its progress and time left show on the item itself."""
+
+    def __init__(self, parent: dict[str, Any], values: dict[str, Any]) -> None:
+        super().__init__(values)
+        self.parent = parent
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        super().__setitem__(key, value)
+        if key in {"progress", "eta"}:
+            self.parent[key] = value
+
+
 class Tasks:
     def __init__(
         self,
@@ -81,17 +96,23 @@ class Tasks:
         followed: Callable[[Path, Path], Any] = lambda old, new: None,
         client_of: Callable[[str], Any] = lambda _: None,
         link_root_of: Callable[[str], str] = lambda _: "",
+        planner: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+        refresh: Callable[[list[str]], None] = lambda client_ids: None,
     ) -> None:
         """`seeds(path)` gives the torrents whose files overlap a path, with the content each
         puts on disk; `client_of(id)` is that torrent's client (ADR-0029: a seeded file moves
-        and renames through its client); `allowed(path)` is the actor's right to touch it."""
+        and renames through its client); `allowed(path)` is the actor's right to touch it.
+        `planner(item)` says what ranging one item does (renames, then the move), worked out when
+        the item runs; `refresh(client ids)` reads those clients' torrents again."""
         self.storage, self.seeds, self.allowed, self.threaded = storage, seeds, allowed, threaded
         self.client_of = client_of
         self.link_root_of = link_root_of  # a client id -> its Link Folder ("" when none)
+        self.planner, self.refresh = planner, refresh
         self.followed = followed  # settings and grants keyed by a path follow a moved folder
         self.tasks: dict[str, dict[str, Any]] = {}
         self._cancel: dict[str, threading.Event] = {}
         self._allowed: dict[str, Callable[[Path], bool]] = {}
+        self._hooks: dict[str, tuple[Any, Any]] = {}
         self._lock = threading.RLock()
 
     # -- Submitting ---------------------------------------------------------------------
@@ -104,20 +125,27 @@ class Tasks:
         conflict: str = "skip",
         apply_all: bool = True,
         allowed: Callable[[Path], bool] | None = None,
+        label: str = "",
+        on_item: Callable[[dict[str, Any], dict[str, Any]], None] | None = None,
+        on_done: Callable[[dict[str, Any]], None] | None = None,
     ) -> dict[str, Any]:
         """`items`: `{"from": path, "to": path}` (the destination folder for move and copy, the
-        new full path for rename); trash and mkdir take `from` only."""
-        if kind not in {"move", "copy", "rename", "mkdir", "trash"}:
+        new full path for rename); trash and mkdir take `from` only. "ranger" takes the item's
+        path and the destination library (empty: the planner picks), and any other key a
+        planner needs, kept in the item's `meta`. `on_item(task, item)` is called as each item
+        ends and `on_done(task)` when the task does."""
+        if kind not in {"move", "copy", "rename", "mkdir", "trash", "ranger"}:
             raise StorageError("Unknown operation.")
         if conflict not in CONFLICTS:
             raise StorageError("Unknown conflict choice.")
         identifier = uuid.uuid4().hex[:12]
         task = {
             "id": identifier, "kind": kind, "actor": actor, "state": "queued",
-            "created": time.time(), "conflict": conflict, "apply_all": apply_all,
+            "created": time.time(), "conflict": conflict, "apply_all": apply_all, "label": label,
             "items": [
                 {"from": i["from"], "to": i.get("to", ""), "state": "queued", "progress": 0.0,
-                 "reason": "", "verified": False, "note": "", "final": "", "undo": None}
+                 "reason": "", "verified": False, "note": "", "final": "", "undo": None,
+                 "meta": {k: v for k, v in i.items() if k not in {"from", "to"}}}
                 for i in items
             ],
         }  # fmt: skip
@@ -125,6 +153,7 @@ class Tasks:
             self._allowed[identifier] = allowed or self.allowed
             self.tasks[identifier] = task
             self._cancel[identifier] = threading.Event()
+            self._hooks[identifier] = (on_item, on_done)
         if self.threaded:
             threading.Thread(target=self.run, args=(identifier,), daemon=True).start()
         else:
@@ -146,6 +175,7 @@ class Tasks:
         for item in task["items"]:
             if stop.is_set():
                 item.update(state="cancelled", reason="Cancelled before it started.")
+                self._hook(identifier, 0, task, item)
                 continue
             item["state"] = "running"
             started = time.monotonic()
@@ -165,10 +195,21 @@ class Tasks:
                     item.update(state="done", progress=1.0)
                 self.storage.finish(operation, "done")
             item["seconds"] = round(time.monotonic() - started, 2)
+            self._hook(identifier, 0, task, item)
         states = {i["state"] for i in task["items"]}
         task["state"] = "done" if states <= {"done", "skipped"} else (
             "cancelled" if "cancelled" in states else "failed"
         )  # fmt: skip
+        self._hook(identifier, 1, task)
+
+    def _hook(self, identifier: str, which: int, *args: Any) -> None:
+        """Tell whoever queued the task how it went; a hook that fails never stops the task."""
+        call = self._hooks.get(identifier, (None, None))[which]
+        if call is not None:
+            try:
+                call(*args)
+            except Exception:  # noqa: BLE001 - the bookkeeping must not undo a finished item
+                logger.warning("A task hook failed.", exc_info=True)
 
     def _guard(self, path: Path, allowed: Callable[[Path], bool] | None = None) -> Path:
         self.storage.under_roots(path)
@@ -178,6 +219,8 @@ class Tasks:
 
     def _item(self, task: dict[str, Any], item: dict[str, Any], cancelled, allowed) -> None:
         kind, source = task["kind"], Path(item["from"])
+        if kind == "ranger":
+            return self._ranger(task, item, cancelled, allowed)
         if kind == "mkdir":
             target = self._guard(source, allowed)
             target.mkdir(parents=True, exist_ok=False)
@@ -207,6 +250,68 @@ class Tasks:
                 return
             target = chosen
         self._transfer(kind, source, target, item, cancelled)
+
+    # -- Ranger: rename to the library's template, then move, in one pass (#223) -------------
+
+    def _ranger(self, task: dict[str, Any], item: dict[str, Any], cancelled, allowed) -> None:
+        """Rename an item's files to its library's template inside their own folder, then move
+        the result into the library, each step through the client when a torrent seeds it. Any
+        failure puts the names back: nothing is left half done."""
+        if self.planner is None:
+            raise StorageError("Nothing plans the ranging.")
+        plan = self.planner({**item["meta"], "from": item["from"], "to": item["to"]})
+        item["meta"]["plan"] = plan
+        if plan.get("error"):
+            raise StorageError(plan["error"])
+        destination, new_top = Path(plan["dest"]), Path(plan["new_top"])
+        landed = destination / new_top.name
+        steps = [
+            r for r in plan["renames"]
+            if os.path.lexists(r["from"]) or not os.path.lexists(r["to"])
+        ]  # fmt: skip
+        if not steps and not os.path.lexists(new_top) and os.path.lexists(landed):
+            item.update(verified=True, final=str(landed), progress=1.0, note="Déjà rangé")
+            return
+        if plan.get("resumed") and os.path.lexists(new_top) and os.path.lexists(landed):
+            self._discard(landed)  # the copy a stop interrupted: it is made again
+        clients = sorted({info["client_id"] for _, info in self.seeds(Path(item["from"]))})
+        done: list[dict[str, str]] = []
+        rename = {"kind": "rename", "actor": task["actor"], "conflict": "skip"}
+        try:
+            for step in steps:
+                if cancelled():
+                    raise InterruptedError("cancelled")
+                part = {"from": step["from"], "to": step["to"], "state": "running", "note": ""}
+                self._item(rename, part, cancelled, allowed)
+                if part["state"] == "skipped":
+                    raise StorageError(f"« {Path(step['to']).name} » existe déjà.")
+                done.append(step)
+            if done and clients:
+                self.refresh(clients)
+            move = {"kind": "move", "actor": task["actor"], "conflict": "skip"}
+            part = _Mirror(item, {"from": str(new_top), "to": str(destination), "state": "running"})
+            self._item(move, part, cancelled, allowed)
+            if part["state"] == "skipped":
+                raise StorageError(f"« {new_top.name} » existe déjà dans {destination.name}.")
+        except BaseException:
+            for step in reversed(done):
+                back = {"from": step["to"], "to": step["from"], "state": "running", "note": ""}
+                try:
+                    if clients:
+                        self.refresh(clients)
+                    self._item(rename, back, cancelled, allowed)
+                except Exception:  # noqa: BLE001 - put every other name back too
+                    logger.warning("Could not put %s back.", step["from"], exc_info=True)
+            raise
+        item.update(
+            verified=part.get("verified", True),
+            final=str(landed),
+            progress=1.0,
+            undo=None,
+            note=part.get("note") or "Rangé",
+        )
+        if clients:
+            self.refresh(clients)
 
     def _conflict(self, task, item, source: Path, target: Path) -> Path | None:
         choice = task["conflict"]

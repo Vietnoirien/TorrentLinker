@@ -61,3 +61,49 @@ def follow_move(setup: Any, accounts: Any, old: Path, new: Path) -> dict[str, in
                     )
                     changed["grants"] += 1
     return changed
+
+
+def register_library(setup: Any, path: Path, kind: Any) -> None:
+    """Make `path` a Library Folder of this kind (a new one, or the kind of the existing one)."""
+    from torrentlinker.domain import LibraryFolder
+
+    with setup.lock:
+        settings = setup.settings
+        found = [f for f in settings.library_folders if Path(f.path) == path]
+        if found:
+            settings.library_folders = [
+                replace(f, kind=kind) if Path(f.path) == path else f
+                for f in settings.library_folders
+            ]
+        else:
+            settings.library_folders = [*settings.library_folders, LibraryFolder(path, kind=kind)]
+        (setup._root or setup).save()
+
+
+def replace_library(setup: Any, accounts: Any, old: Path, new: list[Path]) -> dict[str, int]:
+    """An emptied old Library Folder is replaced by the organised libraries that took its
+    content: the settings drop it (the new ones are already there) and each Member grant of it
+    becomes a grant of the new ones."""
+    changed = {"library": 0, "grants": 0}
+    with setup.lock:
+        settings = setup.settings
+        kept = [f for f in settings.library_folders if Path(f.path) != old]
+        changed["library"] = len(settings.library_folders) - len(kept)
+        settings.library_folders = kept
+        if changed["library"]:
+            (setup._root or setup).save()
+    if accounts is not None:
+        with accounts.lock, accounts.db:
+            for row in accounts.db.execute(
+                "SELECT account, folders FROM media_limits WHERE folders IS NOT NULL"
+            ).fetchall():
+                granted = json.loads(row["folders"])
+                if str(old) not in granted:
+                    continue
+                rewritten = sorted({*(f for f in granted if f != str(old)), *map(str, new)})
+                accounts.db.execute(
+                    "UPDATE media_limits SET folders=? WHERE account=?",
+                    (json.dumps(rewritten), row["account"]),
+                )
+                changed["grants"] += 1
+    return changed
