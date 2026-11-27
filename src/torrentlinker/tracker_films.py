@@ -432,11 +432,15 @@ class TrackerFilms(TrackerRows, AgeRatings):
         """Share film facts both ways with the library, after the scan described it.
 
         A library film c411's release details left without a poster or a synopsis takes the
-        film facts the index holds for its title and year, without a request. A film those
-        details did describe gives its facts to a film the index has none for."""
+        film facts the index holds for its title and year, or for its file's name read as a
+        release name (a file downloaded from another Tracker keeps that release's name), without
+        a request. A film those details did describe gives its facts to a film the index has
+        none for."""
+        from pathlib import PurePath
+
         with self.lock:
             rows = self.db.execute(
-                "SELECT id, body FROM media_items WHERE client=?", (client_id,)
+                "SELECT id, path, body FROM media_items WHERE client=?", (client_id,)
             ).fetchall()
         updates, found = [], {}
         for row in rows:
@@ -451,6 +455,9 @@ class TrackerFilms(TrackerRows, AgeRatings):
                 body.get("artwork") or body.get("remote_artwork")
             )
             if bare:
+                named, named_year = parse_release(PurePath(row["path"]).stem)
+                if named and named_year:
+                    tkeys.append(film_key(named, named_year))
                 facts = self._film_facts(tkeys)
                 if facts and self._library_fill(body, facts):
                     updates.append((json.dumps(body), client_id, row["id"]))
@@ -484,14 +491,18 @@ class TrackerFilms(TrackerRows, AgeRatings):
                     ).fetchone()
                     or self.db.execute("SELECT * FROM film_c411 WHERE tkey=?", (tkey,)).fetchone()
                 )
-                if row is not None:
+                if row is not None and (row["overview"] or row["poster"]):
                     return dict(row)
         return None
 
     @staticmethod
     def _library_fill(body: dict[str, Any], facts: dict[str, Any]) -> bool:
-        """Fill what the library film lacks; True when anything was filled."""
+        """Fill what the library film lacks; True when anything was filled. A film known only by
+        its file name takes the index's title too."""
         filled = False
+        if body.get("identity_source") == "filename" and facts.get("title"):
+            body["title"], body["identity_source"] = facts["title"], "film index"
+            filled = True
         if not body.get("description") and facts.get("overview"):
             body["description"], filled = facts["overview"], True
         if not body.get("genre") and facts.get("genres"):
@@ -883,7 +894,9 @@ class TrackerFilms(TrackerRows, AgeRatings):
                     facts["runtime"],
                     facts["poster"],
                 )
-                if kept.get(tkey) == drawn or (tkey in kept and not overwrite):
+                # A row c411 listed without a synopsis or poster holds no facts to keep.
+                empty = tkey in kept and not (kept[tkey][3] or kept[tkey][6])
+                if kept.get(tkey) == drawn or (tkey in kept and not overwrite and not empty):
                     continue
                 kept[tkey] = drawn
                 self.db.execute(
@@ -941,7 +954,7 @@ class TrackerFilms(TrackerRows, AgeRatings):
         """Facts stored before the original-title keys existed take those keys too, once."""
         with self.lock:
             if self.db.execute(
-                "SELECT 1 FROM media_options WHERE key='films-original-keys'"
+                "SELECT 1 FROM media_options WHERE key='films-original-keys-2'"
             ).fetchone():
                 return
         with self._bulk() as db:
@@ -960,7 +973,7 @@ class TrackerFilms(TrackerRows, AgeRatings):
         self._films_save(found, replace=False)
         with self.lock, self.db:
             self.db.execute(
-                "INSERT OR REPLACE INTO media_options VALUES ('films-original-keys', '1')"
+                "INSERT OR REPLACE INTO media_options VALUES ('films-original-keys-2', '1')"
             )
 
     def _films_unasked(self, client_id) -> tuple[str, str, str] | None:

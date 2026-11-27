@@ -481,6 +481,52 @@ def test_library_films_and_the_index_share_film_facts_both_ways(films):
     assert tuple(heat) == ("Un braquage.", '["Crime", "Drame"]', POSTER.format("heat"))
 
 
+def test_a_file_from_another_tracker_takes_the_facts_c411_filed_under_its_french_title(films):
+    identifier, body = library_body(films)
+    # A file named as a tr4ker release, which the library read under an odd title.
+    body |= {"title": "Hobbit – Multi", "description": "", "artwork": "", "remote_artwork": ""}
+    with films.lock, films.db:
+        films.db.execute(
+            "UPDATE media_items SET body=?, path=? WHERE id=?",
+            (
+                json.dumps(body),
+                "/films/The.Hobbit.The.Battle.of.the.Five.Armies.2014.MULTI.1080p-MW.mkv",
+                identifier,
+            ),
+        )
+        # The index holds the release; c411 listed it once without facts.
+        films.db.execute(
+            "INSERT INTO film_release (tracker, infohash, name, tkey, title, year)"
+            " VALUES ('tr4ker', ?, 'The.Hobbit…-MW', ?, 'The Hobbit…', '2014')",
+            ("f" * 40, film_key("The Hobbit The Battle of the Five Armies", "2014")),
+        )
+        films.db.execute(
+            "INSERT INTO film_c411 (tkey, title, original_title, year, overview, genres,"
+            " runtime, poster, artwork, fetched) VALUES (?, 'The Hobbit', '', '2014', '', '[]',"
+            " 0, '', NULL, 0)",
+            (film_key("The Hobbit The Battle of the Five Armies", "2014"),),
+        )
+    # c411's French facts name the original title: they fill that empty row.
+    films._films_save(
+        {
+            film_key("Le Hobbit : La Bataille des Cinq Armées", "2014"): {
+                "title": "Le Hobbit : La Bataille des Cinq Armées",
+                "original_title": "The Hobbit: The Battle of the Five Armies",
+                "year": "2014",
+                "overview": "Smaug attaque.",
+                "genres": ["Aventure"],
+                "runtime": 144,
+                "poster": POSTER.format("hobbit"),
+            }
+        }
+    )
+    films.library_facts("default")
+    _, body = library_body(films)
+    assert body["description"] == "Smaug attaque."
+    assert body["title"] == "Le Hobbit : La Bataille des Cinq Armées"
+    assert body["remote_artwork"] == POSTER.format("hobbit")
+
+
 def test_a_tmdb_key_added_later_takes_over_and_keeps_the_owners_corrections(films, monkeypatch):
     setup = no_key(films)
     pages = [
