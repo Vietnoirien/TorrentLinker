@@ -153,6 +153,7 @@ class MediaLibrary(TrackerFilms):
         self._setups: dict[str, tuple[float, Any]] = {}
         self.previews: dict[str, dict[str, Any]] = {}
         self.observations: dict[str, tuple[object, set[str]]] = {}
+        self.unfinished_files: dict[str, dict[str, dict[str, int]]] = {}
         with self.db:
             self.db.executescript("""
                 CREATE TABLE IF NOT EXISTS media_items
@@ -453,17 +454,32 @@ class MediaLibrary(TrackerFilms):
 
         mapper = PathMapper(target.setup.settings.path_mappings)
         paths = set()
+        known = self.unfinished_files.get(client_id, {})
+        kept: dict[str, dict[str, int]] = {}
         for torrent in observed:
             if torrent.progress >= 1 and "checking" not in torrent.state.lower():
                 continue
             save_path = Path(mapper.to_local(str(torrent.save_path)))
-            if torrent.files:
-                paths.update(str((save_path / p).absolute()) for p in torrent.files)
+            # The refresh every fifteen seconds lists torrents without their files; an unfinished
+            # one's list is asked once and kept while it downloads, so its save folder (often a
+            # whole Library Folder) is not taken for it.
+            files = torrent.files or known.get(torrent.hash) or self._torrent_files(target, torrent)
+            if files:
+                kept[torrent.hash] = files
+                paths.update(str((save_path / p).absolute()) for p in files)
             else:
                 # An incomplete torrent without its file list cannot establish safe children.
                 paths.add(str(save_path.absolute()))
+        self.unfinished_files[client_id] = kept
         self.observations[client_id] = (observed, paths)
         return paths
+
+    @staticmethod
+    def _torrent_files(target, torrent) -> dict[str, int]:
+        try:
+            return target.setup.client().files(torrent.hash)
+        except Exception:
+            return {}
 
     def scan(self, client_id, stop, progress):
         setup = self.setup(client_id)

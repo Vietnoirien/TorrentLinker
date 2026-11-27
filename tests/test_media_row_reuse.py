@@ -238,3 +238,44 @@ def test_a_page_walks_the_clients_torrents_once_not_once_per_row(tmp_path):
 
     media.listing("default", kind="", view="all", limit=8)
     assert len(walks) == 1, f"a page walked the client's torrents {len(walks)} times"
+
+
+def test_an_unfinished_torrent_listed_without_its_files_blocks_only_its_own_files(tmp_path):
+    """The refresh lists torrents without their files; one still downloading into a Library
+    Folder took the whole folder for itself, so every film there read as unfinished."""
+    from pathlib import Path
+
+    asked = []
+
+    def files(torrent_hash):
+        asked.append(torrent_hash)
+        return {"Pinocchio.mkv": 1}
+
+    def downloading():
+        return types.SimpleNamespace(
+            hash="abc", progress=0.4, state="downloading", save_path=Path("/films"), files={}
+        )
+
+    target = types.SimpleNamespace(
+        observed=[downloading()],
+        setup=types.SimpleNamespace(
+            settings=types.SimpleNamespace(path_mappings=[]),
+            client=lambda: types.SimpleNamespace(files=files),
+        ),
+    )
+    agent = types.SimpleNamespace(
+        setup=types.SimpleNamespace(path=tmp_path / "settings.json"),
+        for_client=lambda client_id: target,
+    )
+    media = MediaLibrary(agent)
+    assert media.incomplete_paths("default") == {"/films/Pinocchio.mkv"}
+    target.observed = [downloading()]  # the next refresh, again without files
+    assert media.incomplete_paths("default") == {"/films/Pinocchio.mkv"}
+    assert asked == ["abc"]  # asked once while it downloads
+
+    def refused(torrent_hash):
+        raise OSError("client unavailable")
+
+    target.setup.client = lambda: types.SimpleNamespace(files=refused)
+    target.observed = [types.SimpleNamespace(**{**vars(downloading()), "hash": "new"})]
+    assert media.incomplete_paths("default") == {"/films"}  # unknown files: the folder waits
