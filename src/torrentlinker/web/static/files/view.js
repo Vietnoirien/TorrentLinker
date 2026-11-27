@@ -178,18 +178,34 @@ function ask(html, onOk) {
   d.showModal();
   d.onclick = (e) => { if (e.target.id === "no") d.close(); if (e.target.id === "yes") { const values = { conflict: (d.querySelector("input[name=c]:checked") || {}).value, text: (d.querySelector("input[type=text]") || {}).value }; d.close(); onOk(values); } };
 }
+// What a torrent that seeds the chosen files changes about each operation (ADR-0029): the client
+// moves, renames and unseeds them, and the confirmation says how long it takes.
+const entryOf = (path) => S.panes.map((p) => p.entries.find((e) => `${p.path}/${e.name}` === path)).find(Boolean);
+function seedNotes(f, paths, crossing) {
+  const seeded = paths.map((p) => entryOf(p)).filter((e) => e?.seed);
+  if (!seeded.length) return "";
+  const clients = [...new Set(seeded.map((e) => e.seed.client))].join(", ");
+  const bytes = seeded.reduce((a, e) => a + (e.size || 0), 0);
+  const speed = 150e6;
+  if (f === "trash") return `<div class="note warn">${say(`${seeded.length} item(s) are shared (${clients}): the torrent leaves the client <b>without its data</b>, as with Replace.`, `${seeded.length} élément(s) sont en partage (${clients}) : le torrent est retiré du client <b>sans ses données</b>, comme pour « Remplacer ».`)}</div>`;
+  if (f === "rename") return `<div class="note">${say(`Shared in <b>${esc(clients)}</b>: the name is changed <b>in the client</b> (the torrent's path), not only on the disk.`, `En partage dans <b>${esc(clients)}</b> : le nom est changé <b>dans le client</b> (chemin du torrent), pas seulement sur le disque.`)}</div>`;
+  if (f === "copy") return `<div class="note">${say("The torrent stays in place and keeps sharing the original; the copy is not shared.", "Le torrent reste en place et continue de partager l'original ; la copie n'est pas partagée.")}</div>`;
+  return `<div class="note">${say(`Shared in <b>${esc(clients)}</b>: the move goes through the client, which keeps sharing. `, `En partage dans <b>${esc(clients)}</b> : le déplacement passe par le client, qui continue de partager. `)}${crossing
+    ? say(`<b>Copy</b> of ${size(bytes)}, about ${duration(bytes / speed)}, checked before the original leaves.`, `<b>Copie</b> de ${size(bytes)}, environ ${duration(bytes / speed)}, vérifiée avant que l'original parte.`)
+    : say("<b>Instant move</b> (same disk).", "<b>Déplacement instantané</b> (même disque).")}</div>`;
+}
 function operate(f, drop) {
   // A drop names its own items and destination; otherwise the other pane is the destination.
   const from = drop ? drop.from : picked(), here = S.panes[S.active], there = drop ? { path: drop.to } : S.panes[1 - S.active];
   const list = from.map((p) => `<div class="dlg-item"><span>${esc(name(p))}</span></div>`).join("");
   if (f === "mkdir") return ask(`<h2>${say("New folder", "Nouveau dossier")}</h2><input type="text" placeholder="${say("Name", "Nom")}" style="width:100%">`, ({ text }) => text && submit("mkdir", [{ from: `${here.path}/${text}` }]));
-  if (f === "rename") return ask(`<h2>${say("Rename", "Renommer")}</h2><input type="text" value="${esc(name(from[0]))}" style="width:100%">`, ({ text }) => text && submit("rename", [{ from: from[0], to: `${here.path}/${text}` }]));
-  if (f === "trash") return ask(`<h2>${say("Move to the trash", "Mettre à la corbeille")} ?</h2><p>${say("Nothing is deleted: each disk's trash keeps it for the retention delay and you can restore it.", "Rien n'est supprimé : la corbeille de chaque disque le garde pendant le délai de conservation et vous pouvez le restaurer.")}</p><div class="dlg-list">${list}</div>`, () => submit("trash", from.map((x) => ({ from: x }))));
+  if (f === "rename") return ask(`<h2>${say("Rename", "Renommer")}</h2><input type="text" value="${esc(name(from[0]))}" style="width:100%">${seedNotes("rename", from)}`, ({ text }) => text && submit("rename", [{ from: from[0], to: `${here.path}/${text}` }]));
+  if (f === "trash") return ask(`<h2>${say("Move to the trash", "Mettre à la corbeille")} ?</h2><p>${say("Nothing is deleted: each disk's trash keeps it for the retention delay and you can restore it.", "Rien n'est supprimé : la corbeille de chaque disque le garde pendant le délai de conservation et vous pouvez le restaurer.")}</p><div class="dlg-list">${list}</div>${seedNotes("trash", from)}`, () => submit("trash", from.map((x) => ({ from: x }))));
   if (!there.path) return TLToast.show(say("Open a destination in the other pane first.", "Ouvrez d'abord une destination dans l'autre panneau."), "bad");
   const crossing = rootOf(here.path) !== rootOf(there.path);
   const note = f === "move" && crossing ? say("Between disks this is a copy: the source goes to the trash only after the copy is verified.", "Entre deux disques, c'est une copie : la source n'est mise à la corbeille qu'une fois la copie vérifiée.") : f === "move" ? say("On the same disk this is instant.", "Sur le même disque, c'est instantané.") : say("The copy is verified.", "La copie est vérifiée.");
   const choices = [["skip", "Ignorer", "Skip"], ["replace", "Remplacer (l'ancien va à la corbeille)", "Replace (the old one goes to the trash)"], ["rename", "Renommer", "Rename"], ["keep-one", "Garder un seul (fichiers identiques)", "Keep one (identical files)"]];
-  ask(`<h2>${f === "move" ? say("Move", "Déplacer") : say("Copy", "Copier")} ${from.length} ${say("item(s) to", "élément(s) vers")} ${esc(there.path)}</h2><div class="dlg-list">${list}</div><div class="note">${note}</div>
+  ask(`<h2>${f === "move" ? say("Move", "Déplacer") : say("Copy", "Copier")} ${from.length} ${say("item(s) to", "élément(s) vers")} ${esc(there.path)}</h2><div class="dlg-list">${list}</div><div class="note">${note}</div>${seedNotes(f, from, crossing)}
     <p class="muted">${say("If a name is already taken:", "Si un nom existe déjà :")}</p>${choices.map(([v, french, en], n) => `<label class="row"><input type="radio" name="c" value="${v}" ${n === 0 ? "checked" : ""}> ${say(en, french)}</label>`).join("")}`, ({ conflict }) => submit(f, from.map((x) => ({ from: x, to: there.path })), conflict));
 }
 async function submit(kind, items, conflict = "skip") {

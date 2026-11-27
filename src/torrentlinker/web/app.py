@@ -482,23 +482,29 @@ def create_app(
 
         follow_move(service, accounts, old, new)
 
-    def annotate_entries(folder: Path, entries: list[dict[str, Any]]) -> None:
-        """Explorateur's rows know their film and the torrent that seeds them."""
-        from torrentlinker.file_annotations import annotate, media_films, seeds_of
+    def seeding() -> list[tuple[Path, dict[str, Any]]]:
+        from torrentlinker.file_annotations import seeds_of
 
         names = {p.id: p.name for p in service.settings.client_profiles if p.enabled}
-        torrents = [
-            (client_id, name, torrent)
-            for client_id, name in names.items()
-            for torrent in for_client(client_id).observed
-        ]
-        client_id = service.settings.default_client_id
-        annotate(
-            folder,
-            entries,
-            media_films(agent_service.media, client_id, folder),
-            seeds_of(torrents),
+        return seeds_of(
+            [
+                (client_id, name, torrent)
+                for client_id, name in names.items()
+                for torrent in for_client(client_id).observed
+            ]
         )
+
+    def annotate_entries(folder: Path, entries: list[dict[str, Any]]) -> None:
+        """Explorateur's rows know their film and the torrent that seeds them."""
+        from torrentlinker.file_annotations import annotate, media_films
+
+        client_id = service.settings.default_client_id
+        annotate(folder, entries, media_films(agent_service.media, client_id, folder), seeding())
+
+    def seeds_of_path(path: Path) -> list[tuple[Path, dict[str, Any]]]:
+        from torrentlinker.file_annotations import seeds_under
+
+        return seeds_under(path, seeding())
 
     file_routes(
         app,
@@ -507,6 +513,8 @@ def create_app(
         notice=lambda *a: owner_notice(*a),
         followed=follow,
         annotate=lambda folder, entries: annotate_entries(folder, entries),
+        seeds=lambda path: seeds_of_path(path),
+        client_of=lambda client_id: for_client(client_id).setup.client(),
     )
     from torrentlinker.library_replace import Replacements
     from torrentlinker.web.replace import replace_routes

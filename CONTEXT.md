@@ -234,7 +234,7 @@ One file operation Fichiers runs or ran (move, rename, trash, restore, purge), j
 _Avoid_: Job (the app's background jobs), transfer (between Torrent Clients)
 
 **Fichiers**:
-The sidebar page for files under the storage roots, with the tabs Explorateur, Disques, Organisation, Corbeille and Tâches. The download queue is no longer a page of its own but a tab of Recherche.
+The sidebar page for files under the storage roots, with the tabs Explorateur, Disques, Organisation, Corbeille and Tâches. The download queue is no longer a page of its own but a tab of Recherche. A file a torrent seeds moves, is renamed and is trashed through its Torrent Client: the torrent keeps seeding at its new place (a copy across disks is verified first), and trashing it removes the torrent without its data.
 _Avoid_: File manager, Files page
 
 **Gérer les fichiers**:

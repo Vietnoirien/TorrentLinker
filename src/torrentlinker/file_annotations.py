@@ -21,10 +21,18 @@ def seeds_of(torrents: list[tuple[str, str, Any]]) -> list[tuple[Path, dict[str,
                 {
                     "client": client_name, "client_id": client_id, "hash": torrent.hash.lower(),
                     "ratio": round(torrent.ratio, 2), "name": torrent.name,
+                    "save_path": str(torrent.save_path),
                     "seeding": torrent.is_seeding, "verifying": "check" in torrent.state.lower(),
                 },
             )  # fmt: skip
     return list(found.items())
+
+
+def seeds_under(
+    path: Path, seeds: list[tuple[Path, dict[str, Any]]]
+) -> list[tuple[Path, dict[str, Any]]]:
+    """The torrents whose content is the path, inside it or holds it."""
+    return [(top, info) for top, info in seeds if _related(path, top)]
 
 
 def _related(entry: Path, other: Path) -> bool:

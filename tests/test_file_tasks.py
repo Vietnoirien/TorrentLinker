@@ -122,14 +122,8 @@ def test_conflicts_ignore_replace_rename_and_keep_one(world):
     assert differs["state"] == "failed" and "differs" in differs["reason"]
 
 
-def test_seeded_files_and_paths_outside_the_roots_or_the_actors_folders_are_refused(
-    world, tmp_path
-):
+def test_paths_outside_the_roots_or_the_actors_folders_are_refused(world, tmp_path):
     root, storage, _ = world
-    seeded = Tasks(storage, seeded=lambda p: "qBittorrent", threaded=False)
-    _, item = one(seeded, "trash", root / "Films" / "Dune.mkv")
-    assert item["state"] == "failed" and "qBittorrent" in item["reason"]
-    assert (root / "Films" / "Dune.mkv").exists()
     plain = Tasks(storage, threaded=False)
     _, outside = one(plain, "trash", tmp_path / "elsewhere.txt")
     assert outside["state"] == "failed" and "outside" in outside["reason"]
@@ -230,3 +224,124 @@ def test_a_copy_reports_what_is_left_of_it(world, monkeypatch):
     monkeypatch.setattr(file_tasks, "CHUNK", 1000)
     tasks._copy(root / "Films" / "Dune.mkv", target, item, lambda: False)
     assert target.exists() and item["progress"] == 1.0 and item["eta"] == 0
+
+
+class SeedClient:
+    """A Torrent Client that records what it is told, and moves nothing itself."""
+
+    def __init__(self, torrent, native: bool) -> None:
+        self.torrents = {torrent.hash: torrent}
+        self.calls: list[tuple] = []
+        if not native:
+            self.repoint = self._repoint
+
+    def torrent(self, hash, with_files=True):
+        return self.torrents.get(hash)
+
+    def set_location(self, hash, path):
+        self.calls.append(("set_location", hash, path))
+        from dataclasses import replace
+
+        old = self.torrents[hash]
+        for name in {Path(n).parts[0] for n in old.files}:
+            (old.save_path / name).rename(Path(path) / name)  # the client moves the files itself
+        self.torrents[hash] = replace(self.torrents[hash], save_path=Path(path))
+
+    def _repoint(self, hash, path, data, name=None):
+        self.calls.append(("repoint", hash, path))
+        from dataclasses import replace
+
+        self.torrents[hash] = replace(self.torrents[hash], save_path=Path(path))
+
+    def rename_file(self, hash, old, new):
+        self.calls.append(("rename_file", old, new))
+        save = self.torrents[hash].save_path
+        (save / old).rename(save / new)
+
+    def remove(self, hash, *, delete_files=False):
+        self.calls.append(("remove", hash, delete_files))
+        del self.torrents[hash]
+
+    def pause(self, hash):
+        self.calls.append(("pause", hash))
+
+    def start(self, hash):
+        self.calls.append(("start", hash))
+
+    def recheck(self, hash):
+        self.calls.append(("recheck", hash))
+
+
+def seeded_world(world, native=True):
+    from torrentlinker.domain import Torrent
+    from torrentlinker.file_annotations import seeds_of, seeds_under
+
+    root, storage, _ = world
+    films = root / "Films"
+    torrent = Torrent(
+        "a" * 40, "Dune.mkv", films, files={"Dune.mkv": 3000}, state="uploading", ratio=1.5
+    )
+    client = SeedClient(torrent, native)
+
+    def seeds(path):
+        known = [("default", "qBittorrent", t) for t in client.torrents.values()]
+        return seeds_under(path, seeds_of(known))
+
+    tasks = Tasks(storage, seeds=seeds, client_of=lambda _: client, threaded=False)
+    return root, storage, tasks, client
+
+
+def test_a_seeded_file_moves_through_its_client_and_keeps_seeding(world):
+    root, storage, tasks, client = seeded_world(world)
+    _, item = one(tasks, "move", root / "Films" / "Dune.mkv", root / "Downloads")
+    assert (
+        item["state"] == "done"
+        and ("set_location", "a" * 40, str(root / "Downloads")) in client.calls
+    )
+    assert item["undo"]["client"]["back"] == str(root / "Films")
+
+
+def test_a_seeded_file_is_renamed_inside_its_client(world):
+    root, storage, tasks, client = seeded_world(world)
+    task, item = one(
+        tasks, "rename", root / "Films" / "Dune.mkv", root / "Films" / "Dune (2021).mkv"
+    )
+    assert ("rename_file", "Dune.mkv", "Dune (2021).mkv") in client.calls
+    assert item["note"].startswith("Renommé dans le client")
+    assert item["state"] == "done" and (root / "Films" / "Dune (2021).mkv").exists()
+
+
+def test_trashing_a_seeded_file_removes_its_torrent_without_the_data(world):
+    root, storage, tasks, client = seeded_world(world)
+    _, item = one(tasks, "trash", root / "Films" / "Dune.mkv")
+    assert item["state"] == "done" and ("remove", "a" * 40, False) in client.calls
+    assert not (root / "Films" / "Dune.mkv").exists()
+
+
+def test_a_folder_holding_several_torrents_and_a_part_of_a_torrent_are_refused(world):
+    root, storage, tasks, client = seeded_world(world)
+    from torrentlinker.domain import Torrent
+
+    other = Torrent(
+        "b" * 40, "Alien.mkv", root / "Films", files={"Alien.mkv": 2000}, state="uploading"
+    )
+    client.torrents[other.hash] = other
+    _, item = one(tasks, "move", root / "Films", root / "Downloads")
+    assert item["state"] == "failed" and "2 torrents" in item["reason"]
+
+
+def test_a_seeded_move_across_disks_copies_verifies_repoints_then_trashes_the_source(
+    world, monkeypatch
+):
+    root, storage, tasks, client = seeded_world(world, native=False)
+    monkeypatch.setattr(file_tasks, "same_device", lambda a, b: False)
+    monkeypatch.setattr("torrentlinker.storage_moves._wait", lambda *a, **k: True)
+    client.torrents["a" * 40] = __import__("dataclasses").replace(
+        client.torrents["a" * 40], progress=1.0
+    )
+    _, item = one(tasks, "move", root / "Films" / "Dune.mkv", root / "Downloads")
+    assert item["state"] == "done" and item["verified"], item
+    assert (root / "Downloads" / "Dune.mkv").read_bytes() == b"d" * 3000
+    assert not (root / "Films" / "Dune.mkv").exists()  # in the trash
+    assert ("repoint", "a" * 40, str(root / "Downloads")) in client.calls
+    assert client.calls[-1] == ("start", "a" * 40)  # seeding again, whatever happened

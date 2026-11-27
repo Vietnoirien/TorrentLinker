@@ -74,14 +74,17 @@ class Tasks:
     def __init__(
         self,
         storage: FileStorage,
-        seeded: Callable[[Path], str | None] = lambda _: None,
+        seeds: Callable[[Path], list[tuple[Path, dict[str, Any]]]] = lambda _: [],
         allowed: Callable[[Path], bool] = lambda _: True,
         threaded: bool = True,
         followed: Callable[[Path, Path], Any] = lambda old, new: None,
+        client_of: Callable[[str], Any] = lambda _: None,
     ) -> None:
-        """`seeded(path)` names the client seeding a path (such files wait for #208);
-        `allowed(path)` is the actor's right to touch it."""
-        self.storage, self.seeded, self.allowed, self.threaded = storage, seeded, allowed, threaded
+        """`seeds(path)` gives the torrents whose files overlap a path, with the content each
+        puts on disk; `client_of(id)` is that torrent's client (ADR-0029: a seeded file moves
+        and renames through its client); `allowed(path)` is the actor's right to touch it."""
+        self.storage, self.seeds, self.allowed, self.threaded = storage, seeds, allowed, threaded
+        self.client_of = client_of
         self.followed = followed  # settings and grants keyed by a path follow a moved folder
         self.tasks: dict[str, dict[str, Any]] = {}
         self._cancel: dict[str, threading.Event] = {}
@@ -168,10 +171,6 @@ class Tasks:
         self.storage.under_roots(path)
         if not (allowed or self.allowed)(path):
             raise StorageError(f"You may not touch {path}.")
-        if client := self.seeded(path):
-            raise StorageError(
-                f"{path.name} is seeded by {client}: moving it goes through that client."
-            )
         return path
 
     def _item(self, task: dict[str, Any], item: dict[str, Any], cancelled, allowed) -> None:
@@ -185,6 +184,7 @@ class Tasks:
         if not os.path.lexists(source):
             raise StorageError(f"{source} does not exist.")
         if kind == "trash":
+            self._unseed(source, task["actor"])
             stored = self.storage.trash(source, task["actor"])
             item.update(verified=True, final=stored["from"], undo={"restore": stored["id"]})
             return
@@ -225,6 +225,8 @@ class Tasks:
         return free_name(target.parent, target.name)
 
     def _transfer(self, kind: str, source: Path, target: Path, item, cancelled) -> None:
+        if kind != "copy" and (seeds := self.seeds(source)):
+            return self._seeded(kind, source, target, seeds, item, cancelled)
         target.parent.mkdir(parents=True, exist_ok=True)
         same_disk = same_device(source, target.parent)
         if kind == "rename" or (kind == "move" and same_disk):
@@ -241,6 +243,141 @@ class Tasks:
                 self.followed(source, target)
             stored = self.storage.trash(source, "system", "Déplacé vers un autre disque")
             item["undo"] = {"restore": stored["id"], "remove": str(target)}
+
+    # -- Files a torrent seeds: through its client (ADR-0029) -----------------------------
+
+    def _owner(self, source: Path, seeds, what: str) -> tuple[Path, dict[str, Any], Any]:
+        """The one torrent a path belongs to, and its client; anything else is refused."""
+        if len(seeds) != 1:
+            raise StorageError(
+                f"{source.name} holds the files of {len(seeds)} torrents: {what} them one by one."
+            )
+        top, info = seeds[0]
+        client = self.client_of(info["client_id"])
+        if client is None:
+            raise StorageError(f"The Torrent Client {info['client']} is not reachable.")
+        return top, info, client
+
+    def _unseed(self, source: Path, actor: str) -> None:
+        """Trashing seeded files takes the torrent out of its client, without its data."""
+        if not (seeds := self.seeds(source)):
+            return
+        top, info, client = self._owner(source, seeds, "trash")
+        if top != source:
+            raise StorageError(f"{source.name} is part of a torrent: trash the torrent as a whole.")
+        client.remove(info["hash"], delete_files=False)
+
+    def _seeded(self, kind: str, source: Path, target: Path, seeds, item, cancelled) -> None:
+        from torrentlinker.storage_moves import StorageMoveError
+
+        top, info, client = self._owner(source, seeds, kind)
+        try:
+            if kind == "rename":
+                self._rename_in_client(source, target, info, client, item)
+            else:
+                self._move_in_client(source, target, top, info, client, item, cancelled)
+        except StorageMoveError as error:
+            raise StorageError(str(error)) from error
+
+    def _rename_in_client(self, source: Path, target: Path, info, client, item) -> None:
+        from torrentlinker.storage_moves import rename_in_torrent
+
+        save = Path(info["save_path"])
+        if not (target.is_relative_to(save) and source.is_relative_to(save)):
+            raise StorageError("A seeded file is renamed inside its torrent's folder.")
+        old, new = source.relative_to(save).as_posix(), target.relative_to(save).as_posix()
+        rename_in_torrent(client, info["hash"], old, new)
+        item.update(
+            verified=target.exists() and not source.exists(), final=str(target),
+            undo={"client": {"id": info["client_id"], "hash": info["hash"],
+                             "old": old, "new": new}},
+            note=f"Renommé dans le client ({info['client']})",
+        )  # fmt: skip
+        if not item["verified"]:
+            raise StorageError(f"{info['client']} did not rename {source.name} on disk.")
+
+    def _move_in_client(self, source, target, top, info, client, item, cancelled) -> None:
+        from torrentlinker.storage_moves import move_torrent
+
+        if top != source:
+            raise StorageError(f"{source.name} is part of a torrent: move the torrent as a whole.")
+        if target.name != source.name:
+            raise StorageError(
+                f"A seeded torrent keeps its name: {target.name} is taken. Skip it or replace it."
+            )
+        destination, save = target.parent, Path(info["save_path"])
+        destination.mkdir(parents=True, exist_ok=True)
+        if same_device(source, destination):
+            move_torrent(client, info["hash"], destination)
+            item.update(
+                final=str(target), verified=target.exists() and not source.exists(),
+                undo={"client": {"id": info["client_id"], "hash": info["hash"], "back": str(save)}},
+                note=f"Déplacé par {info['client']} : instantané, il continue de partager",
+            )  # fmt: skip
+        elif getattr(client, "repoint", None) is None:
+            # The client copies across disks itself; the app rechecks what it wrote.
+            move_torrent(client, info["hash"], destination)
+            self._recheck(client, info["hash"], source, target, save)
+            name = info["client"]
+            item.update(final=str(target), verified=True,
+                        note=f"Copié par {name}, revérifié : il partage depuis ici")  # fmt: skip
+        else:
+            self._copy_then_repoint(source, target, info, client, item, cancelled)
+        if not item["verified"]:
+            raise StorageError(f"{info['client']} did not move {source.name}.")
+
+    @staticmethod
+    def _recheck(client, hash: str, source: Path, target: Path, save: Path) -> None:
+        from torrentlinker.storage_moves import StorageMoveError, _wait, move_torrent
+
+        recheck = getattr(client, "recheck", None)
+        if recheck is not None:
+            recheck(hash)
+            _wait(client, hash, lambda t: "checking" not in t.state.lower(), 300)
+        after = client.torrent(hash, with_files=False)
+        if after is None or after.progress < 1:
+            try:
+                move_torrent(client, hash, save)
+            except StorageMoveError:
+                pass
+            raise StorageError("The client does not find all the pieces at the destination.")
+
+    def _copy_then_repoint(self, source, target, info, client, item, cancelled) -> None:
+        """Copy and verify, point the client at the copy and recheck; only then does the
+        source go to its disk's trash. Any failure leaves the torrent seeding at the source."""
+        from torrentlinker.storage_moves import StorageMoveError, _found, _wait
+
+        torrent = _found(client, info["hash"])
+        data = getattr(client, "export_torrent", lambda h: None)(info["hash"])
+        self._copy(source, target, item, cancelled)
+        client.pause(info["hash"])
+        try:
+            client.repoint(info["hash"], str(target.parent), data)
+            client.recheck(info["hash"])
+            _wait(client, info["hash"], lambda t: "checking" not in t.state.lower(), 600)
+            after = client.torrent(info["hash"], with_files=False)
+            if after is None or after.progress < 1:
+                raise StorageMoveError("The client does not find all the pieces at the copy.")
+        except Exception:
+            client.repoint(info["hash"], str(torrent.save_path), data)
+            self._discard(target)
+            raise
+        finally:
+            client.start(info["hash"])
+        stored = self.storage.trash(source, "system", "Déplacé vers un autre disque")
+        item.update(
+            final=str(target), verified=True, undo=None,
+            note=f"Copié, vérifié : {info['client']} partage depuis la copie",
+        )  # fmt: skip
+        item["trashed"] = stored["id"]
+
+    @staticmethod
+    def _discard(copy: Path) -> None:
+        """Remove the copy this task made when it could not be used."""
+        if copy.is_dir():
+            shutil.rmtree(copy, ignore_errors=True)
+        else:
+            copy.unlink(missing_ok=True)
 
     def _copy(self, source: Path, target: Path, item, cancelled) -> None:
         total = max(1, sum(f.stat().st_size for f in self._files(source)))
@@ -282,7 +419,9 @@ class Tasks:
         action = item.get("undo")
         if item["state"] != "done" or not action:
             raise StorageError("This cannot be undone.")
-        if "rename" in action:
+        if "client" in action:
+            result = self._undo_in_client(action["client"])
+        elif "rename" in action:
             now, before = Path(action["rename"][0]), Path(action["rename"][1])
             if os.path.lexists(before) or not os.path.lexists(now):
                 raise StorageError("The files changed since: nothing was undone.")
@@ -296,3 +435,18 @@ class Tasks:
             result = self.storage.restore(action["restore"], actor)
         item.update(state="undone", undo=None)
         return result
+
+    def _undo_in_client(self, action: dict[str, Any]) -> str:
+        from torrentlinker.storage_moves import StorageMoveError, move_torrent, rename_in_torrent
+
+        client = self.client_of(action["id"])
+        if client is None:
+            raise StorageError("The Torrent Client is not reachable.")
+        try:
+            if "back" in action:
+                move_torrent(client, action["hash"], Path(action["back"]))
+                return action["back"]
+            rename_in_torrent(client, action["hash"], action["new"], action["old"])
+        except StorageMoveError as error:
+            raise StorageError(str(error)) from error
+        return action["old"]
