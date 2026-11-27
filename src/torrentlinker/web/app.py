@@ -428,7 +428,35 @@ def create_app(
                     except Exception:  # noqa: BLE001 - tried again a minute later
                         logger.warning("A replacement could not be followed.", exc_info=True)
 
+        def auto_tidy_loop() -> None:
+            """Tidy the downloads that finished in a Download Folder with the option on."""
+            from torrentlinker.disk_report import disk_cards
+
+            while not shutdown.wait(60):
+                if not any(file_storage.auto_tidy().values()):
+                    continue
+                try:
+                    library, downloads = storage_folders()
+                    cards = disk_cards(file_storage, library, downloads, library_bytes=lambda f: 0)
+                    for profile in service.settings.client_profiles:
+                        if not profile.enabled:
+                            continue
+                        target = for_client(profile.id)
+                        native = getattr(target.setup.client(), "repoint", None) is None
+                        auto_tidy.tick(
+                            profile.id,
+                            list(target.observed),
+                            native,
+                            downloads,
+                            service.settings.library_folders,
+                            cards["disks"],
+                            organisation.template,
+                        )
+                except Exception:  # noqa: BLE001 - tried again a minute later
+                    logger.warning("Auto-tidy could not run.", exc_info=True)
+
         if monitor_verifications:
+            threading.Thread(target=auto_tidy_loop, daemon=True, name="auto-tidy").start()
             threading.Thread(target=trash_loop, daemon=True, name="trash-purge").start()
             threading.Thread(target=replace_loop, daemon=True, name="replacements").start()
         if monitor_verifications:
@@ -569,20 +597,41 @@ def create_app(
             client_id=target,
         )
 
+    from torrentlinker.auto_tidy import AutoTidy
     from torrentlinker.organisation import Organisation
     from torrentlinker.web.organisation import organisation_routes
 
+    organisation = Organisation(
+        file_storage,
+        agent_service.media,
+        lambda: service.settings.library_folders,
+        seeds_of_path,
+        lambda client_id: for_client(client_id).setup.client(),
+    )
+
+    def read_again(client_id: str) -> None:
+        from torrentlinker.web.operations import JobRequest, Operations
+
+        Operations.run(
+            for_client(client_id),
+            JobRequest(kind="refresh", client_id=client_id),
+            threading.Event(),
+            lambda _: None,
+        )
+
+    auto_tidy = AutoTidy(
+        directory,
+        file_storage,
+        lambda kind, items, actor: app.state.file_tasks.submit(kind, items, actor, "skip"),
+        read_again,
+    )
     organisation_routes(
         app,
         file_storage,
-        Organisation(
-            file_storage,
-            agent_service.media,
-            lambda: service.settings.library_folders,
-            seeds_of_path,
-            lambda client_id: for_client(client_id).setup.client(),
-        ),
+        organisation,
         lambda: service.settings.default_client_id,
+        lambda: storage_folders()[1],
+        auto_tidy,
     )
     replacements.on_complete = replaced
     agent_service.media.hidden_paths = replacements.hidden_paths

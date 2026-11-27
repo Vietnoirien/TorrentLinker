@@ -139,6 +139,22 @@ class FileStorage:
         templates[folder] = mine
         self._settings.write_text(json.dumps({**current, "templates": templates}), encoding="utf-8")
 
+    def auto_tidy(self) -> dict[str, bool]:
+        """The Download Folders that tidy a finished download by themselves (off by default)."""
+        try:
+            found = json.loads(self._settings.read_text(encoding="utf-8")).get("auto_tidy", {})
+        except (OSError, ValueError, TypeError):
+            return {}
+        return {k: bool(v) for k, v in found.items()} if isinstance(found, dict) else {}
+
+    def set_auto_tidy(self, folder: str, on: bool) -> None:
+        try:
+            current = json.loads(self._settings.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            current = {}
+        chosen = {**current.get("auto_tidy", {}), folder: on}
+        self._settings.write_text(json.dumps({**current, "auto_tidy": chosen}), encoding="utf-8")
+
     # Disks ---------------------------------------------------------------------------
 
     def disks(self) -> list[Disk]:

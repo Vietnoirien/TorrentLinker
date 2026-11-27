@@ -240,6 +240,9 @@ _Avoid_: File manager, Files page
 **Organisation**:
 The Fichiers tab that renames the library to a Jellyfin layout (`Titre (Année) [tmdbid-N]/Titre (Année) [tmdbid-N].ext` for a film, `Série (Année)/Saison 01/Série S01E01.ext` for a series) from a naming template per Library Folder and kind, editable with tokens and a live example. It shows a current → proposed diff; only the rows the Owner confirms are applied, as Tâches. A seeded release is renamed inside its Torrent Client; a row its client cannot follow is flagged "nécessite un Dossier de liens" and skipped.
 
+**Ranger automatiquement**:
+An option of each Download Folder, off by default: when a download that started while it was on finishes, the release is renamed with the template of the Library Folder the placement rule picks, then moved there through its Torrent Client, still seeding. A client that cannot rename inside a torrent leaves it where it is. Everything shows in Tâches and can be undone.
+
 **Gérer les fichiers**:
 The Member Permission to move, rename and trash files inside the Member's granted Library Folders. Emptying the Corbeille, Disques, settings and replacing a film stay with the Owner.
 

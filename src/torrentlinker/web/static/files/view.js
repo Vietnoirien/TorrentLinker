@@ -292,7 +292,13 @@ function orgHTML() {
         <td class="cur">${esc(r.current)}</td>
         <td class="new">${r.same ? `<small>${say("Already matches the template", "Déjà conforme au modèle")}</small>` : r.error ? `<span style="color:var(--danger)">${esc(r.error)}</span>` : `<b>${esc(r.proposed)}</b>${r.more ? esc(` … (${r.more + 1} ${say("episodes", "épisodes")})`) : ""}`}</td>
         <td>${seedCell(r)}</td></tr>`).join("") || `<tr><td colspan="4" class="empty">${say("Nothing to tidy in this folder.", "Rien à ranger dans ce dossier.")}</td></tr>`}</tbody></table></div></section>
-    <div class="grid2">${card.templates.map((t) => tplCard(card, t)).join("")}</div>`;
+    <div class="grid2">${card.templates.map((t) => tplCard(card, t)).join("")}</div><div style="height:14px"></div>${autoHTML()}`;
+}
+// "Ranger automatiquement": per Download Folder, off by default.
+function autoHTML() {
+  return `<div class="card"><h3>${say("Tidy automatically", "Ranger automatiquement")}</h3><p class="muted">${say("Per Download Folder. Off by default: nothing is tidied unless you ask.", "Par Dossier de téléchargement. Désactivé par défaut : rien n'est rangé sans que vous l'ayez demandé.")}</p>
+    ${S.org.auto.map((a) => `<div class="sect"><div class="switch" role="switch" tabindex="0" data-k="auto" data-f="${esc(a.folder)}" aria-checked="${a.on}"><span class="sw"></span><span><b>${esc(a.folder)}</b>
+      <small>${a.on ? say("When a download finishes, the release is renamed with its Library Folder's template, then <b>moved where the placement rule picks</b>, still sharing: the client follows it. Everything is in Tasks and can be undone.", "À la fin d'un téléchargement, la version est renommée avec le modèle de sa bibliothèque puis <b>déplacée vers l'endroit que choisit la règle de placement</b>, sans cesser de partager : le client la suit. Tout est dans Tâches et annulable.") : say("Off: finished downloads stay where they are.", "Désactivé : les téléchargements terminés restent où ils sont.")}</small></span></div></div>`).join("") || `<p class="muted">${say("No Download Folder is configured.", "Aucun dossier de téléchargement n'est configuré.")}</p>`}</div>`;
 }
 
 const TABS = [["explorer", "Explorer", "Explorateur"], ["disks", "Disks", "Disques"], ["organisation", "Organisation", "Organisation"], ["trash", "Trash", "Corbeille"], ["tasks", "Tasks", "Tâches"]];
@@ -346,6 +352,10 @@ document.addEventListener("click", async (e) => {
   if (t.dataset.k === "reb") { S.rebPick.has(t.dataset.p) ? S.rebPick.delete(t.dataset.p) : S.rebPick.add(t.dataset.p); return render(); }
   if (t.dataset.k === "rebgo") {
     try { const r = await api("rebalance/apply", { paths: [...S.rebPick] }); TLToast.show(say(`${r.queued} film(s) queued: follow them in Tasks.`, `${r.queued} film(s) lancé(s) : suivez-les dans Tâches.`)); S.rebPick = null; S.tab = "tasks"; render(); } catch (x) { fail(x); }
+    return load();
+  }
+  if (t.dataset.k === "auto") {
+    try { await api("organisation/auto", { folder: t.dataset.f, on: t.getAttribute("aria-checked") !== "true" }); } catch (x) { fail(x); }
     return load();
   }
   if (t.dataset.k === "orgall" || t.dataset.k === "orgnone") { const card = orgCard(); S.orgOff = new Set(t.dataset.k === "orgall" ? [] : card.rows.map((r) => rowKey(card, r))); return render(); }

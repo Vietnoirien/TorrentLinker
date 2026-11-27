@@ -23,14 +23,29 @@ class Apply(BaseModel):
     keys: list[str] = Field(min_length=1, max_length=2000)
 
 
+class AutoTidyFolder(BaseModel):
+    folder: str = Field(max_length=4096)
+    on: bool
+
+
 def organisation_routes(
-    app: FastAPI, storage: FileStorage, organisation: Organisation, default_client
+    app: FastAPI,
+    storage: FileStorage,
+    organisation: Organisation,
+    default_client,
+    download_folders=lambda: [],
+    auto_tidy=None,
 ) -> None:
     @app.get("/api/files/organisation")
     def proposals(client_id: str = "") -> dict[str, Any]:
         return {
             "tokens": list(TOKENS), "defaults": DEFAULTS,
             "folders": organisation.folders(client_id or default_client()),
+            "auto": [
+                {"folder": str(f), "on": storage.auto_tidy().get(str(f), False)}
+                for f in download_folders()
+            ],
+            "tidied": auto_tidy.results() if auto_tidy else [],
         }  # fmt: skip
 
     @app.post("/api/files/organisation/template")
@@ -41,6 +56,13 @@ def organisation_routes(
         if body.folder not in known:
             raise HTTPException(404, "This is not a Library Folder.")
         storage.set_template(body.folder, body.kind, body.template)
+        return {"ok": True}
+
+    @app.post("/api/files/organisation/auto")
+    def auto(body: AutoTidyFolder) -> dict[str, Any]:
+        if body.folder not in {str(f) for f in download_folders()}:
+            raise HTTPException(404, "This is not a Download Folder.")
+        storage.set_auto_tidy(body.folder, body.on)
         return {"ok": True}
 
     @app.post("/api/files/organisation/apply", status_code=202)

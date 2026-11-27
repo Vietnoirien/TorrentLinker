@@ -129,3 +129,38 @@ def test_a_native_client_renames_inside_the_torrent(tmp_path: Path):
 def test_a_client_that_cannot_rename_inside_a_torrent_needs_a_link_folder(tmp_path: Path):
     [row] = seeded(tmp_path, False).folders("c")[0]["rows"]
     assert row["needs_link"] and not row["seed"]["native"]
+
+
+def test_the_routes_are_the_owners_and_auto_tidy_is_off_by_default(tmp_path: Path):
+    from fastapi.testclient import TestClient
+
+    from tests.test_web_jobs import login
+    from torrentlinker.web.app import create_app
+
+    library = tmp_path / "lib"
+    library.mkdir()
+    app = create_app(
+        tmp_path / "app",
+        password="test-password-long",
+        roots=(library,),
+        monitor_verifications=False,
+    )
+    with TestClient(app) as browser:
+        assert browser.get("/api/files/organisation").status_code == 401
+        login(browser)
+        found = browser.get("/api/files/organisation").json()
+        assert found["folders"] == [] and found["auto"] == [] and "{titre}" in found["tokens"]
+        assert (
+            browser.post(
+                "/api/files/organisation/auto", json={"folder": "/nowhere", "on": True}
+            ).status_code
+            == 404
+        )
+        assert (
+            browser.post(
+                "/api/files/organisation/template",
+                json={"folder": "/nowhere", "kind": "film", "template": "{titre}"},
+            ).status_code
+            == 404
+        )
+        assert browser.get("/api/files/rebalance").json()["state"] == "balanced"
