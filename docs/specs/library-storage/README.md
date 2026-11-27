@@ -96,3 +96,13 @@ The real Web UI runs on a fake torrent client, with a 14-film library, generated
 | Liens | `links.js` | In the real Paramètres › Connexions › Clients form, next to the real Link Folder field, a marked card explains what the Dossier de liens does for the selected client and whether it requires it. |
 
 Data for the new screens is served by `serve.py` as `storage.json` (and `poster-N.png`, the same posters as Médias); the Fichiers page is `fichiers.html`, built on the app's `panel/base.css` and toast.
+
+## Organisation, reworked (2026-11-27, after first use)
+The first version picked a folder and renamed in place; the owner could not move the library to the new disk with it, and mixing Download Folders into its picker was confusing. Decisions:
+- Organisation is where **folder roles** and **links** are set. A folder (Library or Download Folder, or any folder under the storage roots) is either an **organised library** (the app names and places everything in it: e.g. /library/Films, /library/Séries), a **provenance** (an old library folder or a download folder whose content goes to an organised library), or left alone.
+- A **link** joins a provenance to the organised libraries. It routes by kind: films to the films library, series and episodes to the series library, anime to an anime library when there is one.
+- Each link has **Ranger** (move and rename what is there now, after a summary: items, size, time, every torrent keeps seeding) and an **Auto** toggle (each new arrival too; on by default for a download folder, off for an old library folder).
+- Moving and renaming to the Jellyfin layout happen in one pass; seeded files through their client (ADR-0029).
+- When a provenance that was a Library Folder is emptied, it is replaced by its organised library in Paramètres, and Member grants follow.
+- Items with no recognised title stay where they are, listed "À vérifier": the owner fixes the title or keeps it as is, then ranges it.
+- Design: modern, not a form. Previews compare two layouts before any code.
