@@ -3,7 +3,7 @@
    owner" instead of Download on a tracker film, "Make a wish", and a bell in the Media menu
    whose drawer lists each Request and Wish with its state and the approver's note.
    The server checks the Permissions and caps again; hiding is only presentation. */
-const requests = {rows: [], household: [], quota: null, unread: 0, loaded: false, timer: 0, sequence: 0};
+const requests = {rows: [], following: [], household: [], quota: null, unread: 0, loaded: false, timer: 0, sequence: 0};
 const requestPermission = name => state.setup?.owner === false && (state.setup.permissions || []).includes(name);
 // An account holder (the Owner too, on the Web) also answers the asks of their Viewers.
 const requestsHolder = () => !!state.setup?.web && !state.setup.viewer && (state.setup.owner || requestPermission("request"));
@@ -47,7 +47,7 @@ async function requestsLoad(result) {
   if (sequence !== requests.sequence) return; // a later answer is on its way
   const before = new Map(requests.rows.map(row => [row.id, row.state]));
   const fresh = found.requests.filter(row => row.unread && requests.loaded && before.get(row.id) !== row.state);
-  Object.assign(requests, {rows: found.requests, household: found.household || [], quota: found.quota, unread: found.unread, loaded: true});
+  Object.assign(requests, {following: found.following || [], rows: found.requests, household: found.household || [], quota: found.quota, unread: found.unread, loaded: true});
   // A new answer shows a short notice, then waits in the drawer until it is seen.
   for (const row of fresh) toast(`${row.title} · ${requestState(row)[0]}${row.answer ? ` · « ${row.answer} »` : ""}`);
   requestsBell();

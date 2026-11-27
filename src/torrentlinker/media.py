@@ -150,6 +150,8 @@ class MediaLibrary(TrackerFilms, TrackerSeries):
         self.scanning: set[str] = set()
         # Old releases a replaced film leaves while they finish seeding: not listed (#204).
         self.hidden_paths: Callable[[str], list[Path]] = lambda client_id: []
+        # Requests for the new season packs of the series Members follow (#217).
+        self.series_followed: Callable[[str], Any] = lambda client_id: 0
         # The rows one listing builds, for the next listing of the same library to reuse.
         # A Media page asks for a dozen listings of the same items (home_rows), and each
         # one used to build a row for every record before filtering down to a screenful.
@@ -719,6 +721,7 @@ class MediaLibrary(TrackerFilms, TrackerSeries):
             self.tracker_refresh(client_id, setup, stop)
             self.films_refresh(client_id, setup, stop)
             self.series_refresh(client_id, setup, stop)
+            self.series_followed(client_id)
         self.library_facts(client_id)
         self.prefetch_posters(client_id, stop, progress)
         if stop.is_set():

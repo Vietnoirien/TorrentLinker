@@ -204,6 +204,12 @@ _Avoid_: Tracker release (one torrent of a Tracker Film), suggestion
 A series with at least one seeded release on a Tracker, identified by its TMDb TV id when known and otherwise by its title and year; it carries a poster, synopsis, genres, Age Rating, and its seasons and episodes as TMDb lists them. Its releases, which Members never see, are season packs, Intégrales and episodes. Médias lists it in the Séries tab (anime series in the Anime tab) with the seasons the Library already has marked; a series fully in the Library is hidden from Members, and a season the Trackers hold only as episodes cannot be asked for.
 _Avoid_: Show, tracker release (one torrent)
 
+**Season Request**:
+A Member's Request for one season of a Tracker Series, never for an episode and never for a season the Trackers hold only as episodes. Asking for several seasons makes one per season; Members asking for the same season share it, and it is charged as a Tracker Film is. The Approver chooses among the season's packs and Intégrales; the Intégrale is pre-selected only when it covers the asked seasons, scores better than their packs and those seasons make up at least half of it.
+
+**Suivre la série**:
+A Member's option, when asking for a series still airing: each new complete season pack on a Tracker creates a pending Season Request for the Approver and a notice for the Member. Never an automatic download; the Member can stop following.
+
 **Season Pack**:
 A release of one whole season of a Tracker Series, such as `S01`.
 

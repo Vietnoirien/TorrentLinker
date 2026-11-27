@@ -683,6 +683,10 @@ def create_app(
         from torrentlinker.household_asks import HouseholdAsks
 
         household_asks = app.state.household_asks = HouseholdAsks(accounts, requests)
+        from torrentlinker.series_follows import SeriesFollows
+
+        follows = app.state.series_follows = SeriesFollows(requests, agent_service.media)
+        agent_service.media.series_followed = follows.tick
         request_routes(app, requests, agent_service.media, household_asks)
         from torrentlinker.web.member_workspace import member_workspace_routes
 

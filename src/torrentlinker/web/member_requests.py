@@ -25,6 +25,12 @@ class TrackerRequest(BaseModel):
 class SeriesRequest(BaseModel):
     series: str = Field(pattern=r"^(tv|title|release)-[0-9a-f]{1,40}$")
     seasons: list[int] = Field(max_length=100)
+    follow: bool = False
+
+
+class Follow(BaseModel):
+    series: str = Field(pattern=r"^(tv|title|release)-[0-9a-f]{1,40}$")
+    on: bool
 
 
 class Wish(BaseModel):
@@ -59,6 +65,7 @@ def request_routes(app: FastAPI, requests: Requests, media, household_asks) -> N
             # Household Asks wait here too: a Viewer's ask the holder has not yet opened is new.
             "household": household_asks.household(account),
             "unread": sum(1 for r in rows if r["unread"]) + household_asks.unseen(account),
+            "following": app.state.series_follows.following(account),
         }
 
     @app.get("/api/requests")
@@ -105,7 +112,10 @@ def request_routes(app: FastAPI, requests: Requests, media, household_asks) -> N
             raise HTTPException(403, "This is not allowed for your account.")
         asked = view.quote(media, client, body.series, body.seasons, found)
         if not asked["seasons"]:
-            raise HTTPException(409, "None of these seasons can be asked for.")
+            if not body.follow:
+                raise HTTPException(409, "None of these seasons can be asked for.")
+            app.state.series_follows.follow(found.account, body.series)
+            return {"requests": []}
         each = -(-asked["size"] // len(asked["seasons"]))  # an Intégrale's size is split
         entry = next(e for e in media.series_index() if e["id"] == body.series)
         packs = view.preselect(
@@ -132,7 +142,27 @@ def request_routes(app: FastAPI, requests: Requests, media, household_asks) -> N
                 failed = str(error)
         if not made:
             raise HTTPException(409, failed)
+        if body.follow:
+            app.state.series_follows.follow(found.account, body.series)
         return {"requests": made}
+
+    @app.post("/api/requests/series/follow")
+    @needs(Permission.REQUEST)
+    def follow_series(body: Follow, request: Request) -> dict:
+        """Suivre la série, or stop following it: nothing downloads, a pending Request waits."""
+        account = actor(request).account
+        follows = app.state.series_follows
+        if body.on:
+            from torrentlinker import tracker_series_view as view
+
+            try:
+                view.detail(media, approval.client_id, body.series, actor(request))
+            except KeyError:
+                raise HTTPException(404, "This series is not on the tracker.") from None
+            follows.follow(account, body.series)
+        else:
+            follows.unfollow(account, body.series)
+        return {"following": follows.following(account)}
 
     # Household Asks (decision 24): a Viewer asks its account holder, who answers.
 
