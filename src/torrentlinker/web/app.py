@@ -414,8 +414,23 @@ def create_app(
                 if shutdown.wait(86400):
                     return
 
+        def replace_loop() -> None:
+            """Follow the better releases being downloaded to replace library films."""
+            while not shutdown.wait(60):
+                active = {
+                    r["client"]
+                    for r in replacements.runs()
+                    if r["state"] in {"downloading", "seeding-out"}
+                }
+                for client_id in active:
+                    try:
+                        replacements.tick(for_client(client_id).setup.client(), client_id)
+                    except Exception:  # noqa: BLE001 - tried again a minute later
+                        logger.warning("A replacement could not be followed.", exc_info=True)
+
         if monitor_verifications:
             threading.Thread(target=trash_loop, daemon=True, name="trash-purge").start()
+            threading.Thread(target=replace_loop, daemon=True, name="replacements").start()
         if monitor_verifications:
             threading.Thread(target=catalogue_loop, daemon=True, name="catalogue-refresh").start()
             threading.Thread(
@@ -456,6 +471,11 @@ def create_app(
     file_storage = FileStorage(directory, service.roots)
     file_storage.reconcile()
     file_routes(app, file_storage)
+    from torrentlinker.library_replace import Replacements
+    from torrentlinker.web.replace import replace_routes
+
+    replacements = Replacements(directory, file_storage)
+    replace_routes(app, replacements, lambda client_id: for_client(client_id).setup.client())
 
     def crash_response(request: Request, error: Exception) -> dict[str, Any]:
         return {"detail": error_message(error), "kind": type(error).__name__}
