@@ -238,3 +238,11 @@ def test_series_view_shows_one_card_per_series_and_films_stay_films(tmp_path):
         "view": "series",
         "anime": False,
     }
+    # The home's rows mix films and episodes: the series is one card there too.
+    home = {r["key"]: r for r in media.home_rows("default")["rows"]}
+    for key in ("recent", "unwatched"):
+        titles = [r["title"] for r in home[key]["rows"]]
+        assert sorted(titles) == ["Show", "Star Wars Episode 4 – A New Hope", "The Revenant"]
+        assert home[key]["total"] == 3
+    show = next(r for r in home["recent"]["rows"] if r["title"] == "Show")
+    assert show["series_card"] and show["episode_count"] == 3

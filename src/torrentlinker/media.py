@@ -1345,6 +1345,10 @@ class MediaLibrary(TrackerFilms):
             rows.sort(key=rating_of, reverse=True)
         if view == "series":
             rows = self._series_cards(rows)
+        elif view not in {"continue", "films", "tracks", "albums", "artists"}:
+            # What is new, unwatched or rated mixes films and episodes: a series is one card
+            # there too, where its first episode came, not a row of the same poster.
+            rows = self._fold_series(rows)
         releases_by_content = {}
         for row in rows:
             releases_by_content.setdefault(row["content_id"], []).append(row["id"])
@@ -1519,6 +1523,24 @@ class MediaLibrary(TrackerFilms):
                 card["description"] = row["description"]
         order = {(row["series"], bool(row.get("oav"))): i for i, row in enumerate(rows)}
         return sorted(cards.values(), key=lambda card: order[card["series"], card["oav"]])
+
+    @classmethod
+    def _fold_series(cls, rows):
+        """Films as they are; each series' episodes as one card, at its first episode's place."""
+        cards = {
+            (card["series"], bool(card.get("oav"))): card
+            for card in cls._series_cards([r for r in rows if r.get("series")])
+        }
+        folded, placed = [], set()
+        for row in rows:
+            if not row.get("series"):
+                folded.append(row)
+                continue
+            key = (row["series"], bool(row.get("oav")))
+            if key not in placed:
+                placed.add(key)
+                folded.append(cards[key])
+        return folded
 
     def home_rows(
         self,
