@@ -231,6 +231,8 @@ class Tasks:
         same_disk = same_device(source, target.parent)
         if kind == "rename" or (kind == "move" and same_disk):
             os.rename(source, target)
+            if kind == "rename":
+                self._prune(source.parent, target)
             if target.is_dir():
                 self.followed(source, target)
             item.update(verified=target.exists() and not source.exists(), final=str(target),
@@ -287,6 +289,7 @@ class Tasks:
             raise StorageError("A seeded file is renamed inside its torrent's folder.")
         old, new = source.relative_to(save).as_posix(), target.relative_to(save).as_posix()
         rename_in_torrent(client, info["hash"], old, new)
+        self._prune(source.parent, target)
         item.update(
             verified=target.exists() and not source.exists(), final=str(target),
             undo={"client": {"id": info["client_id"], "hash": info["hash"],
@@ -325,6 +328,17 @@ class Tasks:
             self._copy_then_repoint(source, target, info, client, item, cancelled)
         if not item["verified"]:
             raise StorageError(f"{info['client']} did not move {source.name}.")
+
+    def _prune(self, folder: Path, kept: Path) -> None:
+        """A rename into a new folder leaves the old one empty: that empty folder goes."""
+        while (
+            folder not in self.storage.roots
+            and not kept.is_relative_to(folder)
+            and folder.is_dir()
+            and not any(folder.iterdir())
+        ):
+            folder.rmdir()
+            folder = folder.parent
 
     @staticmethod
     def _recheck(client, hash: str, source: Path, target: Path, save: Path) -> None:

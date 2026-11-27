@@ -556,6 +556,21 @@ def create_app(
             client_id=target,
         )
 
+    from torrentlinker.organisation import Organisation
+    from torrentlinker.web.organisation import organisation_routes
+
+    organisation_routes(
+        app,
+        file_storage,
+        Organisation(
+            file_storage,
+            agent_service.media,
+            lambda: service.settings.library_folders,
+            seeds_of_path,
+            lambda client_id: for_client(client_id).setup.client(),
+        ),
+        lambda: service.settings.default_client_id,
+    )
     replacements.on_complete = replaced
     agent_service.media.hidden_paths = replacements.hidden_paths
     agent_service.torrents_workspace.ending = replacements.ending

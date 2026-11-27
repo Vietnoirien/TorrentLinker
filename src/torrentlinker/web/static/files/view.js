@@ -5,7 +5,7 @@ const fr = () => (parent.document.documentElement.lang || "fr") === "fr";
 const say = (en, french) => (fr() ? french : en);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const DAY = 86400;
-const S = { owner: true, tab: "explorer", panes: [{ path: "", entries: [], sel: new Set() }, { path: "", entries: [], sel: new Set() }], active: 0, roots: [], queue: [], tab0: "", disks: null, trash: null, tasks: [], filter: "all", busy: false, sim: 4.2 };
+const S = { orgOff: new Set(), org: null, orgScope: "", owner: true, tab: "explorer", panes: [{ path: "", entries: [], sel: new Set() }, { path: "", entries: [], sel: new Set() }], active: 0, roots: [], queue: [], tab0: "", disks: null, trash: null, tasks: [], filter: "all", busy: false, sim: 4.2 };
 
 // The panel has no network of its own: the host forwards each request to /api/files/.
 const bridge = window.TLPanel.connect("files", { asynchronous: true });
@@ -235,12 +235,50 @@ function tasksHTML() {
     }).join("") || `<div class="empty">${say("No task for this filter.", "Aucune tâche pour ce filtre.")}</div>`}</div>`;
 }
 
-const TABS = [["explorer", "Explorer", "Explorateur"], ["disks", "Disks", "Disques"], ["trash", "Trash", "Corbeille"], ["tasks", "Tasks", "Tâches"]];
+// ---- Organisation ---------------------------------------------------------------------------
+const SAMPLE = { film: { titre: "Dune", année: "2021", tmdbid: "438631" }, series: { titre: "Severance", année: "2022", saison: "01", épisode: "03" } };
+const exampleOf = (tpl, kind) => tpl.replace(/\{([^}]*)\}/g, (_, t) => SAMPLE[kind][t] ?? "").split("/").join(" / ") + ".mkv";
+const rowKey = (card, r) => `${card.path}|${r.key}`;
+const doable = (r) => r.maps.length && !r.needs_link && !r.problem && !r.error;
+function orgCard() { return S.org?.folders.find((f) => f.path === S.orgScope) || S.org?.folders[0]; }
+function tplCard(card, t) {
+  const kind = t.kind === "film" ? say("Films", "Films") : say("Series", "Séries");
+  return `<div class="card tpl"><div class="row between"><h3>${say("Naming template", "Modèle de nommage")} · ${kind}</h3><span class="badge">${esc(card.name)}</span></div>
+    <small>${say("A “/” separates one folder from the next; the file name is the last level and the extension is added.", "Un « / » sépare un dossier du suivant, le nom du fichier est le dernier niveau, l'extension est ajoutée.")}</small>
+    <input data-k="tpl" data-f="${esc(card.path)}" data-kind="${t.kind}" value="${esc(t.template)}" spellcheck="false" aria-label="${say("Template", "Modèle")} ${kind}">
+    <div class="tokens">${S.org.tokens.map((x) => `<button data-k="token" data-f="${esc(card.path)}" data-kind="${t.kind}" data-t="${esc(x)}">${esc(x)}</button>`).join("")}</div>
+    <div class="tplout" data-f="${esc(card.path)}" data-kind="${t.kind}">${t.error ? `<div class="err">${esc(t.error)}</div>` : `<div class="example"><small>${say("Example", "Exemple")}</small>${esc(t.example)}</div>`}</div>
+    <div class="row"><button data-k="tplreset" data-f="${esc(card.path)}" data-kind="${t.kind}" ${t.template === t.default ? "disabled" : ""}>${say("Restore the Jellyfin template", "Rétablir le modèle Jellyfin")}</button></div></div>`;
+}
+function orgHTML() {
+  const o = S.org, card = orgCard();
+  if (!o) return `<div class="empty">…</div>`;
+  if (!card) return `<div class="empty">${say("No Library Folder is configured.", "Aucun dossier de bibliothèque n'est configuré.")}</div>`;
+  const rows = card.rows, chosen = rows.filter((r) => doable(r) && !S.orgOff.has(rowKey(card, r))), links = rows.filter((r) => r.needs_link).length;
+  const seedCell = (r) => !r.seed ? `<small>${say("No torrent", "Aucun torrent")}</small>`
+    : r.needs_link ? `<span class="badge warn">${say("needs a Link Folder", "nécessite un Dossier de liens")}</span><small>${esc(r.seed.client)}</small>`
+    : r.problem ? `<span class="badge warn">${esc(r.problem)}</span><small>${esc(r.seed.client)}</small>`
+    : `<span class="badge ok">${say("renamed in the client", "renommé dans le client")}</span><small>${esc(r.seed.client)}</small>`;
+  return `<p class="muted hint">${say("Preview of the renames to the Jellyfin layout. Nothing is applied until you confirm rows. A shared torrent is renamed <b>in its client</b>.", "Aperçu des renommages au format Jellyfin. Rien n'est appliqué tant que vous ne confirmez pas des lignes. Un torrent en partage est renommé <b>dans son client</b>.")}</p>
+    <section class="sect"><div class="row"><h3>${say("Proposed renames", "Renommages proposés")}</h3>
+      <label class="row">${say("Folder", "Dossier")} <select data-k="orgscope">${o.folders.map((f) => `<option value="${esc(f.path)}" ${f.path === card.path ? "selected" : ""}>${esc(f.name)}</option>`).join("")}</select></label>
+      <span class="grow"></span><button data-k="orgall">${say("Check all", "Tout cocher")}</button><button data-k="orgnone">${say("Uncheck all", "Tout décocher")}</button>
+      <button class="primary" data-k="orgapply" ${chosen.length ? "" : "disabled"}>${say("Apply the selection", "Appliquer la sélection")} (${chosen.length})</button></div>
+      ${links ? `<div class="note warn">${say(`${links} row(s) need a Link Folder: the client cannot rename them without changing their layout. Set it in Settings, on the client's tab.`, `${links} ligne(s) nécessitent un Dossier de liens : le client ne sait pas les renommer sans changer leur disposition. Configurez-le dans Paramètres, onglet du client.`)}</div>` : ""}
+      <div class="panel"><table class="list diff"><thead><tr><th></th><th>${say("Current", "Actuel")}</th><th>${say("Proposed (Jellyfin)", "Proposé (Jellyfin)")}</th><th>${say("Sharing", "Partage")}</th></tr></thead><tbody>
+      ${rows.map((r) => `<tr class="${r.same ? "unchanged" : ""} ${r.needs_link ? "blocked" : ""}"><td><input type="checkbox" data-k="orgrow" data-r="${esc(rowKey(card, r))}" ${doable(r) && !S.orgOff.has(rowKey(card, r)) ? "checked" : ""} ${doable(r) ? "" : "disabled"} aria-label="${esc(r.title)}"></td>
+        <td class="cur">${esc(r.current)}</td>
+        <td class="new">${r.same ? `<small>${say("Already matches the template", "Déjà conforme au modèle")}</small>` : r.error ? `<span style="color:var(--danger)">${esc(r.error)}</span>` : `<b>${esc(r.proposed)}</b>${r.more ? esc(` … (${r.more + 1} ${say("episodes", "épisodes")})`) : ""}`}</td>
+        <td>${seedCell(r)}</td></tr>`).join("") || `<tr><td colspan="4" class="empty">${say("Nothing to tidy in this folder.", "Rien à ranger dans ce dossier.")}</td></tr>`}</tbody></table></div></section>
+    <div class="grid2">${card.templates.map((t) => tplCard(card, t)).join("")}</div>`;
+}
+
+const TABS = [["explorer", "Explorer", "Explorateur"], ["disks", "Disks", "Disques"], ["organisation", "Organisation", "Organisation"], ["trash", "Trash", "Corbeille"], ["tasks", "Tasks", "Tâches"]];
 // A Member with "Gérer les fichiers" gets Explorateur, Corbeille and Tâches, never Disques.
-const tabsFor = () => TABS.filter(([id]) => S.owner || id !== "disks");
+const tabsFor = () => TABS.filter(([id]) => S.owner || !["disks", "organisation"].includes(id));
 function render() {
   const tabs = tabsFor().map(([id, en, french]) => `<button data-tab="${id}" class="${S.tab === id ? "selected" : ""}">${say(en, french)}${id === "trash" && S.trash ? `<span class="badge count">${S.trash.disks.reduce((a, d) => a + d.items.length, 0)}</span>` : ""}</button>`).join("");
-  $("app").innerHTML = `<nav class="tabs" role="tablist">${tabs}</nav>${S.tab === "trash" ? trashHTML() : S.tab === "disks" ? disksHTML() : S.tab === "explorer" ? explorerHTML() : tasksHTML()}`;
+  $("app").innerHTML = `<nav class="tabs" role="tablist">${tabs}</nav>${S.tab === "trash" ? trashHTML() : S.tab === "disks" ? disksHTML() : S.tab === "organisation" ? orgHTML() : S.tab === "explorer" ? explorerHTML() : tasksHTML()}`;
 }
 async function load() {
   try {
@@ -249,10 +287,11 @@ async function load() {
       S.roots = r.roots;
       for (const [i, pane] of S.panes.entries()) if (!pane.path && r.roots[i] && !pane.chosen) { pane.chosen = true; await openPane(i, r.roots[i]); }
     } else if (S.tab === "disks") { S.disks = await api("disks"); await place(); }
+    else if (S.tab === "organisation") { S.org = await api("organisation"); S.orgScope ||= S.org.folders[0]?.path; }
     else if (S.tab === "trash") { S.trash = await api("trash"); S.owner = S.trash.owner !== false; }
     else { S.tasks = (await api("journal")).operations; S.queue = (await api("tasks")).tasks; }
   } catch (e) { fail(e); }
-  if (!document.querySelector("dialog[open]")) render();
+  if (!document.querySelector("dialog[open]") && !document.activeElement?.closest?.(".tpl")) render();
 }
 
 function confirmEmpty(disk) {
@@ -278,6 +317,19 @@ document.addEventListener("click", async (e) => {
   if (t.dataset.f) return operate(t.dataset.f);
   if (t.dataset.cancel) { try { await api(`tasks/${t.dataset.cancel}/cancel`, {}); } catch (x) { fail(x); } return load(); }
   if (t.dataset.undoitem) { try { await api(`tasks/${t.dataset.undoitem}/undo/${t.dataset.n}`, {}); TLToast.show(say("Undone.", "Annulé.")); } catch (x) { fail(x); } return load(); }
+  if (t.dataset.k === "orgall" || t.dataset.k === "orgnone") { const card = orgCard(); S.orgOff = new Set(t.dataset.k === "orgall" ? [] : card.rows.map((r) => rowKey(card, r))); return render(); }
+  if (t.dataset.k === "orgrow") { S.orgOff.has(t.dataset.r) ? S.orgOff.delete(t.dataset.r) : S.orgOff.add(t.dataset.r); return render(); }
+  if (t.dataset.k === "orgapply") {
+    const card = orgCard(), keys = card.rows.filter((r) => doable(r) && !S.orgOff.has(rowKey(card, r))).map((r) => r.key);
+    try { const r = await api("organisation/apply", { folder: card.path, keys }); TLToast.show(say(`${r.queued} release(s) queued: follow them in Tasks.`, `${r.queued} version(s) lancée(s) : suivez-les dans Tâches.`)); } catch (x) { fail(x); }
+    return setTimeout(load, 800);
+  }
+  if (t.dataset.k === "token") {
+    const input = document.querySelector(`input[data-k="tpl"][data-f="${CSS.escape(t.dataset.f)}"][data-kind="${t.dataset.kind}"]`), a = input.selectionStart ?? input.value.length, b = input.selectionEnd ?? a;
+    input.value = input.value.slice(0, a) + t.dataset.t + input.value.slice(b);
+    input.focus(); input.dispatchEvent(new Event("input", { bubbles: true })); return;
+  }
+  if (t.dataset.k === "tplreset") { try { await api("organisation/template", { folder: t.dataset.f, kind: t.dataset.kind, template: "" }); } catch (x) { fail(x); } return load(); }
   if (t.dataset.k === "go") return openPane(S.active, t.dataset.p);
   if (t.dataset.k === "up") { S.active = Number(t.dataset.pane); return openPane(S.active, parentOf(S.panes[S.active].path)); }
   if (t.dataset.k === "row") {
@@ -312,7 +364,19 @@ document.addEventListener("keydown", (e) => {
   const f = { F2: "rename", F5: "copy", F6: "move", F7: "mkdir", Delete: "trash" }[e.key];
   if (f && (f === "mkdir" || S.panes[S.active].sel.size)) { e.preventDefault(); operate(f); }
 });
+// The example under a template follows what is typed; the template is saved when the field is left.
+document.addEventListener("input", (e) => {
+  if (e.target.dataset.k !== "tpl") return;
+  const out = document.querySelector(`.tplout[data-f="${CSS.escape(e.target.dataset.f)}"][data-kind="${e.target.dataset.kind}"]`);
+  const bad = (e.target.value.match(/\{[^}]*\}/g) || []).filter((x) => !S.org.tokens.includes(x));
+  out.innerHTML = bad.length ? `<div class="err">${say("Unknown token", "Jeton inconnu")} : ${esc(bad.join(", "))}</div>` : !e.target.value.includes("{titre}") ? `<div class="err">${say("The template must contain {titre}.", "Le modèle doit contenir {titre}.")}</div>` : `<div class="example"><small>${say("Example", "Exemple")}</small>${esc(exampleOf(e.target.value, e.target.dataset.kind))}</div>`;
+});
 document.addEventListener("change", async (e) => {
+  if (e.target.dataset.k === "orgscope") { S.orgScope = e.target.value; return render(); }
+  if (e.target.dataset.k === "tpl") {
+    try { await api("organisation/template", { folder: e.target.dataset.f, kind: e.target.dataset.kind, template: e.target.value }); TLToast.show(say("Template saved.", "Modèle enregistré.")); } catch (x) { fail(x); }
+    return load();
+  }
   if (e.target.dataset.k === "root") { S.active = Number(e.target.dataset.pane); if (e.target.value) await openPane(S.active, e.target.value); return; }
   if (e.target.dataset.k === "sim") { S.sim = Math.max(0.1, Number(e.target.value) || 4.2); await place(); render(); return; }
   if (e.target.dataset.k !== "ret") return;

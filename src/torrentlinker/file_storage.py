@@ -116,6 +116,29 @@ class FileStorage:
             current = {}
         self._settings.write_text(json.dumps({**current, "scrutiny": url}), encoding="utf-8")
 
+    def templates(self) -> dict[str, dict[str, str]]:
+        """The Organisation naming templates, per Library Folder: {folder: {film|series: text}}."""
+        try:
+            found = json.loads(self._settings.read_text(encoding="utf-8")).get("templates", {})
+        except (OSError, ValueError, TypeError):
+            return {}
+        return found if isinstance(found, dict) else {}
+
+    def set_template(self, folder: str, kind: str, template: str) -> None:
+        """Save one template; an empty text brings back the Jellyfin default."""
+        try:
+            current = json.loads(self._settings.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            current = {}
+        templates = current.get("templates", {})
+        mine = {**templates.get(folder, {})}
+        if template:
+            mine[kind] = template
+        else:
+            mine.pop(kind, None)
+        templates[folder] = mine
+        self._settings.write_text(json.dumps({**current, "templates": templates}), encoding="utf-8")
+
     # Disks ---------------------------------------------------------------------------
 
     def disks(self) -> list[Disk]:

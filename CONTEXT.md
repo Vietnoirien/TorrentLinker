@@ -237,6 +237,9 @@ _Avoid_: Job (the app's background jobs), transfer (between Torrent Clients)
 The sidebar page for files under the storage roots, with the tabs Explorateur, Disques, Organisation, Corbeille and Tâches. The download queue is no longer a page of its own but a tab of Recherche. A file a torrent seeds moves, is renamed and is trashed through its Torrent Client: the torrent keeps seeding at its new place (a copy across disks is verified first), and trashing it removes the torrent without its data.
 _Avoid_: File manager, Files page
 
+**Organisation**:
+The Fichiers tab that renames the library to a Jellyfin layout (`Titre (Année) [tmdbid-N]/Titre (Année) [tmdbid-N].ext` for a film, `Série (Année)/Saison 01/Série S01E01.ext` for a series) from a naming template per Library Folder and kind, editable with tokens and a live example. It shows a current → proposed diff; only the rows the Owner confirms are applied, as Tâches. A seeded release is renamed inside its Torrent Client; a row its client cannot follow is flagged "nécessite un Dossier de liens" and skipped.
+
 **Gérer les fichiers**:
 The Member Permission to move, rename and trash files inside the Member's granted Library Folders. Emptying the Corbeille, Disques, settings and replacing a film stay with the Owner.
 
