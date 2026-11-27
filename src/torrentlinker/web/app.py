@@ -482,8 +482,31 @@ def create_app(
 
         follow_move(service, accounts, old, new)
 
+    def annotate_entries(folder: Path, entries: list[dict[str, Any]]) -> None:
+        """Explorateur's rows know their film and the torrent that seeds them."""
+        from torrentlinker.file_annotations import annotate, media_films, seeds_of
+
+        names = {p.id: p.name for p in service.settings.client_profiles if p.enabled}
+        torrents = [
+            (client_id, name, torrent)
+            for client_id, name in names.items()
+            for torrent in for_client(client_id).observed
+        ]
+        client_id = service.settings.default_client_id
+        annotate(
+            folder,
+            entries,
+            media_films(agent_service.media, client_id, folder),
+            seeds_of(torrents),
+        )
+
     file_routes(
-        app, file_storage, storage_folders, notice=lambda *a: owner_notice(*a), followed=follow
+        app,
+        file_storage,
+        storage_folders,
+        notice=lambda *a: owner_notice(*a),
+        followed=follow,
+        annotate=lambda folder, entries: annotate_entries(folder, entries),
     )
     from torrentlinker.library_replace import Replacements
     from torrentlinker.web.replace import replace_routes

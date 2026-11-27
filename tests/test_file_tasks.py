@@ -191,3 +191,42 @@ def test_the_routes_browse_queue_and_undo(tmp_path: Path):
         assert browser.post(f"/api/files/tasks/{task['id']}/undo/0").status_code == 200
         assert (root / "Films" / "Dune.mkv").exists()
         assert browser.post(f"/api/files/tasks/{task['id']}/undo/0").status_code == 409
+
+
+def test_entries_know_the_torrent_seeding_them_and_the_film_they_hold(tmp_path: Path):
+    from torrentlinker.domain import Torrent
+    from torrentlinker.file_annotations import annotate, seeds_of
+
+    folder = tmp_path / "Films"
+    torrent = Torrent(
+        "A" * 40, "Dune", folder, files={"Dune/Dune.mkv": 5, "Dune/Dune.nfo": 1}, ratio=1.234,
+        state="uploading",
+    )  # fmt: skip
+    entries = [
+        {"name": "Dune", "dir": True},
+        {"name": "Alien.mkv", "dir": False},
+        {"name": "Others", "dir": True},
+    ]
+    films = [
+        {"id": "f1", "path": str(folder / "Dune" / "Dune.mkv"), "title": "Dune"},
+        {"id": "f2", "path": str(folder / "Alien.mkv"), "title": "Alien"},
+        {"id": "f3", "path": str(folder / "Others" / "a.mkv"), "title": "A"},
+        {"id": "f4", "path": str(folder / "Others" / "b.mkv"), "title": "B"},
+    ]
+    annotate(folder, entries, films, seeds_of([("default", "qBittorrent", torrent)]))
+    dune, alien, others = entries
+    assert dune["seed"]["client"] == "qBittorrent" and dune["seed"]["ratio"] == 1.23
+    assert dune["film"] == {"id": "f1", "title": "Dune"} and "seed" not in alien
+    assert alien["film"]["id"] == "f2"
+    assert "film" not in others and others["films"] == 2  # a folder of several films
+
+
+def test_a_copy_reports_what_is_left_of_it(world, monkeypatch):
+    root, storage, tasks = world
+    target = root / "Downloads" / "Dune.mkv"
+    item = {"state": "running"}
+    ticks = iter([0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
+    monkeypatch.setattr(file_tasks.time, "monotonic", lambda: next(ticks))
+    monkeypatch.setattr(file_tasks, "CHUNK", 1000)
+    tasks._copy(root / "Films" / "Dune.mkv", target, item, lambda: False)
+    assert target.exists() and item["progress"] == 1.0 and item["eta"] == 0

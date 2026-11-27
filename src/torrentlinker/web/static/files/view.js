@@ -127,6 +127,15 @@ async function place() {
 }
 
 // ---- Explorateur ----------------------------------------------------------------------------
+// A film Médias knows shows its poster, through the app's own artwork route.
+function icon(e) {
+  if (e.film) {
+    const url = new URL(`api/media/items/${encodeURIComponent(e.film.id)}/artwork?size=grid`, parent.document.baseURI);
+    return `<span class="ico"><img src="${esc(url.href)}" alt="" width="28" height="42" loading="lazy" onerror="this.parentNode.textContent='🎞'"></span>`;
+  }
+  return `<span class="ico small">${e.dir ? "📁" : "🎞"}</span>`;
+}
+const seedBadge = (e) => e.seed ? `<span class="badge ok seed" title="${say("A torrent uses these files", "Un torrent utilise ces fichiers")}">▲ ${esc(e.seed.client)} · ratio ${String(e.seed.ratio).replace(".", fr() ? "," : ".")}</span>` : "";
 const name = (p) => p.split("/").filter(Boolean).pop() || p;
 const parentOf = (p) => p.replace(/\/[^/]+\/?$/, "") || "/";
 const rootOf = (p) => S.roots.filter((r) => p === r || p.startsWith(r + "/")).sort((a, b) => b.length - a.length)[0] || "";
@@ -149,10 +158,10 @@ function crumbs(pane) {
 function paneHTML(i) {
   const pane = S.panes[i];
   const options = S.roots.map((r) => `<option value="${esc(r)}" ${rootOf(pane.path) === r ? "selected" : ""}>${esc(r)}</option>`).join("");
-  const rows = pane.entries.map((e) => `<tr data-k="row" data-pane="${i}" data-n="${esc(e.name)}" class="${pane.sel.has(e.name) ? "sel" : ""}"><td class="name"><span class="who"><span class="ico small">${e.dir ? "📁" : "🎞"}</span><b>${esc(e.name)}</b></span></td><td class="num">${e.dir ? "" : size(e.size)}</td><td class="date">${date(e.modified)}</td></tr>`).join("");
+  const rows = pane.entries.map((e) => `<tr draggable="true" data-k="row" data-pane="${i}" data-n="${esc(e.name)}" class="${pane.sel.has(e.name) ? "sel" : ""}"><td class="name"><span class="who">${icon(e)}<b>${esc(e.name)}</b></span>${e.film && e.film.title !== e.name ? `<small>${esc(e.film.title)}</small>` : ""}</td><td class="num">${e.dir ? "" : size(e.size)}</td><td class="date">${date(e.modified)}</td><td>${seedBadge(e)}</td></tr>`).join("");
   return `<section class="pane ${S.active === i ? "active" : ""}" data-pane="${i}"><div class="pane-head"><div class="row"><select data-k="root" data-pane="${i}"><option value="">${say("Choose a disk or folder…", "Choisir un disque ou un dossier…")}</option>${options}</select>
     <button data-k="up" data-pane="${i}" ${pane.path && pane.path !== rootOf(pane.path) ? "" : "disabled"}>↑</button></div><div class="crumbs">${crumbs(pane)}</div></div>
-    <div class="files">${pane.path ? `<table class="list"><thead><tr><th>${say("Name", "Nom")}</th><th class="num">${say("Size", "Taille")}</th><th class="date">${say("Modified", "Modifié")}</th></tr></thead><tbody>${rows || `<tr><td colspan="3" class="empty">${say("This folder is empty.", "Ce dossier est vide.")}</td></tr>`}</tbody></table>` : `<div class="empty">${say("Choose a disk or folder above.", "Choisissez un disque ou un dossier ci-dessus.")}</div>`}</div>
+    <div class="files">${pane.path ? `<table class="list"><thead><tr><th>${say("Name", "Nom")}</th><th class="num">${say("Size", "Taille")}</th><th class="date">${say("Modified", "Modifié")}</th><th></th></tr></thead><tbody>${rows || `<tr><td colspan="4" class="empty">${say("This folder is empty.", "Ce dossier est vide.")}</td></tr>`}</tbody></table>` : `<div class="empty">${say("Choose a disk or folder above.", "Choisissez un disque ou un dossier ci-dessus.")}</div>`}</div>
     <div class="pane-foot"><span>${pane.entries.length} ${say("items", "éléments")}</span><span>${pane.sel.size ? `${pane.sel.size} ${say("selected", "sélectionné(s)")}` : ""}</span></div></section>`;
 }
 function explorerHTML() {
@@ -169,8 +178,9 @@ function ask(html, onOk) {
   d.showModal();
   d.onclick = (e) => { if (e.target.id === "no") d.close(); if (e.target.id === "yes") { const values = { conflict: (d.querySelector("input[name=c]:checked") || {}).value, text: (d.querySelector("input[type=text]") || {}).value }; d.close(); onOk(values); } };
 }
-function operate(f) {
-  const from = picked(), here = S.panes[S.active], there = S.panes[1 - S.active];
+function operate(f, drop) {
+  // A drop names its own items and destination; otherwise the other pane is the destination.
+  const from = drop ? drop.from : picked(), here = S.panes[S.active], there = drop ? { path: drop.to } : S.panes[1 - S.active];
   const list = from.map((p) => `<div class="dlg-item"><span>${esc(name(p))}</span></div>`).join("");
   if (f === "mkdir") return ask(`<h2>${say("New folder", "Nouveau dossier")}</h2><input type="text" placeholder="${say("Name", "Nom")}" style="width:100%">`, ({ text }) => text && submit("mkdir", [{ from: `${here.path}/${text}` }]));
   if (f === "rename") return ask(`<h2>${say("Rename", "Renommer")}</h2><input type="text" value="${esc(name(from[0]))}" style="width:100%">`, ({ text }) => text && submit("rename", [{ from: from[0], to: `${here.path}/${text}` }]));
@@ -187,6 +197,7 @@ async function submit(kind, items, conflict = "skip") {
   setTimeout(async () => { await Promise.all([0, 1].map((i) => S.panes[i].path && openPane(i, S.panes[i].path))); }, 800);
 }
 
+const duration = (s) => (s < 90 ? `${Math.max(1, Math.round(s))} s` : s < 5400 ? `${Math.round(s / 60)} min` : `${(s / 3600).toFixed(1).replace(".", fr() ? "," : ".")} h`);
 const KINDS = {
   trash: ["Moved to the trash", "Mise à la corbeille"], restore: ["Restored", "Restauration"],
   purge: ["Daily purge of the trash", "Purge quotidienne de la corbeille"], empty: ["Trash emptied", "Corbeille vidée"],
@@ -196,7 +207,7 @@ function tasksHTML() {
   const rows = S.tasks.filter((o) => S.filter === "all" || (S.filter === "failed" ? o.state === "failed" : S.filter === "running" ? o.state === "pending" : o.state === "done"));
   const f = [["all", "All", "Toutes"], ["running", "Running", "En cours"], ["done", "Done", "Terminées"], ["failed", "Failed", "En échec"]];
   const queue = S.queue.map((t) => `<div class="card task ${t.state === "failed" ? "failed" : ""}"><div class="task-head"><b class="grow">${esc(t.kind)} · ${t.items.length}</b><span class="badge ${t.state === "done" ? "ok" : t.state === "failed" ? "bad" : ""}">${esc(t.state)}</span>${t.state === "running" || t.state === "queued" ? `<button data-cancel="${esc(t.id)}">${say("Cancel", "Annuler")}</button>` : ""}</div>
-    ${t.items.map((x, n) => `<div class="titem"><span class="nm">${esc(name(x.from))}${x.note ? `<small>${esc(x.note)}</small>` : ""}</span><div class="prog"><i style="width:${Math.round(x.progress * 100)}%"></i></div><span>${x.verified ? `<span class="ver">✓ ${say("verified", "vérifié")}</span>` : ""}${x.undo && x.state === "done" ? `<button data-undoitem="${esc(t.id)}" data-n="${n}">${say("Undo", "Annuler")}</button>` : ""}${x.state === "undone" ? say("undone", "annulé") : ""}</span>${x.reason ? `<div class="reason">${esc(x.reason)}</div>` : ""}</div>`).join("")}
+    ${t.items.map((x, n) => `<div class="titem"><span class="nm">${esc(name(x.from))}${x.note ? `<small>${esc(x.note)}</small>` : ""}</span><div class="prog"><i style="width:${Math.round(x.progress * 100)}%"></i></div>${x.eta > 0 && x.state === "running" ? `<small>${say("about", "reste ~")} ${duration(x.eta)}</small>` : ""}<span>${x.verified ? `<span class="ver">✓ ${say("verified", "vérifié")}</span>` : ""}${x.undo && x.state === "done" ? `<button data-undoitem="${esc(t.id)}" data-n="${n}">${say("Undo", "Annuler")}</button>` : ""}${x.state === "undone" ? say("undone", "annulé") : ""}</span>${x.reason ? `<div class="reason">${esc(x.reason)}</div>` : ""}</div>`).join("")}
     <small>${esc(t.actor)} · ${when(t.created)}</small></div>`).join("");
   return `${queue ? `<div class="tasks" style="margin-bottom:16px">${queue}</div><h3>${say("Log", "Journal")}</h3>` : ""}<div class="filters">${f.map(([k, en, french]) => `<button data-filter="${k}" class="${S.filter === k ? "on" : ""}">${say(en, french)}</button>`).join("")}</div>
     <div class="tasks">${rows.map((o) => {
@@ -291,6 +302,103 @@ document.addEventListener("change", async (e) => {
   if (e.target.dataset.k !== "ret") return;
   try { await api("trash/retention", { days: Number(e.target.value) }); TLToast.show(say("Retention saved.", "Conservation enregistrée.")); } catch (x) { fail(x); }
   load();
+});
+
+// ---- Right-click menu and drag between the panes ---------------------------------------------
+function menu() {
+  let box = $("menu");
+  if (!box) { box = document.createElement("div"); box.id = "menu"; box.className = "context"; box.hidden = true; document.body.append(box); }
+  return box;
+}
+function showMenu(x, y, items) {
+  const box = menu();
+  box.innerHTML = items.map((it) => (it === "-" ? "<hr>" : `<button data-act="${it.act}" ${it.off ? "disabled" : ""}><span>${esc(it.label)}</span><span class="kbd">${esc(it.key || "")}</span></button>`)).join("");
+  box.hidden = false;
+  box.style.left = Math.max(4, Math.min(x, innerWidth - box.offsetWidth - 6)) + "px";
+  box.style.top = Math.max(4, Math.min(y, innerHeight - box.offsetHeight - 6)) + "px";
+  box._items = items;
+}
+const hideMenu = () => { menu().hidden = true; };
+addEventListener("click", (e) => { if (!e.target.closest("#menu")) hideMenu(); });
+addEventListener("blur", hideMenu);
+addEventListener("scroll", hideMenu, true);
+menu().addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-act]");
+  if (!b) return;
+  const found = menu()._items.find((x) => x.act === b.dataset.act);
+  hideMenu();
+  found?.run?.();
+});
+function properties(path, e) {
+  ask(`<h2>${say("Properties", "Propriétés")}</h2><dl class="kv"><dt>${say("Name", "Nom")}</dt><dd>${esc(e.name)}</dd><dt>${say("Location", "Emplacement")}</dt><dd>${esc(path)}</dd>
+    <dt>${say("Size", "Taille")}</dt><dd>${size(e.size)}</dd><dt>${say("Modified", "Modifié")}</dt><dd>${when(e.modified)}</dd>
+    ${e.film ? `<dt>${say("Film", "Film")}</dt><dd>${esc(e.film.title)}</dd>` : ""}${e.seed ? `<dt>${say("Seeded by", "Partagé par")}</dt><dd>${esc(e.seed.client)} · ratio ${e.seed.ratio}</dd>` : ""}</dl>`, () => {});
+}
+function contextMenu(ev, i, n) {
+  ev.preventDefault();
+  const pane = S.panes[i];
+  S.active = i;
+  if (n && !pane.sel.has(n)) { pane.sel.clear(); pane.sel.add(n); render(); }
+  const chosen = pane.entries.filter((x) => pane.sel.has(x.name)), one = chosen.length === 1 ? chosen[0] : null, none = !chosen.length;
+  showMenu(ev.clientX, ev.clientY, [
+    { act: "open", label: say("Open", "Ouvrir"), key: "↵", off: !one?.dir, run: () => openPane(i, `${pane.path}/${one.name}`) },
+    { act: "play", label: say("Play in Media", "Lire dans Médias"), off: !one?.film, run: () => { parent.location.hash = "#/media"; } },
+    "-",
+    { act: "rename", label: say("Rename", "Renommer"), key: "F2", off: !one, run: () => operate("rename") },
+    { act: "moveto", label: say("Move to…", "Déplacer vers…"), key: "F6", off: none, run: () => operate("move") },
+    { act: "copyto", label: say("Copy to…", "Copier vers…"), key: "F5", off: none, run: () => operate("copy") },
+    { act: "mkdir", label: say("New folder", "Nouveau dossier"), key: "F7", run: () => operate("mkdir") },
+    "-",
+    { act: "trash", label: say("Move to the trash", "Mettre à la corbeille"), key: "Suppr", off: none, run: () => operate("trash") },
+    "-",
+    { act: "torrent", label: say("See the torrent", "Voir le torrent"), off: !one?.seed, run: () => { parent.location.hash = "#/torrents"; } },
+    { act: "props", label: say("Properties", "Propriétés"), off: !one, run: () => properties(`${pane.path}/${one.name}`, one) },
+  ]);
+}
+document.addEventListener("contextmenu", (e) => {
+  const row = e.target.closest("tr[data-n]"), box = e.target.closest(".files");
+  if (S.tab !== "explorer") return;
+  if (row) contextMenu(e, Number(row.dataset.pane), row.dataset.n);
+  else if (box) contextMenu(e, Number(box.closest("[data-pane]").dataset.pane), null);
+});
+let drag = null;
+document.addEventListener("dragstart", (e) => {
+  const row = e.target.closest("tr[data-n]");
+  if (!row) return;
+  const i = Number(row.dataset.pane), pane = S.panes[i];
+  if (!pane.sel.has(row.dataset.n)) { pane.sel.clear(); pane.sel.add(row.dataset.n); }
+  S.active = i;
+  drag = { i, from: picked() };
+  e.dataTransfer.setData("text/plain", drag.from.map(name).join("\n"));
+  e.dataTransfer.effectAllowed = "copyMove";
+});
+const dropTarget = (e) => {
+  const pane = e.target.closest("section.pane[data-pane]");
+  if (!pane || !drag) return null;
+  const j = Number(pane.dataset.pane), row = e.target.closest("tr[data-n]"), entry = row && S.panes[j].entries.find((x) => x.name === row.dataset.n);
+  const folder = entry?.dir && !drag.from.includes(`${S.panes[j].path}/${entry.name}`) ? `${S.panes[j].path}/${entry.name}` : S.panes[j].path;
+  return { j, row: entry?.dir ? row : null, to: folder };
+};
+document.addEventListener("dragover", (e) => {
+  const hit = dropTarget(e);
+  if (!hit) return;
+  e.preventDefault();
+  document.querySelectorAll("tr.drop").forEach((x) => x.classList.remove("drop"));
+  hit.row?.classList.add("drop");
+});
+document.addEventListener("dragend", () => { drag = null; document.querySelectorAll("tr.drop").forEach((x) => x.classList.remove("drop")); });
+document.addEventListener("drop", (e) => {
+  const hit = dropTarget(e);
+  if (!hit) return;
+  e.preventDefault();
+  const from = drag.from;
+  drag = null;
+  document.querySelectorAll("tr.drop").forEach((x) => x.classList.remove("drop"));
+  if (from.every((p) => parentOf(p) === hit.to)) return TLToast.show(say("Drop on the other pane or on a folder.", "Déposez sur l'autre panneau ou sur un dossier."), "bad");
+  showMenu(e.clientX, e.clientY, [
+    { act: "dm", label: `${say("Move here", "Déplacer ici")} (${from.length})`, key: "F6", run: () => operate("move", { from, to: hit.to }) },
+    { act: "dc", label: `${say("Copy here", "Copier ici")} (${from.length})`, key: "F5", run: () => operate("copy", { from, to: hit.to }) },
+  ]);
 });
 
 function theme() {

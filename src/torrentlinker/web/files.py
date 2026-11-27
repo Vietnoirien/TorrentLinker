@@ -52,6 +52,7 @@ def file_routes(
     films=None,
     notice=None,
     followed=lambda old, new: None,
+    annotate=lambda folder, entries: None,
 ) -> None:
     """`folders` gives the Library and Download Folders; `films(path)` counts a folder's films."""
     app.state.file_storage = storage
@@ -147,7 +148,9 @@ def file_routes(
             target = Path(path)
             if not within(actor)(target):
                 raise StorageError("You may only browse your granted folders.")
-            return {"path": str(target), "entries": listing(storage, target)}
+            entries = listing(storage, target)
+            annotate(target, entries)
+            return {"path": str(target), "entries": entries}
         except StorageError as error:
             raise refuse(error) from error
         except OSError as error:

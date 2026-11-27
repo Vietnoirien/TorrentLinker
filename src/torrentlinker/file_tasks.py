@@ -245,6 +245,7 @@ class Tasks:
     def _copy(self, source: Path, target: Path, item, cancelled) -> None:
         total = max(1, sum(f.stat().st_size for f in self._files(source)))
         done = 0
+        began = time.monotonic()
         made: list[Path] = []
         try:
             for src in self._files(source):
@@ -258,6 +259,8 @@ class Tasks:
                         w.write(chunk)
                         done += len(chunk)
                         item["progress"] = round(done / total, 3)
+                        # What is left, at the speed so far (the verification is not counted).
+                        item["eta"] = round((time.monotonic() - began) * (total - done) / done)
                 shutil.copystat(src, dst)
                 if src.stat().st_size != dst.stat().st_size or digest(src) != digest(dst):
                     raise StorageError(f"Verification failed for {src.name}: the copy was removed.")
