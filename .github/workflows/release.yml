@@ -7,6 +7,8 @@ on:
 
 jobs:
   linux:
+    # Skipped while releases are built locally (scripts/release_local.sh); container and release follow
+    if: vars.LOCAL_RELEASES != 'true'
     runs-on: ubuntu-22.04
     env:
       QT_QPA_PLATFORM: offscreen
@@ -61,6 +63,8 @@ jobs:
           path: dist/TorrentLinker-x86_64.AppImage
 
   windows:
+    # Skipped while releases are built locally (scripts/release_local.sh); container and release follow
+    if: vars.LOCAL_RELEASES != 'true'
     runs-on: windows-latest
     env:
       QT_QPA_PLATFORM: offscreen
@@ -108,6 +112,8 @@ jobs:
           path: dist/TorrentLinker.exe
 
   macos:
+    # Skipped while releases are built locally (scripts/release_local.sh); container and release follow
+    if: vars.LOCAL_RELEASES != 'true'
     # Apple Silicon only; the app is ad-hoc signed, not notarized, so Gatekeeper asks once
     runs-on: macos-15
     timeout-minutes: 60
