@@ -237,6 +237,35 @@
     dialog.replaceChildren(form); dialog.showModal();
   }
 
+  // ---- the Owner: every release of a season, and one episode on its own (#219) ----------------
+  const better = (a, b) => (b.score ?? 0) - (a.score ?? 0) || b.seeders - a.seeders;
+  const releasesOf = (season, kind) => (season.releases || []).filter(r => r.kind === kind).sort(better);
+  const download = (release, control) => guard(() => filmsDownload(release, control));
+  TS.seasonActions = (s, season, head) => {
+    if (!owner()) return;
+    const best = releasesOf(season, "season")[0];
+    if (best) { const get = button(say("Download", "Télécharger"), () => download(best, get), "media-secondary ts-get"); head.append(get); }
+  };
+  TS.seasonReleases = (s, season, body) => {
+    if (!owner() || !(season.releases || []).length) return;
+    const box = element("div", undefined, "ts-releases");
+    const packs = releasesOf(season, "season");
+    for (const release of [...packs, ...releasesOf(season, "integrale")]) {
+      const line = mediaTrackerRelease({...release, published_at: null});
+      if (release === packs[0]) line.prepend(element("span", say("Pre-selected", "Pré-sélection"), "media-poster-badge films-inline"));
+      if (release.kind === "integrale") line.prepend(element("span", "Intégrale", "ts-pill integ"));
+      const get = button(say("Download", "Télécharger"), () => download(release, get), "media-secondary ts-get"); line.append(get);
+      box.append(line);
+    }
+    if (box.childElementCount) body.append(box);
+  };
+  TS.episodeActions = (s, season, ep, line) => {
+    if (!owner() || !ep.on_tracker) return;
+    const release = releasesOf(season, "episode").find(r => r.episode === ep.n);
+    if (!release) return;
+    const get = button(say("Download", "Télécharger"), () => download(release, get), "media-secondary ts-get"); line.append(get);
+  };
+
   const open = new Set();  // "id:n" of the seasons unfolded
   TS.open = open;
   const kindOf = season => season.state === "pack" ? [say("Full pack", "Pack complet"), "ok"]
