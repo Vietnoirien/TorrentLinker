@@ -827,6 +827,7 @@ function clientsTab(form) {
   };
   layout.addEventListener("input", showLayout);
   showLayout();
+  client.append(linkFolderCard(data.client.client, requiresLinks, data.reseed_link_root));
   if (data.client.client === "transmission")
     field(
       client,
@@ -846,6 +847,55 @@ function clientsTab(form) {
     return `${say("Connected", "Connecté")} · ${result.version}`;
   }));
   fileAccessCard(form);
+}
+// What the Link Folder is used for with this client, and whether the client requires it.
+const linkFolderNative = {
+  qbittorrent: ["setLocation and renaming the torrent's paths", "setLocation et le renommage des chemins du torrent"],
+  deluge: ["move_storage and renaming the torrent's paths", "move_storage et le renommage des chemins du torrent"],
+  transmission: ["torrent-set-location and renaming the torrent's paths", "torrent-set-location et le renommage des chemins du torrent"],
+};
+function linkFolderCard(type, required, root) {
+  const name = { qbittorrent: "qBittorrent", deluge: "Deluge", transmission: "Transmission", utorrent: "µTorrent", bittorrent: "BitTorrent", rtorrent: "rTorrent" }[type] || type;
+  const native = say(...(linkFolderNative[type] || ["", ""]));
+  const uses = [
+    [
+      say("Reseed of a torrent whose file or subfolder names differ from the library", "Remise en seed d’un torrent dont les noms de fichiers ou de sous-dossiers diffèrent de la médiathèque"),
+      required
+        ? say("Always through links: this client cannot rename a torrent's paths, and renaming would change your original files. Links reproduce the torrent's layout without touching the originals.", "Toujours par liens : ce client ne sait pas renommer les chemins d’un torrent, renommer changerait vos fichiers d’origine. Les liens reproduisent la disposition du torrent sans toucher aux originaux.")
+        : say("By default the client renames the paths inside the torrent: no links. Choose “Links” only to keep the torrent's original layout (cross-seed).", "Par défaut le client renomme les chemins dans le torrent : aucun lien. Choisissez « Liens » seulement pour garder la disposition d’origine du torrent (cross-seed)."),
+    ],
+    [
+      say("Organisation (Fichiers › Organisation) of files already seeding", "Organisation (Fichiers › Organisation) des fichiers déjà en partage"),
+      required
+        ? say("The client cannot rename: the file is renamed on disk, then the torrent is pointed at it again and rechecked through the Link Folder. Without one, those rows read “needs a Link Folder”.", "Le client ne peut pas renommer : le fichier est renommé sur le disque, puis le torrent est re-pointé et revérifié via le Dossier de liens. Sans lui, ces lignes affichent « nécessite un Dossier de liens ».")
+        : say(`The client renames and moves by itself (${native}): no Link Folder. It only serves a torrent whose layout differs from the library (a Subs/ folder, extra files at the root).`, `Le client renomme et déplace lui-même (${native}) : pas de Dossier de liens. Il ne sert que pour un torrent dont la disposition diffère de la bibliothèque (dossier Subs/, fichiers en plus à la racine).`),
+    ],
+    [
+      say("Moving a seeding file (Fichiers › Explorateur)", "Déplacement d’un fichier en partage (Fichiers › Explorateur)"),
+      required
+        ? say("Pause, move, point again, recheck, resume: done by TorrentLinker, without a Link Folder, but the client is stopped during the operation.", "Pause, déplacement, re-pointage, revérification, reprise : fait par TorrentLinker, sans Dossier de liens, mais le client doit être arrêté pendant l’opération.")
+        : say("Native: the client moves it itself, the Link Folder does not take part.", "Natif : le client déplace lui-même, le Dossier de liens n’intervient pas."),
+    ],
+  ];
+  const card = element("div", undefined, "link-folder-card");
+  const head = element("div", undefined, "link-folder-head");
+  head.append(
+    element("b", say(`What the Link Folder is used for with ${name}`, `À quoi sert le Dossier de liens avec ${name}`)),
+    element("span", required ? say("Required by this client", "Requis par ce client") : say("Optional for this client", "Facultatif pour ce client"), required ? "link-folder-badge required" : "link-folder-badge"),
+  );
+  const list = element("ul");
+  for (const [title, detail] of uses) {
+    const item = element("li");
+    item.append(element("b", title), document.createElement("br"), element("span", detail, "muted"));
+    list.append(item);
+  }
+  card.append(head, list);
+  card.append(
+    required && !String(root || "").trim()
+      ? element("p", say(`Not configured yet: enter the folder above, outside the library, so that Reseed and Organisation can work with ${name}.`, `Pas encore configuré : indiquez le dossier ci-dessus, hors de la bibliothèque, pour que Remise en seed et Organisation puissent fonctionner avec ${name}.`), "link-folder-warn")
+      : element("p", say("Keep the Link Folder outside the library for as long as its torrents seed: links are permanent.", "Gardez le Dossier de liens hors de la bibliothèque tant que ses torrents partagent : les liens sont permanents."), "muted"),
+  );
+  return card;
 }
 function servicesTab(form) {
   const data = draft("connections"),
