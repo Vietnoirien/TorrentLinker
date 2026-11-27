@@ -29,6 +29,7 @@ import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 
 from guessit import guessit
@@ -36,6 +37,12 @@ from guessit import guessit
 from torrentlinker import age_ratings
 from torrentlinker.media_ratings import AgeRatings
 from torrentlinker.media_tracker import TrackerRows, plain
+from torrentlinker.tracker_films import (
+    RECENT_YEARS,
+    TrackerFilms,
+    native_children,
+    walk_step,
+)
 
 # The first sync parses every series release of the Catalogues (~200,000 names, ~9 ms each):
 # it saves them in batches and pauses between batches, so pages keep answering meanwhile.
@@ -59,6 +66,13 @@ IDENTIFY_PAUSE = 0.25
 NOT_FOUND_RETRY = 7 * 86400
 UNAVAILABLE_PAUSE = 60.0  # seconds before a page may start the index job again after TMDb failed
 LIMIT_PAUSE = 3600.0
+IDENTIFY_BATCH = 10  # series the index job asks TMDb per batch, then looks at the focus again
+SYNC_IDENTIFY = 5  # series identified between two batches of the first sync
+WALK_PAUSE = 10.0  # seconds between two pages of c411's series listing
+FOCUS_PAUSE = 2.0  # seconds between two searches for the series on screen
+SERIES_ROOT = "1"  # c411's native root of films and series; series are among its children
+SERIES_C411 = frozenset(SERIES_KINDS["c411"])  # their Torznab ids: 5000, 5070, 2000
+FIRST_YEAR = 1950  # the oldest year of c411's series walk
 
 SEASON_RANGE = re.compile(
     r"\bsaisons?[ ._-]*(\d{1,2})[ ._-]*(?:a|à|to|-|&|et)[ ._-]*(\d{1,2})\b", re.IGNORECASE
@@ -175,6 +189,20 @@ def coverage(
     return result
 
 
+def named_seasons(releases: list[dict[str, Any]]) -> dict[int, int]:
+    """The seasons the releases' names give, with the highest episode number seen in each:
+    what a series' panel lists when no TMDb season list is known."""
+    found: dict[int, int] = {}
+    for release in releases:
+        if release["pack"] in {"season", "complete"}:
+            for n in release["seasons"]:
+                found.setdefault(n, 0)
+        elif release["pack"] == "episode":
+            n = release["season"]
+            found[n] = max(found.get(n, 0), release["episode"])
+    return {n: count for n, count in found.items() if n > 0}
+
+
 class TrackerSeries(TrackerRows, AgeRatings):
     """Mixed into MediaLibrary, which provides db and lock."""
 
@@ -186,6 +214,9 @@ class TrackerSeries(TrackerRows, AgeRatings):
         self._series_bumped = 0.0
         self._series_working = threading.Lock()  # one identification at a time
         self._series_resting: dict[str, float] = {}
+        self._series_focus: dict[str, frozenset[str]] = {}
+        self._series_asked: set[str] = set()  # keys searched on c411 since the start
+        self._series_status: tuple[int, tuple[int, int]] | None = None
         with self.db:
             self.db.executescript("""
                 CREATE TABLE IF NOT EXISTS series_release
@@ -205,6 +236,10 @@ class TrackerSeries(TrackerRows, AgeRatings):
                     overview TEXT, genres TEXT, status TEXT, rating TEXT,
                     rating_by TEXT NOT NULL DEFAULT '', poster TEXT, fetched REAL);
                 CREATE TABLE IF NOT EXISTS series_artwork (tmdb TEXT PRIMARY KEY, artwork TEXT);
+                CREATE TABLE IF NOT EXISTS series_c411
+                    (tkey TEXT PRIMARY KEY, title TEXT, original_title TEXT, year TEXT,
+                    overview TEXT, genres TEXT, poster TEXT, fetched REAL,
+                    source TEXT NOT NULL DEFAULT '');
                 CREATE TABLE IF NOT EXISTS series_season
                     (tmdb TEXT, season INTEGER, name TEXT, episodes INTEGER,
                     PRIMARY KEY(tmdb, season));
@@ -222,9 +257,16 @@ class TrackerSeries(TrackerRows, AgeRatings):
 
     # -- The Catalogues ---------------------------------------------------------------------
 
-    def series_sync(self, client_id, setup, stop: threading.Event | None = None) -> bool:
+    def series_sync(
+        self,
+        client_id,
+        setup,
+        stop: threading.Event | None = None,
+        between: Callable[[], None] | None = None,
+    ) -> bool:
         """Bring `series_release` up to the Catalogues' seeded series releases: parse the new
-        ones, drop the vanished, follow seeders and sizes. True when anything changed."""
+        ones, drop the vanished, follow seeders and sizes. True when anything changed. `between`
+        runs after each saved batch: the index job identifies the series already there."""
         stop = stop or threading.Event()
         changed = False
         for site in self._catalogue_trackers(setup):
@@ -275,6 +317,8 @@ class TrackerSeries(TrackerRows, AgeRatings):
                         )  # fmt: skip
                     self._series_save(site, [], inserts, [])
                     stop.wait(SYNC_PAUSE)
+                    if between is not None and not stop.is_set():
+                        between()
         if changed:
             self._series_changed()
         return changed
@@ -368,10 +412,13 @@ class TrackerSeries(TrackerRows, AgeRatings):
         *,
         budget: float = IDENTIFY_BUDGET,
         pause: float = IDENTIFY_PAUSE,
+        limit: int | None = None,
     ) -> str:
-        """Ask TMDb for the series the index does not know yet, newest and most shared first,
-        each once (a week later when TMDb did not know it). Returns "off" without a TMDb key,
-        "limit", "unavailable", "cancelled" or "complete"."""
+        """Ask TMDb for the series the index does not know yet, the ones on screen first, then
+        the most shared, each once (a week later when TMDb did not know it). A series whose
+        TMDb id c411 gave gets its facts too. Returns "off" without a TMDb key, "limit",
+        "batch" when `limit` series were asked and more wait, "unavailable", "cancelled" or
+        "complete"."""
         from torrentlinker.domain import ContentKind
 
         secrets = getattr(setup, "secrets", None)
@@ -380,20 +427,26 @@ class TrackerSeries(TrackerRows, AgeRatings):
             return "off"
         tmdb = self.tmdb_client(key)
         started, failures = time.monotonic(), 0
-        with self.lock:
-            titles = self.db.execute(
+        with self._bulk() as db:  # type: ignore[attr-defined]  # the large read, off the lock
+            titles = db.execute(
                 "SELECT r.tkey, MIN(r.title) AS title, MIN(r.year) AS year FROM series_release r"
                 " LEFT JOIN series_title t ON t.tkey = r.tkey WHERE r.tkey <> ''"
                 " AND (t.tkey IS NULL OR (t.tmdb = '' AND t.manual = 0 AND t.checked < ?))"
                 " GROUP BY r.tkey ORDER BY SUM(r.seeders) DESC",
                 (time.time() - NOT_FOUND_RETRY,),
             ).fetchall()
-            have = {r[0] for r in self.db.execute("SELECT tmdb FROM series_meta")}
+            have = {r[0] for r in db.execute("SELECT tmdb FROM series_meta")}
+        focus = self._series_focus.get(client_id, frozenset())
+        titles.sort(key=lambda row: row["tkey"] not in focus)  # stable: shared order stays
+        asked = 0
         for row in titles:
             if stop.is_set():
                 return "cancelled"
             if time.monotonic() - started > budget:
                 return "limit"
+            if limit is not None and asked >= limit:
+                return "batch"
+            asked += 1
             try:
                 found = (
                     tmdb.lookup(row["title"], int(row["year"]) if row["year"] else None,
@@ -418,6 +471,30 @@ class TrackerSeries(TrackerRows, AgeRatings):
                     failures += 1
                     if failures >= 3:
                         return "unavailable"
+            self._series_changed()
+            time.sleep(pause)
+        with self.lock:
+            wanted = [
+                r[0]
+                for r in self.db.execute(
+                    "SELECT tmdb FROM series_title WHERE tmdb <> '' UNION"
+                    " SELECT manual FROM series_release WHERE manual <> ''"
+                )
+            ]
+        for tmdb_id in wanted:  # an id c411 gave: TMDb's facts replace c411's
+            if tmdb_id in have:
+                continue
+            if stop.is_set():
+                return "cancelled"
+            try:
+                self._series_fetch_meta(tmdb, tmdb_id)
+                have.add(tmdb_id)
+            except Exception:
+                failures += 1
+                if failures >= 3:
+                    return "unavailable"
+                continue
+            failures = 0
             self._series_changed()
             time.sleep(pause)
         return "complete"
@@ -464,43 +541,69 @@ class TrackerSeries(TrackerRows, AgeRatings):
             )
 
     def series_progress(self) -> tuple[int, int]:
-        """(identified, total) series titles of the index."""
-        with self.lock:
-            total = self.db.execute(
+        """(identified, total) series titles of the index: TMDb knows them, or c411 gave their
+        facts. Kept until something changes."""
+        cached = self._series_status
+        if cached is not None and cached[0] == self._series_generation:
+            return cached[1]
+        generation = self._series_generation
+        with self._bulk() as db:  # type: ignore[attr-defined]
+            total = db.execute(
                 "SELECT COUNT(DISTINCT tkey) FROM series_release WHERE tkey <> ''"
             ).fetchone()[0]
-            identified = self.db.execute(
-                "SELECT COUNT(DISTINCT r.tkey) FROM series_release r JOIN series_title t"
-                " ON t.tkey = r.tkey WHERE t.tmdb <> ''"
+            identified = db.execute(
+                "SELECT COUNT(*) FROM (SELECT DISTINCT r.tkey FROM series_release r"
+                " LEFT JOIN series_title t ON t.tkey = r.tkey"
+                " LEFT JOIN series_c411 c ON c.tkey = r.tkey"
+                " WHERE r.tkey <> '' AND (c.tkey IS NOT NULL OR t.tmdb <> ''))"
             ).fetchone()[0]
-        return identified, total
+        progress = (identified, total)
+        if generation == self._series_generation:
+            self._series_status = (generation, progress)
+        return progress
 
     def series_behind(self, client_id, setup) -> bool:
-        """Whether the index needs its job: the Catalogues were not read for a while, or titles
-        wait for TMDb (which needs a key). Cheap; asked by every page that shows series."""
+        """Whether the index needs its job: the Catalogues were not read for a while, or series
+        wait for TMDb (with a key) or for c411's listing (without). Cheap; asked by every page
+        that shows series."""
         if time.monotonic() < self._series_resting.get(client_id, 0.0):
             return False
         if not self._series_fresh("series-sync:" + client_id):
             return True
-        secrets = getattr(setup, "secrets", None)
-        if not (secrets.get("tmdb-api-key") if secrets is not None else ""):
-            return False
         identified, total = self.series_progress()
         return identified < total and not self._series_fresh("series-run:" + client_id)
 
     def series_index_job(
-        self, client_id, setup, stop: threading.Event, progress, *, pause: float = IDENTIFY_PAUSE
+        self,
+        client_id,
+        setup,
+        stop: threading.Event,
+        progress,
+        *,
+        pause: float = IDENTIFY_PAUSE,
+        walk_pause: float = WALK_PAUSE,
     ) -> str:
-        """The job a page starts: read the Catalogues, then identify until done."""
+        """The job a page starts: read the Catalogues, identifying the series already there
+        between two batches, then identify the rest until done: through TMDb with a key,
+        through c411 without."""
         if not self._series_working.acquire(blocking=False):
             return "busy"
         try:
             progress({"phase": "sync"})
-            self.series_sync(client_id, setup, stop)
+            self._series_from_details()
+            hold = self._series_interleave(client_id, setup, stop, progress, pause, walk_pause)
+            self.series_sync(client_id, setup, stop, between=hold)
             self._series_stamp("series-sync:" + client_id)
-            status = self.series_identify(client_id, setup, stop, budget=float("inf"), pause=pause)
-            done, total = self.series_progress()
-            progress({"phase": "identify", "identified": done, "total": total})
+            while True:
+                status = self.series_identify(
+                    client_id, setup, stop, budget=float("inf"), pause=pause, limit=IDENTIFY_BATCH
+                )
+                done, total = self.series_progress()
+                progress({"phase": "identify", "identified": done, "total": total})
+                if status != "batch":
+                    break
+            if status == "off":
+                status = self.series_c411(client_id, setup, stop, progress, walk_pause=walk_pause)
         finally:
             self._series_working.release()
         if status in {"complete", "off"}:
@@ -510,6 +613,312 @@ class TrackerSeries(TrackerRows, AgeRatings):
         elif status == "limit":
             self._series_resting[client_id] = time.monotonic() + LIMIT_PAUSE
         return status
+
+    # -- Identifying while the first sync runs -----------------------------------------------
+
+    def _series_interleave(
+        self, client_id, setup, stop, progress, pause: float, walk_pause: float
+    ) -> Callable[[], None]:
+        """What the sync runs between two batches: a few series of those already saved are
+        identified (TMDb with a key), or one c411 request is made when `walk_pause` has passed
+        (without), so the page shows series with their posters long before the sync ends. A
+        source that fails or asks to wait is left alone for the rest of the sync."""
+        secrets = getattr(setup, "secrets", None)
+        has_key = bool(secrets.get("tmdb-api-key") if secrets is not None else "")
+        state: dict[str, Any] = {"off": False, "last": time.monotonic(), "walk": None}
+
+        def between() -> None:
+            if state["off"]:
+                return
+            if has_key:
+                status = self.series_identify(
+                    client_id, setup, stop, budget=float("inf"), pause=pause, limit=SYNC_IDENTIFY
+                )
+                state["off"] = status in {"unavailable", "limit"}
+                return
+            if time.monotonic() - state["last"] < walk_pause:
+                return
+            try:
+                indexer = setup.indexer()
+            except Exception:
+                state["off"] = True
+                return
+            if not indexer.is_c411:
+                state["off"] = True
+                return
+            if state["walk"] is None:
+                # Its own cursor, never saved: the series a page names are read only when the
+                # sync already holds them, so the walk after the sync reads those pages again.
+                state["walk"] = {**self._series_walk_state(client_id), "save": False}
+            with indexer.background(stop):
+                status = self._series_c411_step(client_id, indexer, state["walk"], progress)
+            state["last"] = time.monotonic()
+            if status:
+                state["off"] = True
+
+        return between
+
+    # -- c411 identifies the series without a TMDb key ------------------------------------------
+
+    def series_c411(
+        self, client_id, setup, stop: threading.Event, progress, *, walk_pause: float = WALK_PAUSE
+    ) -> str:
+        """Fill the index from c411, which names no TMDb id in its listing: the facts of the
+        series on screen (one search each), then c411's series listing walked page by page,
+        newest year first, until all of it is read; later runs only read the new pages.
+        Returns "off" when c411 is not the Indexer, "limit" when c411 asks to wait (or refuses
+        the key), "unavailable" after three failures, "cancelled" or "complete"."""
+        try:
+            indexer = setup.indexer()
+        except Exception:
+            return "off"
+        if not indexer.is_c411:
+            return "off"
+        state = self._series_walk_state(client_id)
+        with indexer.background(stop):
+            while True:
+                if stop.is_set():
+                    return "cancelled"
+                status = self._series_c411_step(client_id, indexer, state, progress)
+                if status == "complete":
+                    self._series_walk_save(state)
+                if status:
+                    return status
+                if stop.wait(state["wait"]):
+                    return "cancelled"
+
+    def _series_walk_state(self, client_id) -> dict[str, Any]:
+        """The walk's cursor, saved by its last run: resumable after a restart. A finished walk
+        starts again at the newest years, each read up to the first page that adds nothing; that
+        pass is not saved."""
+        key = "series-years:" + client_id
+        with self.lock:
+            row = self.db.execute("SELECT body FROM media_options WHERE key=?", (key,)).fetchone()
+        walk = json.loads(row[0]) if row else TrackerFilms._films_slices(FIRST_YEAR)
+        fresh = walk["done"]
+        if fresh:
+            walk = TrackerFilms._films_slices(date.today().year + 2 - RECENT_YEARS, walk["capped"])
+        return {"key": key, "walk": walk, "fresh": fresh, "children": None, "failures": 0,
+                "wait": WALK_PAUSE}  # fmt: skip
+
+    def _series_walk_save(self, state: dict[str, Any]) -> None:
+        state["walk"]["done"] = True
+        self._series_write_walk(state)
+
+    def _series_write_walk(self, state: dict[str, Any]) -> None:
+        with self.lock, self.db:
+            self.db.execute(
+                "INSERT OR REPLACE INTO media_options VALUES (?,?)",
+                (state["key"], json.dumps(state["walk"])),
+            )
+
+    def _series_c411_step(self, client_id, indexer, state: dict[str, Any], progress) -> str:
+        """One c411 request: a series on screen without facts is searched by name, else the next
+        page of the walk is read. "" to go on (after `state["wait"]` seconds), else the status
+        the walk ends with."""
+        from torrentlinker.indexer import KeyRefused, RateLimited
+
+        wanted = self._series_unasked(client_id)
+        try:
+            if wanted:
+                self._series_search(indexer, *wanted)
+                state["wait"] = FOCUS_PAUSE
+            else:
+                if state["children"] is None:
+                    state["children"] = native_children(indexer, SERIES_ROOT, SERIES_C411, "series")
+                more = walk_step(
+                    indexer, state["walk"], state["children"], state["fresh"], SERIES_ROOT,
+                    self._series_read,
+                )  # fmt: skip
+                done, total = self.series_progress()
+                progress(
+                    {"phase": "c411", "identified": done, "total": total,
+                     "capped": len(state["walk"]["capped"])}
+                )  # fmt: skip
+                if not more:
+                    return "complete"
+                if not state["fresh"] and state.get("save", True):
+                    self._series_write_walk(state)
+                state["wait"] = WALK_PAUSE
+        except (RateLimited, KeyRefused):
+            return "limit"
+        except Exception:
+            state["failures"] += 1
+            if state["failures"] >= 3:
+                return "unavailable"
+            state["wait"] = WALK_PAUSE
+        else:
+            state["failures"] = 0
+        return ""
+
+    def series_focus(self, client_id, identifiers) -> None:
+        """The series the panel shows that are not identified yet: the next batch takes them
+        first. Each call replaces the last one."""
+        wanted = set(list(identifiers)[:200])
+        keys: set[str] = set()
+        if wanted:
+            for entry in self.series_index():
+                if entry["id"] in wanted and not (entry["tmdb"] or entry["c411"]):
+                    keys.update(r["tkey"] for r in entry["releases"] if r["tkey"])
+        self._series_focus[client_id] = frozenset(keys)
+
+    def _series_unasked(self, client_id) -> tuple[str, str, str] | None:
+        """The next series on screen c411 has no facts for and was not searched yet:
+        (series key, title, year)."""
+        pending = self._series_focus.get(client_id, frozenset()) - self._series_asked
+        if not pending:
+            return None
+        with self.lock:
+            for tkey in sorted(pending):
+                if self.db.execute("SELECT 1 FROM series_c411 WHERE tkey=?", (tkey,)).fetchone():
+                    continue
+                row = self.db.execute(
+                    "SELECT MIN(title) AS title, MIN(year) AS year FROM series_release"
+                    " WHERE tkey=?",
+                    (tkey,),
+                ).fetchone()
+                if row and row["title"]:
+                    return tkey, row["title"], row["year"]
+        self._series_asked |= pending
+        return None
+
+    def _series_search(self, indexer, tkey: str, title: str, year: str) -> None:
+        """One c411 search by the series' title (and year), falling back to the title alone;
+        the rows read are matched to the index by infohash or key."""
+        from torrentlinker.torrent_search import native_search
+
+        self._series_asked.add(tkey)
+        for name in dict.fromkeys((f"{title} {year}".strip(), title)):
+            self._series_read(native_search(indexer, {"category": SERIES_ROOT, "name": name}, 1))
+            with self.lock:
+                if self.db.execute("SELECT 1 FROM series_c411 WHERE tkey=?", (tkey,)).fetchone():
+                    return
+
+    def _series_read(self, page) -> bool:
+        """Keep the facts of the series a listing page names (`kind` tv); True when any
+        series' changed. A release the index holds says which series it belongs to, whatever
+        its name parsed to; the listing's own title, with and without its year, and its
+        original title name the others, when the index holds them."""
+        hashes = [c.infohash for c in page.rows if c.infohash]
+        if not hashes:
+            return False
+        with self.lock:
+            keyed = {
+                r[0]: r[1]
+                for r in self.db.execute(
+                    "SELECT infohash, tkey FROM series_release WHERE tkey <> '' AND infohash IN"
+                    f" ({','.join('?' * len(hashes))})",
+                    hashes,
+                )
+            }
+        by_name: dict[str, tuple[str, dict[str, Any]]] = {}
+        for infohash in hashes:
+            listing = page.details.get(infohash)
+            if listing is None or listing.kind != "tv" or not listing.title:
+                continue
+            facts = {
+                "title": listing.title,
+                "original_title": listing.original_title,
+                "year": str(listing.year or ""),
+                "overview": listing.overview,
+                "genres": list(listing.genres),
+                "poster": listing.poster_url,
+            }
+            names = [listing.title, listing.original_title]
+            tkeys = [series_key(n, y) for n in names if n for y in (facts["year"], "")]
+            if infohash in keyed:
+                tkeys.append(keyed[infohash])
+            for tkey in tkeys:
+                by_name.setdefault(tkey, (infohash, facts))
+        held = self._series_held(list(by_name))
+        found = {tkey: pair for tkey, pair in by_name.items() if tkey in held}
+        return self._series_save_facts(found)
+
+    def _series_held(self, tkeys: list[str]) -> set[str]:
+        held: set[str] = set()
+        with self._bulk() as db:  # type: ignore[attr-defined]
+            for start in range(0, len(tkeys), 500):
+                chunk = tkeys[start : start + 500]
+                held.update(
+                    r[0]
+                    for r in db.execute(
+                        "SELECT DISTINCT tkey FROM series_release WHERE tkey IN"
+                        f" ({','.join('?' * len(chunk))})",
+                        chunk,
+                    )
+                )
+        return held
+
+    def _series_save_facts(self, found: dict[str, tuple[str, dict[str, Any]]]) -> bool:
+        """Store facts by series key, as `(origin infohash, facts)`. Two releases of one series
+        may list slightly different facts (another poster): once one wrote them, another does
+        not overwrite them, or a walk would rewrite them page after page and move the revision
+        each time. A row listed without synopsis or poster holds no facts to keep. The
+        revision moves only when what a card draws changed."""
+        if not found:
+            return False
+        changed = False
+        with self.lock, self.db:
+            for tkey, (origin, facts) in found.items():
+                drawn = (
+                    facts["title"], facts["original_title"], facts["year"], facts["overview"],
+                    json.dumps(facts["genres"], ensure_ascii=False), facts["poster"],
+                )  # fmt: skip
+                kept = self.db.execute(
+                    "SELECT title, original_title, year, overview, genres, poster, source"
+                    " FROM series_c411 WHERE tkey=?",
+                    (tkey,),
+                ).fetchone()
+                if kept is not None:
+                    same = tuple(kept)[:6] == drawn
+                    empty = not (kept["overview"] or kept["poster"])
+                    if same or (kept["source"] not in ("", origin) and not empty):
+                        continue
+                self.db.execute(
+                    "INSERT OR REPLACE INTO series_c411 (tkey, title, original_title, year,"
+                    " overview, genres, poster, fetched, source) VALUES (?,?,?,?,?,?,?,?,?)",
+                    (tkey, *drawn, time.time(), origin),
+                )
+                changed = True
+        if changed:
+            self._series_changed()
+        return changed
+
+    def _series_from_details(self) -> None:
+        """The TMDb ids c411 already gave in the Library's cached release details (`type` tv):
+        a series of the index with the same title and year as one of them takes that id."""
+        with self.lock:
+            bodies = [
+                r[0]
+                for r in self.db.execute(
+                    "SELECT body FROM media_options WHERE key LIKE 'c411-details:%'"
+                )
+            ]
+            open_keys = {
+                r[0]
+                for r in self.db.execute(
+                    "SELECT DISTINCT tkey FROM series_release WHERE tkey <> ''"
+                    " AND tkey NOT IN (SELECT tkey FROM series_title)"
+                )
+            }
+        found: dict[str, str] = {}
+        for body in bodies:
+            details = json.loads(body)
+            tmdb, year = str(details.get("id") or ""), str(details.get("year") or "")
+            if not tmdb.isdigit() or str(details.get("type") or "").lower() != "tv":
+                continue
+            for title in (details.get("title"), details.get("originalTitle")):
+                for y in (year, ""):
+                    if title and (tkey := series_key(str(title), y)) in open_keys:
+                        found[tkey] = tmdb
+        if not found:
+            return
+        with self.lock, self.db:
+            self.db.executemany(
+                "INSERT OR IGNORE INTO series_title VALUES (?,?,0,?)",
+                [(tkey, tmdb, time.time()) for tkey, tmdb in found.items()],
+            )
+        self._series_changed()
 
     def series_revision_info(self, running: bool, owner: bool) -> dict[str, Any]:
         """What the panel polls: changes whenever the index does. Only the Owner gets counts."""
@@ -537,6 +946,7 @@ class TrackerSeries(TrackerRows, AgeRatings):
             releases = [dict(r) for r in self.db.execute("SELECT * FROM series_release")]
             ids = {r["tkey"]: r["tmdb"] for r in self.db.execute("SELECT * FROM series_title")}
             metas = {r["tmdb"]: dict(r) for r in self.db.execute("SELECT * FROM series_meta")}
+            c411s = {r["tkey"]: dict(r) for r in self.db.execute("SELECT * FROM series_c411")}
             seasons: dict[str, dict[int, int]] = {}
             for r in self.db.execute("SELECT tmdb, season, episodes FROM series_season"):
                 seasons.setdefault(r["tmdb"], {})[r["season"]] = r["episodes"]
@@ -546,18 +956,31 @@ class TrackerSeries(TrackerRows, AgeRatings):
         groups: dict[str, dict[str, Any]] = {}
         for r in releases:
             tmdb = r["manual"] or ids.get(r["tkey"], "")
-            if r["tracker"] in IDENTIFIED_ONLY and not tmdb:
+            if r["tracker"] in IDENTIFIED_ONLY and not tmdb and r["tkey"] not in c411s:
                 continue
             identifier = series_id(tmdb, r["tkey"], r["tracker"], r["infohash"])
             group = groups.setdefault(
-                identifier, {"id": identifier, "tmdb": tmdb, "title": r["title"], "releases": []}
+                identifier,
+                {
+                    "id": identifier,
+                    "tmdb": tmdb,
+                    "title": r["title"],
+                    "tkeys": set(),
+                    "releases": [],
+                },
             )
+            group["tkeys"].add(r["tkey"])
             r["seasons"] = tuple(json.loads(r["seasons"]))
             group["releases"].append(r)
         result = []
         for group in groups.values():
             tmdb = group["tmdb"]
             meta = metas.get(tmdb)
+            # TMDb's facts, when it identified the series, take precedence over c411's.
+            c411 = "" if meta else next((k for k in sorted(group.pop("tkeys")) if k in c411s), "")
+            group.pop("tkeys", None)
+            if c411:
+                meta = {**c411s[c411], "status": "", "rating": None, "rating_by": ""}
             kinds = {r["kind"] for r in group["releases"]}
             entry = {
                 **group,
@@ -565,8 +988,12 @@ class TrackerSeries(TrackerRows, AgeRatings):
                     "documentary" if kinds == {"documentary"} else "series"
                 ),
                 "meta": meta,
+                "c411": c411,
+                # Without TMDb's list, the seasons the releases name.
                 "coverage": coverage(
-                    group["releases"], seasons.get(tmdb, {}), episodes.get(tmdb, {})
+                    group["releases"],
+                    seasons.get(tmdb) or named_seasons(group["releases"]),
+                    episodes.get(tmdb, {}),
                 ),
             }  # fmt: skip
             if meta:
@@ -597,7 +1024,7 @@ class TrackerSeries(TrackerRows, AgeRatings):
         poster = ((entry or {}).get("meta") or {}).get("poster") or ""
         if not poster.startswith(POSTER_BASE):
             return None
-        tmdb = entry["tmdb"]  # type: ignore[index]
+        tmdb = entry["tmdb"] or "c411:" + entry["c411"]  # type: ignore[index]
         with media_artwork.download_lock(f"series:{tmdb}"):
             with self.lock:
                 row = self.db.execute(

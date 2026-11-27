@@ -6,6 +6,7 @@ Catalogues are fake."""
 
 import threading
 import time
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -35,6 +36,7 @@ def test_the_index_is_behind_until_the_job_has_read_the_catalogues_and_identifie
 def test_without_a_tmdb_key_the_catalogues_are_read_and_the_job_does_not_repeat(series):
     series.setup_for_test.secrets = None
     setup = series.setup_for_test
+    setup.indexer = lambda: SimpleNamespace(is_c411=False)  # no c411 to walk either
     assert series.series_index_job("default", setup, threading.Event(), lambda _: None) == "off"
     assert not series.series_behind("default", setup)
 

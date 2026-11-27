@@ -69,6 +69,18 @@ def _seasons(media: Any, tmdb: str) -> dict[int, dict[str, Any]]:
     return found
 
 
+def _entry_seasons(media: Any, entry: dict[str, Any]) -> dict[int, dict[str, Any]]:
+    """TMDb's seasons and episodes; for a series TMDb does not know (yet), the seasons its
+    releases name, without episode titles."""
+    found = _seasons(media, entry["tmdb"])
+    if found:
+        return found
+    return {
+        n: {"n": n, "name": f"Saison {n}", "count": held["episode_count"], "episodes": {}}
+        for n, held in sorted(entry["coverage"].items())
+    }
+
+
 def _card(entry: dict[str, Any], owned: set[int], seasons: int) -> dict[str, Any]:
     meta = entry["meta"] or {}
     return {
@@ -79,7 +91,8 @@ def _card(entry: dict[str, Any], owned: set[int], seasons: int) -> dict[str, Any
         "genre": ", ".join(json.loads(meta["genres"])) if meta.get("genres") else "",
         "description": meta.get("overview") or "", "duration": 0,
         "artwork_url": "tracker" if meta.get("poster") else "", "available": True,
-        "identified": bool(entry["tmdb"]), "in_library": bool(seasons) and len(owned) >= seasons,
+        "identified": bool(entry["tmdb"] or entry["c411"]),
+        "in_library": bool(seasons) and len(owned) >= seasons,
         "owned_seasons": sorted(owned), "series_kind": entry["kind"],
     }  # fmt: skip
 
@@ -87,7 +100,7 @@ def _card(entry: dict[str, Any], owned: set[int], seasons: int) -> dict[str, Any
 def may_see(entry: dict[str, Any], owned: set[int], seasons: int, actor: Any) -> bool:
     if actor.owner:
         return True
-    if not entry["tmdb"] or (seasons and len(owned) >= seasons):
+    if not (entry["tmdb"] or entry["c411"]) or (seasons and len(owned) >= seasons):
         return False  # unidentified, or fully in the Library
     rank = age_ratings.rank((entry["meta"] or {}).get("rating"))
     return actor.age_limit is None or (rank is not None and rank <= actor.age_limit)
@@ -101,7 +114,7 @@ def catalogue(media: Any, client_id: str, actor: Any, scope: str) -> list[dict[s
         if (entry["kind"] == "anime") != (scope == "anime"):
             continue
         owned = _owned(entry, library)
-        count = len(_seasons(media, entry["tmdb"])) if entry["tmdb"] else 0
+        count = len(_entry_seasons(media, entry))
         if may_see(entry, owned, count, actor):
             cards.append({**_card(entry, owned, count), "_seeders": _seeders(entry),
                           "_published": 0})  # fmt: skip
@@ -183,7 +196,7 @@ def detail(
         raise KeyError(identifier)
     library = owned_seasons(media, client_id)
     owned = _owned(entry, library)
-    seasons = _seasons(media, entry["tmdb"])
+    seasons = _entry_seasons(media, entry)
     if not may_see(entry, owned, len(seasons), actor):
         raise KeyError(identifier)
     cover = coverage(
@@ -327,7 +340,7 @@ def approver_choices(
     if entry is None or parsed is None:
         return None
     season = parsed[1]
-    count = len(_seasons(media, entry["tmdb"]))
+    count = len(_entry_seasons(media, entry))
     chosen = preselect(entry, sorted({*pending, season}), scorer, order, count)
     pick = chosen["per_season"].get(season)
     found = []

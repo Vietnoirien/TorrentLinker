@@ -23,7 +23,8 @@ def release(name, pack, seasons=(), season=0, episode=0, seeders=5, tracker="c41
 
 def entry(identifier, title, releases, kind="series", rating="12", tmdb="1"):
     return {
-        "id": identifier, "tmdb": tmdb, "title": title, "kind": kind, "releases": releases,
+        "id": identifier, "tmdb": tmdb, "c411": "", "coverage": {}, "title": title, "kind": kind,
+        "releases": releases,
         "meta": {"year": "2020", "rating": rating, "genres": json.dumps(["Drame"]),
                  "overview": "Synopsis", "poster": "", "status": "Ended"},
     }  # fmt: skip

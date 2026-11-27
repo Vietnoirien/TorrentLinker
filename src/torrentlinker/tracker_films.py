@@ -91,6 +91,72 @@ def parse_release(name: str) -> tuple[str, str]:
     return str(guessed.get("title") or "").strip(), str(guessed.get("year") or "")
 
 
+def native_children(indexer, root: str, wanted, noun: str) -> list[int]:
+    """c411's native categories under `root` whose Torznab id is in `wanted`, read from its own
+    tree, not from Torznab ids."""
+    from torrentlinker.catalogue_sync import SUBCATS
+    from torrentlinker.torrent_search import parse_tree
+
+    tree = parse_tree(indexer.search_categories(), adult=False)
+    children = sorted(
+        -key
+        for key, category in tree.categories.items()
+        if key < 0 and str(category.parent) == root and SUBCATS[int(root)].get(-key) in wanted
+    )
+    if not children:
+        raise ValueError(f"c411 lists no {noun} category.")
+    return children
+
+
+def walk_step(
+    indexer, walk: dict[str, Any], children: list[int], fresh: bool, root: str, read
+) -> bool:
+    """One c411 request of a walk: a page of one year's slice of the categories under `root`,
+    handed to `read`. c411 answers no page past SLICE_CAP releases, so a year with more is read
+    per category, and a category still with more is read from the newest end, then from the
+    oldest until the two meet (a slice they do not cover is flagged in `capped`). `fresh` only
+    reads each year's newest pages. False once every year is read."""
+    from torrentlinker.torrent_search import native_search
+
+    if not walk["todo"]:
+        if walk["year"] < walk["floor"]:
+            return False
+        walk["todo"] = [",".join(str(child) for child in children)]
+    subcat = walk["todo"][0]
+    params = {
+        "category": root,
+        "subcat": subcat,
+        "year": str(walk["year"]),
+        "sortBy": "createdAt",
+        "sortOrder": walk["order"],
+    }
+    page = native_search(indexer, params, walk["page"])
+    changed = read(page)
+    walk["seen"] += len(page.rows)
+    if not fresh and walk["page"] == 1 and walk["order"] == "desc" and page.total > SLICE_CAP:
+        if "," in subcat:  # too many for one search: one per category
+            walk["todo"][:1] = subcat.split(",")
+            walk["seen"] = 0
+            return True
+    if walk["order"] == "asc":
+        covered = walk["first"] + walk["seen"] >= page.total
+    else:
+        covered = walk["seen"] >= page.total
+    if page.has_more and not covered and (changed or not fresh):
+        walk["page"] += 1
+        return True
+    if not fresh and not covered and walk["order"] == "desc":
+        walk.update(order="asc", page=1, first=walk["seen"], seen=0)
+        return True
+    if not covered and not fresh:
+        walk["capped"].append(f"{walk['year']}:{subcat}")
+    walk.update(order="desc", page=1, first=0, seen=0)
+    walk["todo"].pop(0)
+    if not walk["todo"]:
+        walk["year"] -= 1
+    return True
+
+
 class TrackerFilms(TrackerRows, AgeRatings):
     """Mixed into MediaLibrary, which provides db and lock; the rows' tracker helpers and
     the ratings' `tmdb_client` come from the classes it builds on."""
@@ -698,66 +764,11 @@ class TrackerFilms(TrackerRows, AgeRatings):
     @staticmethod
     def _films_children(indexer) -> list[int]:
         """c411's native film categories, read from its own tree, not from Torznab ids."""
-        from torrentlinker.catalogue_sync import SUBCATS
-        from torrentlinker.torrent_search import parse_tree
-
-        tree = parse_tree(indexer.search_categories(), adult=False)
-        children = sorted(
-            -key
-            for key, category in tree.categories.items()
-            if key < 0
-            and str(category.parent) == FILM_ROOT
-            and SUBCATS[int(FILM_ROOT)].get(-key) in FILM_CATEGORIES["c411"]
-        )
-        if not children:
-            raise ValueError("c411 lists no film category.")
-        return children
+        return native_children(indexer, FILM_ROOT, FILM_CATEGORIES["c411"], "film")
 
     def _films_step(self, indexer, walk: dict[str, Any], children: list[int], fresh: bool) -> bool:
-        """One c411 request of the walk: a page of one year's slice of the film categories.
-        c411 answers no page past SLICE_CAP releases, so a year with more is read per category,
-        and a category still with more is read from the newest end, then from the oldest until
-        the two meet (a slice they do not cover is flagged in `capped`). `fresh` only reads each
-        year's newest pages. False once every year is read."""
-        from torrentlinker.torrent_search import native_search
-
-        if not walk["todo"]:
-            if walk["year"] < walk["floor"]:
-                return False
-            walk["todo"] = [",".join(str(child) for child in children)]
-        subcat = walk["todo"][0]
-        params = {
-            "category": FILM_ROOT,
-            "subcat": subcat,
-            "year": str(walk["year"]),
-            "sortBy": "createdAt",
-            "sortOrder": walk["order"],
-        }
-        page = native_search(indexer, params, walk["page"])
-        changed = self._films_read(page)
-        walk["seen"] += len(page.rows)
-        if not fresh and walk["page"] == 1 and walk["order"] == "desc" and page.total > SLICE_CAP:
-            if "," in subcat:  # too many for one search: one per film category
-                walk["todo"][:1] = subcat.split(",")
-                walk["seen"] = 0
-                return True
-        if walk["order"] == "asc":
-            covered = walk["first"] + walk["seen"] >= page.total
-        else:
-            covered = walk["seen"] >= page.total
-        if page.has_more and not covered and (changed or not fresh):
-            walk["page"] += 1
-            return True
-        if not fresh and not covered and walk["order"] == "desc":
-            walk.update(order="asc", page=1, first=walk["seen"], seen=0)
-            return True
-        if not covered and not fresh:
-            walk["capped"].append(f"{walk['year']}:{subcat}")
-        walk.update(order="desc", page=1, first=0, seen=0)
-        walk["todo"].pop(0)
-        if not walk["todo"]:
-            walk["year"] -= 1
-        return True
+        """One c411 request of the walk (see `walk_step`). False once every year is read."""
+        return walk_step(indexer, walk, children, fresh, FILM_ROOT, self._films_read)
 
     def _films_walk(self, key: str, walk: dict[str, Any]) -> None:
         with self.lock, self.db:

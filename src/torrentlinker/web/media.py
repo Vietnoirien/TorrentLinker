@@ -461,6 +461,12 @@ def media_routes(app, agent, assistant):
         running = agent.jobs.running("series-index", target(request, client_id))
         return media.series_revision_info(running, actor(request).owner)
 
+    @app.post("/api/media/tracker-series/focus")
+    @needs(Permission.SERIES, Permission.ANIME)
+    def series_focus(body: FilmFocus, request: Request):
+        media.series_focus(target(request, body.client_id), body.films)
+        return {"ok": True}
+
     @app.get("/api/media/tracker-series/landing")
     @needs(Permission.SERIES, Permission.ANIME)
     def series_landing(request: Request, client_id: str = "", scope: str = "series"):

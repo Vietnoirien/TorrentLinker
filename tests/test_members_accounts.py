@@ -172,6 +172,7 @@ def test_every_existing_route_without_a_declaration_is_the_owners(server):
         "/api/media/tracker-series",
         "/api/media/tracker-series/landing",
         "/api/media/tracker-series/revision",
+        "/api/media/tracker-series/focus",
         "/api/media/tracker-series/{identifier}/quote",
         "/api/requests/series",
         "/api/requests/series/follow",

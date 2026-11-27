@@ -31,7 +31,7 @@
       return {...page, rows: page.rows.map(asRow)};
     }
     if (name === "media/tracker-films/revision") return request(scoped(`media/tracker-series/revision?${query}`, scope), options);
-    if (name === "media/tracker-films/focus") return {};
+    if (name === "media/tracker-films/focus") return request("media/tracker-series/focus", options);
     return null;
   }
   const connect = TLPanel.connect;
@@ -76,6 +76,14 @@
     if (!TS.scope) return;
     for (const count of document.querySelectorAll(".films-bar .media-home-row-count")) if (/film/.test(count.textContent)) count.textContent = count.textContent.replace(/film/, say("series", "série"));
   }).observe(document.documentElement, {childList: true, subtree: true, characterData: true});
+  // The Owner's progress line counts series here, not films.
+  const originalProgress = filmsProgressLine;
+  filmsProgressLine = function () {
+    originalProgress();
+    if (!TS.scope) return;
+    const line = document.querySelector(".films-progress");
+    if (line) line.textContent = line.textContent.replace(/Film identification|Identification des films/, say("Series identification", "Identification des séries"));
+  };
   // A card: its seasons beside the year, once the panel has told how many.
   const originalBadge = filmsBadge;
   filmsBadge = function (row, art) {
