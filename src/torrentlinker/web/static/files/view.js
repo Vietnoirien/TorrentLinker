@@ -265,41 +265,64 @@ const rowKey = (card, r) => `${card.path}|${r.key}`;
 const doable = (r) => r.maps.length && !r.needs_link && !r.problem && !r.error;
 function orgCard() { return S.org?.folders.find((f) => f.path === S.orgScope) || S.org?.folders[0]; }
 function tplCard(card, t) {
-  const kind = t.kind === "film" ? say("Films", "Films") : say("Series", "Séries");
-  return `<div class="card tpl"><div class="row between"><h3>${say("Naming template", "Modèle de nommage")} · ${kind}</h3><span class="badge">${esc(card.name)}</span></div>
-    <small>${say("A “/” separates one folder from the next; the file name is the last level and the extension is added.", "Un « / » sépare un dossier du suivant, le nom du fichier est le dernier niveau, l'extension est ajoutée.")}</small>
+  const kind = t.kind === "film" ? "Films" : say("Series", "Séries");
+  return `<div class="card tpl"><div class="row"><h3>${kind}</h3>${S.org.folders.length > 1 ? `<span class="badge">${esc(card.name)}</span>` : ""}${tip("A “/” separates one folder from the next. The last level is the file name; the extension is added. The default template follows the Jellyfin layout.", "Un « / » sépare un dossier du suivant. Le dernier niveau est le nom du fichier ; l'extension est ajoutée. Le modèle par défaut suit le format Jellyfin.", say("Help on the template", "Aide sur le modèle"))}</div>
     <input data-k="tpl" data-f="${esc(card.path)}" data-kind="${t.kind}" value="${esc(t.template)}" spellcheck="false" aria-label="${say("Template", "Modèle")} ${kind}">
     <div class="tokens">${S.org.tokens.map((x) => `<button data-k="token" data-f="${esc(card.path)}" data-kind="${t.kind}" data-t="${esc(x)}">${esc(x)}</button>`).join("")}</div>
-    <div class="tplout" data-f="${esc(card.path)}" data-kind="${t.kind}">${t.error ? `<div class="err">${esc(t.error)}</div>` : `<div class="example"><small>${say("Example", "Exemple")}</small>${esc(t.example)}</div>`}</div>
+    <div class="tplout" data-f="${esc(card.path)}" data-kind="${t.kind}">${t.error ? `<div class="err">${esc(t.error)}</div>` : `<div class="example">${esc(t.example)}</div>`}</div>
     <div class="row"><button data-k="tplreset" data-f="${esc(card.path)}" data-kind="${t.kind}" ${t.template === t.default ? "disabled" : ""}>${say("Restore the Jellyfin template", "Rétablir le modèle Jellyfin")}</button></div></div>`;
 }
+// The top level of a path, without the tmdb id: what a person recognises.
+const shortName = (s) => s.split("/")[0].replace(/\s*\[tmdbid-\d+\]/g, "");
 function orgHTML() {
   const o = S.org, card = orgCard();
   if (!o) return `<div class="empty">…</div>`;
   if (!card) return `<div class="empty">${say("No Library Folder is configured.", "Aucun dossier de bibliothèque n'est configuré.")}</div>`;
-  const rows = card.rows, chosen = rows.filter((r) => doable(r) && !S.orgOff.has(rowKey(card, r))), links = rows.filter((r) => r.needs_link).length;
-  const seedCell = (r) => !r.seed ? `<small>${say("No torrent", "Aucun torrent")}</small>`
-    : r.needs_link ? `<span class="badge warn">${say("needs a Link Folder", "nécessite un Dossier de liens")}</span><small>${esc(r.seed.client)}</small>`
-    : r.problem ? `<span class="badge warn">${esc(r.problem)}</span><small>${esc(r.seed.client)}</small>`
-    : `<span class="badge ok">${say("renamed in the client", "renommé dans le client")}</span><small>${esc(r.seed.client)}</small>`;
-  return `<p class="muted hint">${say("Preview of the renames to the Jellyfin layout. Nothing is applied until you confirm rows. A shared torrent is renamed <b>in its client</b>.", "Aperçu des renommages au format Jellyfin. Rien n'est appliqué tant que vous ne confirmez pas des lignes. Un torrent en partage est renommé <b>dans son client</b>.")}</p>
-    <section class="sect"><div class="row"><h3>${say("Proposed renames", "Renommages proposés")}</h3>
-      <label class="row">${say("Folder", "Dossier")} <select data-k="orgscope">${o.folders.map((f) => `<option value="${esc(f.path)}" ${f.path === card.path ? "selected" : ""}>${esc(f.name)}</option>`).join("")}</select></label>
-      <span class="grow"></span><button data-k="orgall">${say("Check all", "Tout cocher")}</button><button data-k="orgnone">${say("Uncheck all", "Tout décocher")}</button>
-      <button class="primary" data-k="orgapply" ${chosen.length ? "" : "disabled"}>${say("Apply the selection", "Appliquer la sélection")} (${chosen.length})</button></div>
-      ${links ? `<div class="note warn">${say(`${links} row(s) need a Link Folder: the client cannot rename them without changing their layout. Set it in Settings, on the client's tab.`, `${links} ligne(s) nécessitent un Dossier de liens : le client ne sait pas les renommer sans changer leur disposition. Configurez-le dans Paramètres, onglet du client.`)}</div>` : ""}
-      <div class="panel"><table class="list diff"><thead><tr><th></th><th>${say("Current", "Actuel")}</th><th>${say("Proposed (Jellyfin)", "Proposé (Jellyfin)")}</th><th>${say("Sharing", "Partage")}</th></tr></thead><tbody>
-      ${rows.map((r) => `<tr class="${r.same ? "unchanged" : ""} ${r.needs_link ? "blocked" : ""}"><td><input type="checkbox" data-k="orgrow" data-r="${esc(rowKey(card, r))}" ${doable(r) && !S.orgOff.has(rowKey(card, r)) ? "checked" : ""} ${doable(r) ? "" : "disabled"} aria-label="${esc(r.title)}"></td>
-        <td class="cur">${esc(r.current)}</td>
-        <td class="new">${r.same ? `<small>${say("Already matches the template", "Déjà conforme au modèle")}</small>` : r.error ? `<span style="color:var(--danger)">${esc(r.error)}</span>` : `<b>${esc(r.proposed)}</b>${r.more ? esc(` … (${r.more + 1} ${say("episodes", "épisodes")})`) : ""}`}</td>
-        <td>${seedCell(r)}</td></tr>`).join("") || `<tr><td colspan="4" class="empty">${say("Nothing to tidy in this folder.", "Rien à ranger dans ce dossier.")}</td></tr>`}</tbody></table></div></section>
-    <div class="grid2">${card.templates.map((t) => tplCard(card, t)).join("")}</div><div style="height:14px"></div>${autoHTML()}`;
+  const rows = card.rows, apply = rows.filter(doable), chosen = apply.filter((r) => !S.orgOff.has(rowKey(card, r)));
+  const state = !apply.length ? "" : chosen.length === apply.length ? "all" : chosen.length ? "some" : "none";
+  const rowHTML = (r) => {
+    const seedTip = r.seed ? say(`Shared in ${r.seed.client}: the name is also changed in the client, sharing continues.`, `En partage dans ${r.seed.client} : le nom est aussi changé dans le client, le partage continue.`) : "";
+    const blockTip = r.error || r.problem || say("The client cannot rename this torrent's files.", "Ce client ne sait pas renommer les fichiers de ce torrent.");
+    const info = r.needs_link ? TLInfo.html(`${blockTip} ${say("A Link Folder is needed (Settings, the client's tab).", "Un Dossier de liens est nécessaire (Paramètres, onglet du client).")}`, say("Why this cannot be tidied", "Pourquoi ce n'est pas rangeable"), "links", say("Open Settings", "Ouvrir Paramètres"))
+      : r.error || r.problem ? TLInfo.html(blockTip, say("Why this cannot be tidied", "Pourquoi ce n'est pas rangeable")) : seedTip ? TLInfo.html(seedTip, say("Details", "Détails")) : "";
+    const unrenamable = r.needs_link || r.problem || r.error;
+    return `<div class="orow ${r.same ? "unchanged" : ""} ${unrenamable ? "blocked" : ""}">
+      <span class="oc">${unrenamable ? `<span class="warnmark" aria-hidden="true">⚠</span>` : `<input type="checkbox" data-k="orgrow" data-r="${esc(rowKey(card, r))}" ${doable(r) && !S.orgOff.has(rowKey(card, r)) ? "checked" : ""} ${doable(r) ? "" : "disabled"} aria-label="${say("Tidy", "Ranger")} ${esc(r.title)}">`}</span>
+      <span class="cur" title="${esc(r.current)}">${r.seed && !unrenamable ? `<i class="dot" title="${say("Shared in", "En partage dans")} ${esc(r.seed.client)}"></i>` : ""}<span class="t">${esc(r.current)}</span></span>
+      <span class="new">${unrenamable ? `<span class="no">${say("cannot be tidied", "ne peut pas être rangé")}</span>` : r.same ? `<span class="muted">${say("Already tidy", "Déjà rangé")}</span>` : `<span class="arrow" aria-hidden="true">→</span><b class="t" title="${esc(r.proposed)}">${esc(shortName(r.proposed))}</b>`}</span>
+      <span class="oi">${info}</span></div>`;
+  };
+  return `<section class="sect"><div class="row orghead"><select data-k="orgscope" aria-label="${say("Folder", "Dossier")}">${o.folders.map((f) => `<option value="${esc(f.path)}" ${f.path === card.path ? "selected" : ""}>${esc(f.name)}</option>`).join("")}</select>
+      ${tip("Tidy renames each ticked item with its library's template (Jellyfin layout). Nothing is applied until you click; the result is in Tasks and can be undone. A shared torrent is also renamed in its client.", "Ranger renomme chaque élément coché avec le modèle de sa bibliothèque (format Jellyfin). Rien n'est appliqué avant que vous cliquiez ; le résultat est dans Tâches et annulable. Un torrent en partage est aussi renommé dans son client.", say("Help on Tidy", "Aide sur Ranger"))}
+      <button data-k="orgsettings" aria-label="${say("Tidy settings", "Réglages du rangement")}" title="${say("Settings", "Réglages")}">⚙</button><span class="grow"></span>
+      <button class="primary" data-k="orgapply" ${chosen.length ? "" : "disabled"}>${say("Tidy the selection", "Ranger la sélection")} (${chosen.length})</button></div>
+    <div class="panel orows"><div class="orow ohead"><span class="oc"><input type="checkbox" data-k="orgtoggle" data-state="${state}" ${state === "all" ? "checked" : ""} ${state ? "" : "disabled"} aria-label="${say("Tick or untick all", "Tout cocher ou décocher")}"></span><span class="muted">${say("Tick all", "Tout cocher")}</span><span></span><span></span></div>
+      ${rows.map(rowHTML).join("") || `<div class="empty">${say("Nothing to tidy.", "Rien à ranger.")}</div>`}</div></section>`;
 }
-// "Ranger automatiquement": per Download Folder, off by default.
-function autoHTML() {
-  return `<div class="card"><h3>${say("Tidy automatically", "Ranger automatiquement")}</h3><p class="muted">${say("Per Download Folder. Off by default: nothing is tidied unless you ask.", "Par Dossier de téléchargement. Désactivé par défaut : rien n'est rangé sans que vous l'ayez demandé.")}</p>
-    ${S.org.auto.map((a) => `<div class="sect"><div class="switch" role="switch" tabindex="0" data-k="auto" data-f="${esc(a.folder)}" aria-checked="${a.on}"><span class="sw"></span><span><b>${esc(a.folder)}</b>
-      <small>${a.on ? say("When a download finishes, the release is renamed with its Library Folder's template, then <b>moved where the placement rule picks</b>, still sharing: the client follows it. Everything is in Tasks and can be undone.", "À la fin d'un téléchargement, la version est renommée avec le modèle de sa bibliothèque puis <b>déplacée vers l'endroit que choisit la règle de placement</b>, sans cesser de partager : le client la suit. Tout est dans Tâches et annulable.") : say("Off: finished downloads stay where they are.", "Désactivé : les téléchargements terminés restent où ils sont.")}</small></span></div></div>`).join("") || `<p class="muted">${say("No Download Folder is configured.", "Aucun dossier de téléchargement n'est configuré.")}</p>`}</div>`;
+// The ⚙ modal: naming templates, and which Download Folders tidy by themselves.
+function orgSettingsHTML() {
+  const o = S.org;
+  const folders = o?.auto || [];
+  const dl = `<section class="sect"><div class="row"><h3>${say("Your download folders", "Vos dossiers de téléchargement")}</h3>${tip("Off by default: nothing is tidied without your say. When on for a folder, each finished download is renamed with its library's template, then moved where the placement rule sends it, still sharing. Everything is in Tasks and can be undone.", "Désactivé par défaut : rien n'est rangé sans votre accord. Activé pour un dossier, chaque téléchargement terminé est renommé avec le modèle de sa bibliothèque puis déplacé là où la règle de placement l'envoie, sans cesser de partager. Tout est dans Tâches et annulable.", say("Help on automatic tidying", "Aide sur le rangement automatique"))}<span class="grow"></span>${folders.length ? `<button class="quiet small" data-k="dlfolders">${say("Edit in Settings", "Modifier dans Paramètres")}</button>` : ""}</div>
+    ${folders.length ? "" : `<div class="row autorow"><span class="muted">${say("No download folder", "Aucun dossier de téléchargement")}</span><button class="quiet small" data-k="dlfolders">${say("Add", "Ajouter")}</button></div>`}
+    ${folders.map((a) => `<div class="row autorow"><div class="switch" role="switch" tabindex="0" data-k="auto" data-f="${esc(a.folder)}" aria-checked="${a.on}" aria-label="${say("Tidy automatically", "Ranger automatiquement")} ${esc(a.folder)}"><span class="sw"></span><span>${esc(a.folder)}</span></div></div>`).join("")}</section>`;
+  return `<div class="row between"><h2>${say("Tidy settings", "Réglages du rangement")}</h2><button class="quiet" data-close aria-label="${say("Close", "Fermer")}">✕</button></div>
+    <section class="sect"><div class="row"><h3>${say("Name template", "Modèle de nom")}</h3></div><div class="grid2 one">${(o?.folders || []).flatMap((f) => f.templates.map((t) => tplCard(f, t))).join("")}</div></section>${dl}
+    <div class="dialog-foot"><button class="primary" data-close>${say("Close", "Fermer")}</button></div>`;
+}
+// A ⚙ settings modal: header with ✕, sections, a Close button; redrawn with the page.
+function openSettings(html) {
+  const d = $("dialog");
+  S.settings = html;
+  d.innerHTML = html();
+  d.dataset.settings = "1";
+  d.showModal();
+  d.onclick = (e) => { if (e.target.closest("[data-close]")) d.close(); };
+  d.addEventListener("close", () => { S.settings = null; delete d.dataset.settings; }, { once: true });
+}
+function refreshSettings() {
+  const d = $("dialog");
+  if (S.settings && d.open && !document.activeElement?.closest?.(".tpl")) d.innerHTML = S.settings();
 }
 
 const TAB_TIPS = {
@@ -314,6 +337,8 @@ const tabsFor = () => TABS.filter(([id]) => S.owner || !["disks", "organisation"
 function render() {
   const tabs = tabsFor().map(([id, en, french]) => `<button data-tab="${id}" class="${S.tab === id ? "selected" : ""}">${say(en, french)}${id === "trash" && S.trash ? `<span class="badge count">${S.trash.disks.reduce((a, d) => a + d.items.length, 0)}</span>` : ""}</button>${S.tab === id && TAB_TIPS[id] ? `<span class="tabtip">${tip(...TAB_TIPS[id](), say("Help on this tab", "Aide sur cet onglet"))}</span>` : ""}`).join("");
   $("app").innerHTML = `<nav class="tabs" role="tablist">${tabs}</nav>${S.tab === "trash" ? trashHTML() : S.tab === "disks" ? disksHTML() : S.tab === "organisation" ? orgHTML() : S.tab === "explorer" ? explorerHTML() : tasksHTML()}`;
+  const toggle = document.querySelector('[data-k="orgtoggle"]');
+  if (toggle) toggle.indeterminate = toggle.dataset.state === "some";
 }
 async function load() {
   try {
@@ -330,7 +355,8 @@ async function load() {
     else if (S.tab === "trash") { S.trash = await api("trash"); S.owner = S.trash.owner !== false; }
     else { S.tasks = (await api("journal")).operations; S.queue = (await api("tasks")).tasks; }
   } catch (e) { fail(e); }
-  if (!document.querySelector("dialog[open]") && !document.activeElement?.closest?.(".tpl")) render();
+  if (S.settings && $("dialog").open) refreshSettings();
+  else if (!document.querySelector("dialog[open]") && !document.activeElement?.closest?.(".tpl")) render();
 }
 
 function confirmEmpty(disk) {
@@ -365,7 +391,8 @@ document.addEventListener("click", async (e) => {
     try { await api("organisation/auto", { folder: t.dataset.f, on: t.getAttribute("aria-checked") !== "true" }); } catch (x) { fail(x); }
     return load();
   }
-  if (t.dataset.k === "orgall" || t.dataset.k === "orgnone") { const card = orgCard(); S.orgOff = new Set(t.dataset.k === "orgall" ? [] : card.rows.map((r) => rowKey(card, r))); return render(); }
+  if (t.dataset.k === "orgsettings") return openSettings(orgSettingsHTML);
+  if (t.dataset.k === "dlfolders") { $("dialog").close(); parent.location.hash = "#/setup/downloads"; return; }
   if (t.dataset.k === "orgrow") { S.orgOff.has(t.dataset.r) ? S.orgOff.delete(t.dataset.r) : S.orgOff.add(t.dataset.r); return render(); }
   if (t.dataset.k === "orgapply") {
     const card = orgCard(), keys = card.rows.filter((r) => doable(r) && !S.orgOff.has(rowKey(card, r))).map((r) => r.key);
@@ -407,7 +434,10 @@ document.addEventListener("click", async (e) => {
     } catch (x) { fail(x); }
   }
 });
+document.addEventListener("tl-info-action", (e) => { if (e.detail === "links") parent.location.hash = "#/setup/connections"; });
 document.addEventListener("keydown", (e) => {
+  const sw = e.target.closest?.('[data-k="auto"]');
+  if (sw && (e.key === " " || e.key === "Enter")) { e.preventDefault(); sw.click(); return; }
   if (S.tab !== "explorer" || e.target.closest("input,select,textarea") || $("dialog").open) return;
   const f = { F2: "rename", F5: "copy", F6: "move", F7: "mkdir", Delete: "trash" }[e.key];
   if (f && (f === "mkdir" || S.panes[S.active].sel.size)) { e.preventDefault(); operate(f); }
@@ -420,6 +450,7 @@ document.addEventListener("input", (e) => {
   out.innerHTML = bad.length ? `<div class="err">${say("Unknown token", "Jeton inconnu")} : ${esc(bad.join(", "))}</div>` : !e.target.value.includes("{titre}") ? `<div class="err">${say("The template must contain {titre}.", "Le modèle doit contenir {titre}.")}</div>` : `<div class="example"><small>${say("Example", "Exemple")}</small>${esc(exampleOf(e.target.value, e.target.dataset.kind))}</div>`;
 });
 document.addEventListener("change", async (e) => {
+  if (e.target.dataset.k === "orgtoggle") { const card = orgCard(), rows = card.rows.filter(doable); S.orgOff = e.target.checked ? new Set() : new Set(rows.map((r) => rowKey(card, r))); return render(); }
   if (e.target.dataset.k === "orgscope") { S.orgScope = e.target.value; return render(); }
   if (e.target.dataset.k === "tpl") {
     try { await api("organisation/template", { folder: e.target.dataset.f, kind: e.target.dataset.kind, template: e.target.value }); TLToast.show(say("Template saved.", "Modèle enregistré.")); } catch (x) { fail(x); }
