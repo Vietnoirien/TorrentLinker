@@ -506,6 +506,18 @@ def create_app(
 
         return seeds_under(path, seeding())
 
+    def rebalancing(cards: list[dict[str, Any]]) -> dict[str, Any]:
+        from torrentlinker.file_annotations import media_films
+        from torrentlinker.rebalance import proposal
+
+        client_id = service.settings.default_client_id
+        return proposal(
+            cards,
+            storage_folders()[0],
+            lambda folder: media_films(agent_service.media, client_id, folder),
+            seeding(),
+        )
+
     file_routes(
         app,
         file_storage,
@@ -514,6 +526,7 @@ def create_app(
         followed=follow,
         annotate=lambda folder, entries: annotate_entries(folder, entries),
         seeds=lambda path: seeds_of_path(path),
+        rebalance=lambda cards: rebalancing(cards),
         client_of=lambda client_id: for_client(client_id).setup.client(),
     )
     from torrentlinker.library_replace import Replacements

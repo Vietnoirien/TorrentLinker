@@ -5,7 +5,7 @@ const fr = () => (parent.document.documentElement.lang || "fr") === "fr";
 const say = (en, french) => (fr() ? french : en);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const DAY = 86400;
-const S = { orgOff: new Set(), org: null, orgScope: "", owner: true, tab: "explorer", panes: [{ path: "", entries: [], sel: new Set() }, { path: "", entries: [], sel: new Set() }], active: 0, roots: [], queue: [], tab0: "", disks: null, trash: null, tasks: [], filter: "all", busy: false, sim: 4.2 };
+const S = { rebal: null, rebPick: null, orgOff: new Set(), org: null, orgScope: "", owner: true, tab: "explorer", panes: [{ path: "", entries: [], sel: new Set() }, { path: "", entries: [], sel: new Set() }], active: 0, roots: [], queue: [], tab0: "", disks: null, trash: null, tasks: [], filter: "all", busy: false, sim: 4.2 };
 
 // The panel has no network of its own: the host forwards each request to /api/files/.
 const bridge = window.TLPanel.connect("files", { asynchronous: true });
@@ -113,6 +113,28 @@ function placementHTML() {
       "Les versions d'un film et les épisodes d'une série restent sur le disque qu'ils partagent déjà. Sinon, le téléchargement va sur le disque qui a le plus de place libre au-dessus de la marge de 10 %. Remplacer et les téléchargements l'utilisent.")}</p>
     <div class="sim"><div class="row"><label>${say("Next download size (GB)", "Taille du prochain téléchargement (Go)")}<input type="number" min="0.1" step="0.1" value="${S.sim}" data-k="sim" style="width:100px"></label></div>${answer}</div></section>`;
 }
+// ---- Rebalance: films from a disk under the margin to one with room ---------------------------
+function rebalanceHTML() {
+  const r = S.rebal;
+  if (!r) return "";
+  if (r.state === "balanced") return `<section class="card sect"><h3>${say("Rebalance", "Rééquilibrer")}</h3><p class="muted">${say("No disk is under the 10 % margin.", "Aucun disque n'est sous la marge de 10 %.")}</p></section>`;
+  if (r.state === "no-room") return `<section class="card sect"><h3>${say("Rebalance", "Rééquilibrer")}</h3><p class="muted">${say("Every disk is under the margin: there is nowhere to move films to.", "Tous les disques sont sous la marge : aucun endroit où déplacer des films.")}</p></section>`;
+  if (r.state === "no-folder") return `<section class="card sect"><h3>${say("Rebalance", "Rééquilibrer")}</h3><p class="muted">${say(`${esc(r.target.name)} has room but no Library Folder: add one in Settings to move films there.`, `${esc(r.target.name)} a de la place mais aucun dossier de bibliothèque : ajoutez-en un dans Paramètres pour y déplacer des films.`)}</p></section>`;
+  let total = 0, count = 0;
+  const blocks = r.sources.map((b) => {
+    const picked = b.films.filter((f) => S.rebPick.has(f.path)), bytes = picked.reduce((a, f) => a + f.size, 0);
+    total += bytes; count += picked.length;
+    const missing = b.disk.margin - b.disk.free;
+    return `<div class="sect"><p><b>${esc(b.disk.name)}</b> ${b.disk.free <= 0 ? say("is full", "est plein") : say("is almost full", "est presque plein")} (${size(b.disk.free)} ${say("free", "libres")}, ${say("10 % margin", "marge de 10 %")} = ${size(b.disk.margin)}). ${picked.length ? say(`Moving ${picked.length} film(s) (${size(bytes)}) to ${esc(r.target.name)} would free ${size(bytes)}.`, `Déplacer ${picked.length} film(s) (${size(bytes)}) vers ${esc(r.target.name)} libérerait ${size(bytes)}.`) : say("Tick films to move.", "Cochez des films à déplacer.")}
+      ${bytes < missing ? `<small>${say(`The margin needs ${size(missing)}: the rest is outside the Library Folders, TorrentLinker does not touch it.`, `La marge demanderait ${size(missing)} : ce qui reste est hors des dossiers de bibliothèque, TorrentLinker n'y touche pas.`)}</small>` : ""}</p>
+      <div class="panel"><table class="list"><tbody>${b.films.map((f) => `<tr><td style="width:30px"><input type="checkbox" data-k="reb" data-p="${esc(f.path)}" ${S.rebPick.has(f.path) ? "checked" : ""}></td>
+        <td style="width:40px">${icon({ film: { id: f.id }, dir: true })}</td><td class="name">${esc(f.title)}<small>${esc(f.name)}</small></td><td class="num">${size(f.size)}</td>
+        <td>${f.seed ? `<span class="badge ok">▲ ${esc(f.seed.client)} · ratio ${String(f.seed.ratio).replace(".", fr() ? "," : ".")}</span>` : ""}</td></tr>`).join("")}</tbody></table></div></div>`;
+  }).join("");
+  return `<section class="card sect"><div class="row between"><h3>${say("Proposal: rebalance to", "Proposition : rééquilibrer vers")} ${esc(r.target.name)}</h3></div>${blocks}
+    <div class="note">${count} film(s) · ${size(total)} · ${say("a copy between disks of about", "copie entre disques d'environ")} ${duration(total / r.speed)}. ${say("Each shared film is moved <b>by its client</b>, which keeps sharing, then the original is removed after verification.", "Chaque film en partage est déplacé <b>par son client</b>, qui continue de partager, puis l'original est supprimé après vérification.")}</div>
+    <div class="row"><button class="primary" data-k="rebgo" ${count ? "" : "disabled"}>${say(`Move ${count} film(s) to ${esc(r.target.name)}`, `Déplacer ${count} film(s) vers ${esc(r.target.name)}`)}</button><small>${say("The moves open in Tasks; you can undo them.", "Les déplacements s'ouvrent dans Tâches, vous pouvez les annuler.")}</small></div></section>`;
+}
 function disksHTML() {
   const d = S.disks;
   if (!d) return `<div class="empty">…</div>`;
@@ -120,7 +142,7 @@ function disksHTML() {
     "Each disk is mounted separately and identified by its device (st_dev). The Corbeille is counted apart.",
     "Chaque disque est monté séparément et identifié par son périphérique (st_dev). La corbeille est comptée à part.")}</p>
     ${healthHTML()}<div class="disks">${d.disks.map(diskCard).join("")}${d.missing.map(missingCard).join("")}</div>
-    ${d.disks.length ? `<div style="height:14px"></div>${placementHTML()}` : `<div class="empty">${say("No storage folder is configured.", "Aucun dossier de stockage n'est configuré.")}</div>`}`;
+    ${d.disks.length ? `<div style="height:14px"></div>${placementHTML()}${rebalanceHTML()}` : `<div class="empty">${say("No storage folder is configured.", "Aucun dossier de stockage n'est configuré.")}</div>`}`;
 }
 async function place() {
   try { S.placed = await api("disks/placement", { size: Math.round(S.sim * 1e9) }); } catch (e) { fail(e); }
@@ -286,7 +308,11 @@ async function load() {
       const r = await api("browse");
       S.roots = r.roots;
       for (const [i, pane] of S.panes.entries()) if (!pane.path && r.roots[i] && !pane.chosen) { pane.chosen = true; await openPane(i, r.roots[i]); }
-    } else if (S.tab === "disks") { S.disks = await api("disks"); await place(); }
+    } else if (S.tab === "disks") {
+      S.disks = await api("disks"); await place();
+      S.rebal = await api("rebalance");
+      if (!S.rebPick && S.rebal.state === "proposal") S.rebPick = new Set(S.rebal.sources.flatMap((b) => b.films.slice(0, 3).map((f) => f.path)));
+    }
     else if (S.tab === "organisation") { S.org = await api("organisation"); S.orgScope ||= S.org.folders[0]?.path; }
     else if (S.tab === "trash") { S.trash = await api("trash"); S.owner = S.trash.owner !== false; }
     else { S.tasks = (await api("journal")).operations; S.queue = (await api("tasks")).tasks; }
@@ -317,6 +343,11 @@ document.addEventListener("click", async (e) => {
   if (t.dataset.f) return operate(t.dataset.f);
   if (t.dataset.cancel) { try { await api(`tasks/${t.dataset.cancel}/cancel`, {}); } catch (x) { fail(x); } return load(); }
   if (t.dataset.undoitem) { try { await api(`tasks/${t.dataset.undoitem}/undo/${t.dataset.n}`, {}); TLToast.show(say("Undone.", "Annulé.")); } catch (x) { fail(x); } return load(); }
+  if (t.dataset.k === "reb") { S.rebPick.has(t.dataset.p) ? S.rebPick.delete(t.dataset.p) : S.rebPick.add(t.dataset.p); return render(); }
+  if (t.dataset.k === "rebgo") {
+    try { const r = await api("rebalance/apply", { paths: [...S.rebPick] }); TLToast.show(say(`${r.queued} film(s) queued: follow them in Tasks.`, `${r.queued} film(s) lancé(s) : suivez-les dans Tâches.`)); S.rebPick = null; S.tab = "tasks"; render(); } catch (x) { fail(x); }
+    return load();
+  }
   if (t.dataset.k === "orgall" || t.dataset.k === "orgnone") { const card = orgCard(); S.orgOff = new Set(t.dataset.k === "orgall" ? [] : card.rows.map((r) => rowKey(card, r))); return render(); }
   if (t.dataset.k === "orgrow") { S.orgOff.has(t.dataset.r) ? S.orgOff.delete(t.dataset.r) : S.orgOff.add(t.dataset.r); return render(); }
   if (t.dataset.k === "orgapply") {

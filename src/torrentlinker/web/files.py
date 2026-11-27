@@ -41,6 +41,10 @@ class Operation(BaseModel):
     conflict: str = Field(default="skip", pattern="^(skip|replace|rename|keep-one)$")
 
 
+class Rebalancing(BaseModel):
+    paths: list[str] = Field(min_length=1, max_length=500)
+
+
 class Retention(BaseModel):
     days: int = Field(ge=1, le=365)
 
@@ -55,6 +59,7 @@ def file_routes(
     annotate=lambda folder, entries: None,
     seeds=lambda path: [],
     client_of=lambda client_id: None,
+    rebalance=None,
 ) -> None:
     """`folders` gives the Library and Download Folders; `films(path)` counts a folder's films."""
     app.state.file_storage = storage
@@ -237,6 +242,29 @@ def file_routes(
     @app.get("/api/files/disks")
     def disks() -> dict:
         return cards()
+
+    @app.get("/api/files/rebalance")
+    def rebalance_proposal() -> dict:
+        if rebalance is None:
+            return {"state": "balanced", "sources": []}
+        return rebalance(cards()["disks"])
+
+    @app.post("/api/files/rebalance/apply", status_code=202)
+    def rebalance_apply(body: Rebalancing, request: Request) -> dict:
+        """Queue the ticked films as moves; the paths are checked against a fresh proposal."""
+        from torrentlinker.rebalance import destination
+
+        found = rebalance(cards()["disks"]) if rebalance else {}
+        if found.get("state") != "proposal":
+            raise HTTPException(409, "There is nothing to rebalance now.")
+        folder, paths = destination(found, body.paths)
+        if not paths:
+            raise HTTPException(409, "None of these films is part of the proposal.")
+        try:
+            task = tasks.submit("move", [{"from": p, "to": folder} for p in paths], who(request))
+        except StorageError as error:
+            raise refuse(error) from error
+        return {"task": task["id"], "queued": len(paths)}
 
     @app.post("/api/files/disks/placement")
     def placement(body: Placement) -> dict:
