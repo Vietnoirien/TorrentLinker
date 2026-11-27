@@ -182,6 +182,8 @@ class BundledView(QWidget):
                             "ratings.js",
                             "requests.js",
                             "tracker-films.js",
+                            "tracker-series.js",
+                            "replace.js",
                             "watch.js",
                         )
                     }
