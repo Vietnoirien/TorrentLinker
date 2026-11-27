@@ -1781,6 +1781,8 @@ class MediaLibrary(TrackerFilms, TrackerSeries):
             return self.film_artwork(client_id, identifier[5:])
         if identifier.startswith("tracker-"):
             return self.tracker_artwork(client_id, identifier[8:])
+        if identifier.startswith("tseries-"):
+            return self.series_artwork(client_id, identifier[8:])
         row = self.record(client_id, identifier)
         image = json.loads(row["body"]).get("artwork")
         if not image:

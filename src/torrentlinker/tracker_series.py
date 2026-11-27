@@ -172,6 +172,7 @@ class TrackerSeries(TrackerRows, AgeRatings):
                     (tmdb TEXT PRIMARY KEY, title TEXT, original_title TEXT, year TEXT,
                     overview TEXT, genres TEXT, status TEXT, rating TEXT,
                     rating_by TEXT NOT NULL DEFAULT '', poster TEXT, fetched REAL);
+                CREATE TABLE IF NOT EXISTS series_artwork (tmdb TEXT PRIMARY KEY, artwork TEXT);
                 CREATE TABLE IF NOT EXISTS series_season
                     (tmdb TEXT, season INTEGER, name TEXT, episodes INTEGER,
                     PRIMARY KEY(tmdb, season));
@@ -438,3 +439,46 @@ class TrackerSeries(TrackerRows, AgeRatings):
                 entry["title"] = meta["title"] or entry["title"]
             result.append(entry)
         return sorted(result, key=lambda e: plain(e["title"]))
+
+    # -- Posters and visibility -------------------------------------------------------------
+
+    def series_visible(self, client_id, identifier: str, actor) -> bool:
+        """Whether the actor may see this series' poster: as for its panel, a hidden series is
+        as missing as an unknown one."""
+        from torrentlinker import tracker_series_view as view
+
+        try:
+            view.detail(self, client_id, identifier, actor)
+        except KeyError:
+            return False
+        return True
+
+    def series_artwork(self, client_id, identifier: str):
+        """A series' TMDb poster, downloaded once and kept as the other posters are."""
+        import re
+
+        from torrentlinker import media_artwork
+
+        entry = next((e for e in self.series_index() if e["id"] == identifier), None)
+        poster = ((entry or {}).get("meta") or {}).get("poster") or ""
+        if not poster.startswith(POSTER_BASE):
+            return None
+        tmdb = entry["tmdb"]  # type: ignore[index]
+        with media_artwork.download_lock(f"series:{tmdb}"):
+            with self.lock:
+                row = self.db.execute(
+                    "SELECT artwork FROM series_artwork WHERE tmdb=?", (tmdb,)
+                ).fetchone()
+            image = row["artwork"] if row else ""
+            if not image:
+                from torrentlinker.assistant.images import fetch_image
+
+                data, _ = fetch_image(poster)
+                image = self.cache_artwork(data)  # type: ignore[attr-defined]
+                with self.lock, self.db:
+                    self.db.execute(
+                        "INSERT OR REPLACE INTO series_artwork VALUES (?,?)", (tmdb, image)
+                    )
+        if not re.fullmatch(r"asset:[a-f0-9]{64}\.(png|webp)", image):
+            return None
+        return self.agent.setup.path.parent / "media-artwork" / image[6:]  # type: ignore[attr-defined]

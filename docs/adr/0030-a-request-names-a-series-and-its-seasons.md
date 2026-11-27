@@ -14,9 +14,9 @@ Category ids, read from the Owner's Catalogues on 2026-11-27:
 
 c411's 5080 (Émission TV) and 5060 (sport), and the adult 6000s, are left out. tr4ker's 5000 also holds TV shows, so a tr4ker release is listed only once TMDb identifies it as a series.
 
-A **Request** may name a series and chosen seasons, never episodes. Members asking for the same season share one Request (key: TMDb TV id and season), charged as ADR-0028 charges a film. The Approver picks the releases: the best season packs under the ReleaseScore profile are pre-selected, and an Intégrale instead when it covers the seasons asked for and scores better, ties going to the Tracker order and then to seeders (ADR-0025). A Member may tick "Suivre la série" on an airing series: each new complete season pack then creates a pending Request for the Approver and notifies the Member. Nothing downloads on its own.
+A **Request** may name a series and chosen seasons, never episodes, and a season the Trackers only hold as single episodes cannot be asked for: it is greyed, and "Suivre la série" catches the pack when it lands. Members asking for the same season share one Request (key: TMDb TV id and season), charged as ADR-0028 charges a film. The Approver picks the releases: the best season packs under the ReleaseScore profile are pre-selected, and an Intégrale instead when it covers the seasons asked for, scores better and the asked seasons make up at least half of it, ties going to the Tracker order and then to seeders (ADR-0025). A Member may tick "Suivre la série" on an airing series: each new complete season pack then creates a pending Request for the Approver and notifies the Member. Nothing downloads on its own.
 
-The Films Permission becomes "Films et séries"; existing grants are kept.
+The existing **Séries** Member Permission gates the series catalogue (anime series: the Anime Permission); "Films" keeps its name. Categories: Séries documentaires (c411 2000) are split from the other kinds of 2000 by their native child id (57), never by the Torznab id.
 
 ## Considered Options
 

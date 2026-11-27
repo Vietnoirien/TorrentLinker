@@ -201,7 +201,7 @@ A Film with at least one seeded release on a Tracker, identified by its TMDb id 
 _Avoid_: Tracker release (one torrent of a Tracker Film), suggestion
 
 **Tracker Series**:
-A series with at least one seeded release on a Tracker, identified by its TMDb TV id when known and otherwise by its title and year; it carries a poster, synopsis, genres, Age Rating, and its seasons and episodes as TMDb lists them. Its releases, which Members never see, are season packs, Intégrales and episodes.
+A series with at least one seeded release on a Tracker, identified by its TMDb TV id when known and otherwise by its title and year; it carries a poster, synopsis, genres, Age Rating, and its seasons and episodes as TMDb lists them. Its releases, which Members never see, are season packs, Intégrales and episodes. Médias lists it in the Séries tab (anime series in the Anime tab) with the seasons the Library already has marked; a series fully in the Library is hidden from Members, and a season the Trackers hold only as episodes cannot be asked for.
 _Avoid_: Show, tracker release (one torrent)
 
 **Season Pack**:

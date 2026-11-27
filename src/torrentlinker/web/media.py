@@ -438,6 +438,56 @@ def media_routes(app, agent, assistant):
         target = client(client_id)
         return replace_context(media, target, media.setup(target), tracker_hash(infohash))
 
+    # Tracker Series: what the Trackers hold of series and anime series (#215, #218). The Séries
+    # Permission browses the series, the Anime Permission the anime; a Member never gets a release.
+    def series_scope(request: Request, scope: str) -> None:
+        if scope not in {"series", "anime"}:
+            raise HTTPException(400, "Unknown series tab.")
+        found = actor(request)
+        if not found.owner and Permission(scope) not in found.permissions:
+            raise HTTPException(403, "This is not allowed for your account.")
+
+    @app.get("/api/media/tracker-series/landing")
+    @needs(Permission.SERIES, Permission.ANIME)
+    def series_landing(request: Request, client_id: str = "", scope: str = "series"):
+        from torrentlinker import tracker_series_view as view
+
+        series_scope(request, scope)
+        chosen = target(request, client_id)
+        return view.landing(view.catalogue(media, chosen, actor(request), scope))
+
+    @app.get("/api/media/tracker-series")
+    @needs(Permission.SERIES, Permission.ANIME)
+    def series_grid(
+        request: Request,
+        client_id: str = "",
+        scope: str = "series",
+        genre: list[str] = Query([], max_length=2),
+        sort: str = Query("new", pattern="^(new|shared|year|title)$"),
+        q: str = Query("", max_length=200),
+        offset: int = Query(0, ge=0),
+        limit: int = Query(60, ge=1, le=100),
+    ):
+        from torrentlinker import tracker_series_view as view
+
+        series_scope(request, scope)
+        chosen = target(request, client_id)
+        cards = view.catalogue(media, chosen, actor(request), scope)
+        return view.grid(cards, genre, sort, q, offset, limit)
+
+    @app.get("/api/media/tracker-series/{identifier}")
+    @needs(Permission.SERIES, Permission.ANIME)
+    def series_panel(identifier: str, request: Request, client_id: str = ""):
+        from torrentlinker import tracker_series_view as view
+
+        chosen = target(request, client_id)
+        try:
+            found = view.detail(media, chosen, identifier, actor(request))
+        except KeyError:
+            raise HTTPException(404, "This series is not on the tracker.") from None
+        series_scope(request, "anime" if found["series_kind"] == "anime" else "series")
+        return found
+
     @app.post("/api/media/tracker/{infohash}/download")
     def tracker_download(infohash: str, body: TrackerDownload, request: Request):
         from pathlib import Path
@@ -689,11 +739,29 @@ def media_routes(app, agent, assistant):
         size: Literal["grid", "hero"] | None = None,
         v: str = "",
     ):
-        if not identifier.startswith(("tracker-", "film-")):
+        if not identifier.startswith(("tracker-", "film-", "tseries-")):
             client_id = item(request, client_id, identifier)
-        elif not media.sees_tracker(actor(request)) or (
-            identifier.startswith("film-")
-            and not media.film_visible(target(request, client_id), identifier[5:], actor(request))
+        elif (
+            not (
+                media.sees_tracker(actor(request))
+                or identifier.startswith("tseries-")
+                and (
+                    actor(request).holds(Permission.SERIES)
+                    or actor(request).holds(Permission.ANIME)
+                )
+            )
+            or (
+                identifier.startswith("film-")
+                and not media.film_visible(
+                    target(request, client_id), identifier[5:], actor(request)
+                )
+            )
+            or (
+                identifier.startswith("tseries-")
+                and not media.series_visible(
+                    target(request, client_id), identifier[8:], actor(request)
+                )
+            )
         ):
             raise HTTPException(404, "Artwork unavailable.")
         else:
