@@ -5,7 +5,7 @@ const fr = () => (parent.document.documentElement.lang || "fr") === "fr";
 const say = (en, french) => (fr() ? french : en);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const DAY = 86400;
-const S = { tab: "disks", disks: null, trash: null, tasks: [], filter: "all", busy: false, sim: 4.2 };
+const S = { tab: "explorer", panes: [{ path: "", entries: [], sel: new Set() }, { path: "", entries: [], sel: new Set() }], active: 0, roots: [], queue: [], tab0: "", disks: null, trash: null, tasks: [], filter: "all", busy: false, sim: 4.2 };
 
 // The panel has no network of its own: the host forwards each request to /api/files/.
 const bridge = window.TLPanel.connect("files", { asynchronous: true });
@@ -126,6 +126,67 @@ async function place() {
   try { S.placed = await api("disks/placement", { size: Math.round(S.sim * 1e9) }); } catch (e) { fail(e); }
 }
 
+// ---- Explorateur ----------------------------------------------------------------------------
+const name = (p) => p.split("/").filter(Boolean).pop() || p;
+const parentOf = (p) => p.replace(/\/[^/]+\/?$/, "") || "/";
+const rootOf = (p) => S.roots.filter((r) => p === r || p.startsWith(r + "/")).sort((a, b) => b.length - a.length)[0] || "";
+const date = (t) => new Date(t * 1000).toLocaleDateString(fr() ? "fr-FR" : "en-GB");
+async function openPane(i, path) {
+  const pane = S.panes[i];
+  try {
+    const r = await api(`browse?path=${encodeURIComponent(path)}`);
+    Object.assign(pane, { path: r.path, entries: r.entries, sel: new Set() });
+  } catch (e) { fail(e); }
+  render();
+}
+function crumbs(pane) {
+  const root = rootOf(pane.path);
+  if (!root) return "";
+  const parts = pane.path.slice(root.length).split("/").filter(Boolean);
+  let at = root;
+  return `<button data-k="go" data-p="${esc(root)}">${esc(name(root))}</button>${parts.map((x) => { at += "/" + x; return `<span>/</span><button data-k="go" data-p="${esc(at)}">${esc(x)}</button>`; }).join("")}`;
+}
+function paneHTML(i) {
+  const pane = S.panes[i];
+  const options = S.roots.map((r) => `<option value="${esc(r)}" ${rootOf(pane.path) === r ? "selected" : ""}>${esc(r)}</option>`).join("");
+  const rows = pane.entries.map((e) => `<tr data-k="row" data-pane="${i}" data-n="${esc(e.name)}" class="${pane.sel.has(e.name) ? "sel" : ""}"><td class="name"><span class="who"><span class="ico small">${e.dir ? "📁" : "🎞"}</span><b>${esc(e.name)}</b></span></td><td class="num">${e.dir ? "" : size(e.size)}</td><td class="date">${date(e.modified)}</td></tr>`).join("");
+  return `<section class="pane ${S.active === i ? "active" : ""}" data-pane="${i}"><div class="pane-head"><div class="row"><select data-k="root" data-pane="${i}"><option value="">${say("Choose a disk or folder…", "Choisir un disque ou un dossier…")}</option>${options}</select>
+    <button data-k="up" data-pane="${i}" ${pane.path && pane.path !== rootOf(pane.path) ? "" : "disabled"}>↑</button></div><div class="crumbs">${crumbs(pane)}</div></div>
+    <div class="files">${pane.path ? `<table class="list"><thead><tr><th>${say("Name", "Nom")}</th><th class="num">${say("Size", "Taille")}</th><th class="date">${say("Modified", "Modifié")}</th></tr></thead><tbody>${rows || `<tr><td colspan="3" class="empty">${say("This folder is empty.", "Ce dossier est vide.")}</td></tr>`}</tbody></table>` : `<div class="empty">${say("Choose a disk or folder above.", "Choisissez un disque ou un dossier ci-dessus.")}</div>`}</div>
+    <div class="pane-foot"><span>${pane.entries.length} ${say("items", "éléments")}</span><span>${pane.sel.size ? `${pane.sel.size} ${say("selected", "sélectionné(s)")}` : ""}</span></div></section>`;
+}
+function explorerHTML() {
+  const none = !S.panes[S.active].sel.size ? "disabled" : "";
+  return `<p class="muted hint">${say("Move, copy, rename and trash files no torrent uses. Moves run in the background in Tasks; each item is verified.", "Déplacez, copiez, renommez et mettez à la corbeille les fichiers qu'aucun torrent n'utilise. Les opérations s'exécutent en arrière-plan dans Tâches ; chaque élément est vérifié.")}</p>
+    <div class="panes">${paneHTML(0)}${paneHTML(1)}</div>
+    <div class="fkeys"><button data-f="rename" ${none}><kbd>F2</kbd>${say("Rename", "Renommer")}</button><button data-f="copy" ${none}><kbd>F5</kbd>${say("Copy", "Copier")}</button><button data-f="move" ${none}><kbd>F6</kbd>${say("Move", "Déplacer")}</button>
+      <button data-f="mkdir"><kbd>F7</kbd>${say("New folder", "Nouveau dossier")}</button><button data-f="trash" class="danger" ${none}><kbd>Suppr</kbd>${say("Move to the trash", "Mettre à la corbeille")}</button></div>`;
+}
+const picked = () => { const p = S.panes[S.active]; return p.entries.filter((e) => p.sel.has(e.name)).map((e) => `${p.path}/${e.name}`); };
+function ask(html, onOk) {
+  const d = $("dialog");
+  d.innerHTML = html + `<div class="dialog-foot"><button id="no">${say("Cancel", "Annuler")}</button><button id="yes" class="primary">OK</button></div>`;
+  d.showModal();
+  d.onclick = (e) => { if (e.target.id === "no") d.close(); if (e.target.id === "yes") { const values = { conflict: (d.querySelector("input[name=c]:checked") || {}).value, text: (d.querySelector("input[type=text]") || {}).value }; d.close(); onOk(values); } };
+}
+function operate(f) {
+  const from = picked(), here = S.panes[S.active], there = S.panes[1 - S.active];
+  const list = from.map((p) => `<div class="dlg-item"><span>${esc(name(p))}</span></div>`).join("");
+  if (f === "mkdir") return ask(`<h2>${say("New folder", "Nouveau dossier")}</h2><input type="text" placeholder="${say("Name", "Nom")}" style="width:100%">`, ({ text }) => text && submit("mkdir", [{ from: `${here.path}/${text}` }]));
+  if (f === "rename") return ask(`<h2>${say("Rename", "Renommer")}</h2><input type="text" value="${esc(name(from[0]))}" style="width:100%">`, ({ text }) => text && submit("rename", [{ from: from[0], to: `${here.path}/${text}` }]));
+  if (f === "trash") return ask(`<h2>${say("Move to the trash", "Mettre à la corbeille")} ?</h2><p>${say("Nothing is deleted: each disk's trash keeps it for the retention delay and you can restore it.", "Rien n'est supprimé : la corbeille de chaque disque le garde pendant le délai de conservation et vous pouvez le restaurer.")}</p><div class="dlg-list">${list}</div>`, () => submit("trash", from.map((x) => ({ from: x }))));
+  if (!there.path) return TLToast.show(say("Open a destination in the other pane first.", "Ouvrez d'abord une destination dans l'autre panneau."), "bad");
+  const crossing = rootOf(here.path) !== rootOf(there.path);
+  const note = f === "move" && crossing ? say("Between disks this is a copy: the source goes to the trash only after the copy is verified.", "Entre deux disques, c'est une copie : la source n'est mise à la corbeille qu'une fois la copie vérifiée.") : f === "move" ? say("On the same disk this is instant.", "Sur le même disque, c'est instantané.") : say("The copy is verified.", "La copie est vérifiée.");
+  const choices = [["skip", "Ignorer", "Skip"], ["replace", "Remplacer (l'ancien va à la corbeille)", "Replace (the old one goes to the trash)"], ["rename", "Renommer", "Rename"], ["keep-one", "Garder un seul (fichiers identiques)", "Keep one (identical files)"]];
+  ask(`<h2>${f === "move" ? say("Move", "Déplacer") : say("Copy", "Copier")} ${from.length} ${say("item(s) to", "élément(s) vers")} ${esc(there.path)}</h2><div class="dlg-list">${list}</div><div class="note">${note}</div>
+    <p class="muted">${say("If a name is already taken:", "Si un nom existe déjà :")}</p>${choices.map(([v, french, en], n) => `<label class="row"><input type="radio" name="c" value="${v}" ${n === 0 ? "checked" : ""}> ${say(en, french)}</label>`).join("")}`, ({ conflict }) => submit(f, from.map((x) => ({ from: x, to: there.path })), conflict));
+}
+async function submit(kind, items, conflict = "skip") {
+  try { await api("tasks", { kind, items, conflict }); TLToast.show(say("Started: follow it in Tasks.", "Lancé : suivez-le dans Tâches.")); } catch (e) { fail(e); }
+  setTimeout(async () => { await Promise.all([0, 1].map((i) => S.panes[i].path && openPane(i, S.panes[i].path))); }, 800);
+}
+
 const KINDS = {
   trash: ["Moved to the trash", "Mise à la corbeille"], restore: ["Restored", "Restauration"],
   purge: ["Daily purge of the trash", "Purge quotidienne de la corbeille"], empty: ["Trash emptied", "Corbeille vidée"],
@@ -134,7 +195,10 @@ const STATES = { pending: ["In progress", "En cours"], done: ["Done", "Terminé"
 function tasksHTML() {
   const rows = S.tasks.filter((o) => S.filter === "all" || (S.filter === "failed" ? o.state === "failed" : S.filter === "running" ? o.state === "pending" : o.state === "done"));
   const f = [["all", "All", "Toutes"], ["running", "Running", "En cours"], ["done", "Done", "Terminées"], ["failed", "Failed", "En échec"]];
-  return `<div class="filters">${f.map(([k, en, french]) => `<button data-filter="${k}" class="${S.filter === k ? "on" : ""}">${say(en, french)}</button>`).join("")}</div>
+  const queue = S.queue.map((t) => `<div class="card task ${t.state === "failed" ? "failed" : ""}"><div class="task-head"><b class="grow">${esc(t.kind)} · ${t.items.length}</b><span class="badge ${t.state === "done" ? "ok" : t.state === "failed" ? "bad" : ""}">${esc(t.state)}</span>${t.state === "running" || t.state === "queued" ? `<button data-cancel="${esc(t.id)}">${say("Cancel", "Annuler")}</button>` : ""}</div>
+    ${t.items.map((x, n) => `<div class="titem"><span class="nm">${esc(name(x.from))}${x.note ? `<small>${esc(x.note)}</small>` : ""}</span><div class="prog"><i style="width:${Math.round(x.progress * 100)}%"></i></div><span>${x.verified ? `<span class="ver">✓ ${say("verified", "vérifié")}</span>` : ""}${x.undo && x.state === "done" ? `<button data-undoitem="${esc(t.id)}" data-n="${n}">${say("Undo", "Annuler")}</button>` : ""}${x.state === "undone" ? say("undone", "annulé") : ""}</span>${x.reason ? `<div class="reason">${esc(x.reason)}</div>` : ""}</div>`).join("")}
+    <small>${esc(t.actor)} · ${when(t.created)}</small></div>`).join("");
+  return `${queue ? `<div class="tasks" style="margin-bottom:16px">${queue}</div><h3>${say("Log", "Journal")}</h3>` : ""}<div class="filters">${f.map(([k, en, french]) => `<button data-filter="${k}" class="${S.filter === k ? "on" : ""}">${say(en, french)}</button>`).join("")}</div>
     <div class="tasks">${rows.map((o) => {
       const name = (o.detail.from || "").split("/").pop() || (o.detail.items ? `${o.detail.items}` : "");
       return `<div class="card task ${o.state === "failed" ? "failed" : ""}"><div class="task-head"><b class="grow">${esc(say(...(KINDS[o.kind] || [o.kind, o.kind])))}${name ? ` · ${esc(name)}` : ""}</b>
@@ -144,16 +208,20 @@ function tasksHTML() {
     }).join("") || `<div class="empty">${say("No task for this filter.", "Aucune tâche pour ce filtre.")}</div>`}</div>`;
 }
 
-const TABS = [["disks", "Disks", "Disques"], ["trash", "Trash", "Corbeille"], ["tasks", "Tasks", "Tâches"]];
+const TABS = [["explorer", "Explorer", "Explorateur"], ["disks", "Disks", "Disques"], ["trash", "Trash", "Corbeille"], ["tasks", "Tasks", "Tâches"]];
 function render() {
   const tabs = TABS.map(([id, en, french]) => `<button data-tab="${id}" class="${S.tab === id ? "selected" : ""}">${say(en, french)}${id === "trash" && S.trash ? `<span class="badge count">${S.trash.disks.reduce((a, d) => a + d.items.length, 0)}</span>` : ""}</button>`).join("");
-  $("app").innerHTML = `<nav class="tabs" role="tablist">${tabs}</nav>${S.tab === "trash" ? trashHTML() : S.tab === "disks" ? disksHTML() : tasksHTML()}`;
+  $("app").innerHTML = `<nav class="tabs" role="tablist">${tabs}</nav>${S.tab === "trash" ? trashHTML() : S.tab === "disks" ? disksHTML() : S.tab === "explorer" ? explorerHTML() : tasksHTML()}`;
 }
 async function load() {
   try {
-    if (S.tab === "disks") { S.disks = await api("disks"); await place(); }
+    if (S.tab === "explorer") {
+      const r = await api("browse");
+      S.roots = r.roots;
+      for (const [i, pane] of S.panes.entries()) if (!pane.path && r.roots[i] && !pane.chosen) { pane.chosen = true; await openPane(i, r.roots[i]); }
+    } else if (S.tab === "disks") { S.disks = await api("disks"); await place(); }
     else if (S.tab === "trash") S.trash = await api("trash");
-    else S.tasks = (await api("journal")).operations;
+    else { S.tasks = (await api("journal")).operations; S.queue = (await api("tasks")).tasks; }
   } catch (e) { fail(e); }
   if (!document.querySelector("dialog[open]")) render();
 }
@@ -176,8 +244,22 @@ function confirmEmpty(disk) {
 }
 
 document.addEventListener("click", async (e) => {
-  const t = e.target.closest("[data-tab],[data-k],[data-filter],[data-undo]");
+  const t = e.target.closest("[data-tab],[data-k],[data-filter],[data-undo],[data-f],[data-cancel],[data-undoitem]");
   if (!t) return;
+  if (t.dataset.f) return operate(t.dataset.f);
+  if (t.dataset.cancel) { try { await api(`tasks/${t.dataset.cancel}/cancel`, {}); } catch (x) { fail(x); } return load(); }
+  if (t.dataset.undoitem) { try { await api(`tasks/${t.dataset.undoitem}/undo/${t.dataset.n}`, {}); TLToast.show(say("Undone.", "Annulé.")); } catch (x) { fail(x); } return load(); }
+  if (t.dataset.k === "go") return openPane(S.active, t.dataset.p);
+  if (t.dataset.k === "up") { S.active = Number(t.dataset.pane); return openPane(S.active, parentOf(S.panes[S.active].path)); }
+  if (t.dataset.k === "row") {
+    const i = Number(t.dataset.pane), pane = S.panes[i], n = t.dataset.n;
+    S.active = i;
+    const entry = pane.entries.find((x) => x.name === n);
+    if (e.detail >= 2 && entry?.dir) return openPane(i, `${pane.path}/${n}`);
+    if (!(e.ctrlKey || e.metaKey)) pane.sel.clear();
+    pane.sel.has(n) && (e.ctrlKey || e.metaKey) ? pane.sel.delete(n) : pane.sel.add(n);
+    return render();
+  }
   if (t.dataset.tab) { S.tab = t.dataset.tab; render(); load(); }
   else if (t.dataset.filter) { S.filter = t.dataset.filter; render(); }
   else if (t.dataset.undo) {
@@ -196,7 +278,13 @@ document.addEventListener("click", async (e) => {
     } catch (x) { fail(x); }
   }
 });
+document.addEventListener("keydown", (e) => {
+  if (S.tab !== "explorer" || e.target.closest("input,select,textarea") || $("dialog").open) return;
+  const f = { F2: "rename", F5: "copy", F6: "move", F7: "mkdir", Delete: "trash" }[e.key];
+  if (f && (f === "mkdir" || S.panes[S.active].sel.size)) { e.preventDefault(); operate(f); }
+});
 document.addEventListener("change", async (e) => {
+  if (e.target.dataset.k === "root") { S.active = Number(e.target.dataset.pane); if (e.target.value) await openPane(S.active, e.target.value); return; }
   if (e.target.dataset.k === "sim") { S.sim = Math.max(0.1, Number(e.target.value) || 4.2); await place(); render(); return; }
   if (e.target.dataset.k !== "ret") return;
   try { await api("trash/retention", { days: Number(e.target.value) }); TLToast.show(say("Retention saved.", "Conservation enregistrée.")); } catch (x) { fail(x); }
