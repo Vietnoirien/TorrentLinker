@@ -77,12 +77,15 @@ class Tasks:
         seeded: Callable[[Path], str | None] = lambda _: None,
         allowed: Callable[[Path], bool] = lambda _: True,
         threaded: bool = True,
+        followed: Callable[[Path, Path], Any] = lambda old, new: None,
     ) -> None:
         """`seeded(path)` names the client seeding a path (such files wait for #208);
         `allowed(path)` is the actor's right to touch it."""
         self.storage, self.seeded, self.allowed, self.threaded = storage, seeded, allowed, threaded
+        self.followed = followed  # settings and grants keyed by a path follow a moved folder
         self.tasks: dict[str, dict[str, Any]] = {}
         self._cancel: dict[str, threading.Event] = {}
+        self._allowed: dict[str, Callable[[Path], bool]] = {}
         self._lock = threading.RLock()
 
     # -- Submitting ---------------------------------------------------------------------
@@ -94,6 +97,7 @@ class Tasks:
         actor: str,
         conflict: str = "skip",
         apply_all: bool = True,
+        allowed: Callable[[Path], bool] | None = None,
     ) -> dict[str, Any]:
         """`items`: `{"from": path, "to": path}` (the destination folder for move and copy, the
         new full path for rename); trash and mkdir take `from` only."""
@@ -112,6 +116,7 @@ class Tasks:
             ],
         }  # fmt: skip
         with self._lock:
+            self._allowed[identifier] = allowed or self.allowed
             self.tasks[identifier] = task
             self._cancel[identifier] = threading.Event()
         if self.threaded:
@@ -142,7 +147,7 @@ class Tasks:
                 task["kind"], task["actor"], {"from": item["from"], "to": item["to"]}, {}
             )
             try:
-                self._item(task, item, stop.is_set)
+                self._item(task, item, stop.is_set, self._allowed.get(identifier, self.allowed))
             except InterruptedError:
                 item.update(state="cancelled", reason="Cancelled; the source is untouched.")
                 self.storage.finish(operation, "failed", "cancelled")
@@ -159,9 +164,9 @@ class Tasks:
             "cancelled" if "cancelled" in states else "failed"
         )  # fmt: skip
 
-    def _guard(self, path: Path) -> Path:
+    def _guard(self, path: Path, allowed: Callable[[Path], bool] | None = None) -> Path:
         self.storage.under_roots(path)
-        if not self.allowed(path):
+        if not (allowed or self.allowed)(path):
             raise StorageError(f"You may not touch {path}.")
         if client := self.seeded(path):
             raise StorageError(
@@ -169,14 +174,14 @@ class Tasks:
             )
         return path
 
-    def _item(self, task: dict[str, Any], item: dict[str, Any], cancelled) -> None:
+    def _item(self, task: dict[str, Any], item: dict[str, Any], cancelled, allowed) -> None:
         kind, source = task["kind"], Path(item["from"])
         if kind == "mkdir":
-            target = self._guard(source)
+            target = self._guard(source, allowed)
             target.mkdir(parents=True, exist_ok=False)
             item.update(final=str(target), verified=target.is_dir(), undo=None)
             return
-        self._guard(source)
+        self._guard(source, allowed)
         if not os.path.lexists(source):
             raise StorageError(f"{source} does not exist.")
         if kind == "trash":
@@ -185,12 +190,12 @@ class Tasks:
             return
         target = Path(item["to"])
         if kind in {"move", "copy"}:
-            self._guard(target)
+            self._guard(target, allowed)
             if not target.is_dir():
                 raise StorageError(f"{target} is not a folder.")
             target = target / source.name
         else:  # rename
-            self._guard(target.parent)
+            self._guard(target.parent, allowed)
         if source == target or (source.is_dir() and target.is_relative_to(source)):
             raise StorageError("The destination is the source or inside it.")
         if os.path.lexists(target):
@@ -224,12 +229,16 @@ class Tasks:
         same_disk = same_device(source, target.parent)
         if kind == "rename" or (kind == "move" and same_disk):
             os.rename(source, target)
+            if target.is_dir():
+                self.followed(source, target)
             item.update(verified=target.exists() and not source.exists(), final=str(target),
                         undo={"rename": [str(target), str(source)]}, note="instantané")  # fmt: skip
             return
         self._copy(source, target, item, cancelled)
         item.update(final=str(target), verified=True)
         if kind == "move":  # copied and verified: only now does the source go to its trash
+            if target.is_dir():
+                self.followed(source, target)
             stored = self.storage.trash(source, "system", "Déplacé vers un autre disque")
             item["undo"] = {"restore": stored["id"], "remove": str(target)}
 
@@ -275,6 +284,8 @@ class Tasks:
             if os.path.lexists(before) or not os.path.lexists(now):
                 raise StorageError("The files changed since: nothing was undone.")
             os.rename(now, before)
+            if before.is_dir():
+                self.followed(now, before)
             result = str(before)
         else:
             if "remove" in action and (copy := Path(action["remove"])).exists():

@@ -8,11 +8,13 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from torrentlinker.accounts import Actor, Permission
 from torrentlinker.disk_health import alert as health_alert
 from torrentlinker.disk_health import disk_health, scrutiny
 from torrentlinker.disk_report import disk_cards, place
 from torrentlinker.file_storage import FileStorage, StorageError
 from torrentlinker.file_tasks import Tasks, listing
+from torrentlinker.web.permissions import needs
 
 
 class TrashPath(BaseModel):
@@ -44,10 +46,29 @@ class Retention(BaseModel):
 
 
 def file_routes(
-    app: FastAPI, storage: FileStorage, folders=lambda: ([], []), films=None, notice=None
+    app: FastAPI,
+    storage: FileStorage,
+    folders=lambda: ([], []),
+    films=None,
+    notice=None,
+    followed=lambda old, new: None,
 ) -> None:
     """`folders` gives the Library and Download Folders; `films(path)` counts a folder's films."""
     app.state.file_storage = storage
+
+    def granted(actor: Actor) -> list[Path]:
+        """The folders an actor may touch: every storage root for the Owner, the Member's
+        granted Library Folders (or all Library Folders when none is named) otherwise."""
+        if actor.owner:
+            return list(storage.roots)
+        library = folders()[0]
+        if actor.folders is None:
+            return list(library)
+        return [f for f in library if str(f) in actor.folders]
+
+    def within(actor: Actor):
+        scope = granted(actor)
+        return lambda path: any(path == f or path.is_relative_to(f) for f in scope)
 
     def who(request: Request) -> str:
         actor = request.state.actor
@@ -57,19 +78,33 @@ def file_routes(
         return HTTPException(409, str(error))
 
     @app.get("/api/files/trash")
-    def trash_listing() -> dict:
-        return storage.listing()
+    @needs(Permission.MANAGE_FILES)
+    def trash_listing(request: Request) -> dict:
+        actor = request.state.actor
+        found = storage.listing()
+        if not actor.owner:
+            ok = within(actor)
+            for disk in found["disks"]:
+                disk["items"] = [i for i in disk["items"] if ok(Path(i["from"]))]
+        found["owner"] = actor.owner
+        return found
 
     @app.post("/api/files/trash")
+    @needs(Permission.MANAGE_FILES)
     def trash(body: TrashPath, request: Request) -> dict:
         try:
+            if not within(request.state.actor)(Path(body.path)):
+                raise StorageError("You may only trash files in your granted folders.")
             return storage.trash(Path(body.path), who(request))
         except StorageError as error:
             raise refuse(error) from error
 
     @app.post("/api/files/trash/{identifier}/restore")
+    @needs(Permission.MANAGE_FILES)
     def restore(identifier: str, request: Request) -> dict:
         try:
+            if not within(request.state.actor)(Path(storage._row(identifier)["original"])):
+                raise StorageError("This item did not come from your granted folders.")
             return {"restored": storage.restore(identifier, who(request))}
         except StorageError as error:
             raise refuse(error) from error
@@ -99,15 +134,19 @@ def file_routes(
         except StorageError as error:
             raise refuse(error) from error
 
-    tasks = Tasks(storage)
+    tasks = Tasks(storage, followed=followed)
     app.state.file_tasks = tasks
 
     @app.get("/api/files/browse")
-    def browse(path: str = "") -> dict:
+    @needs(Permission.MANAGE_FILES)
+    def browse(request: Request, path: str = "") -> dict:
+        actor = request.state.actor
         if not path:
-            return {"path": "", "roots": [str(r) for r in storage.roots], "entries": []}
+            return {"path": "", "roots": [str(r) for r in granted(actor)], "entries": []}
         try:
             target = Path(path)
+            if not within(actor)(target):
+                raise StorageError("You may only browse your granted folders.")
             return {"path": str(target), "entries": listing(storage, target)}
         except StorageError as error:
             raise refuse(error) from error
@@ -115,25 +154,38 @@ def file_routes(
             raise HTTPException(404, error.strerror or str(error)) from error
 
     @app.post("/api/files/tasks", status_code=202)
+    @needs(Permission.MANAGE_FILES)
     def run(body: Operation, request: Request) -> dict:
         try:
-            return tasks.submit(body.kind, body.items, who(request), body.conflict)
+            return tasks.submit(
+                body.kind, body.items, who(request), body.conflict,
+                allowed=within(request.state.actor),
+            )  # fmt: skip
         except StorageError as error:
             raise refuse(error) from error
 
     @app.get("/api/files/tasks")
-    def queue() -> dict:
-        return {"tasks": tasks.snapshot()}
+    @needs(Permission.MANAGE_FILES)
+    def queue(request: Request) -> dict:
+        actor = request.state.actor
+        mine = [t for t in tasks.snapshot() if actor.owner or t["actor"] == who(request)]
+        return {"tasks": mine}
 
     @app.post("/api/files/tasks/{identifier}/cancel")
-    def cancel(identifier: str) -> dict:
-        if identifier not in tasks.tasks:
+    @needs(Permission.MANAGE_FILES)
+    def cancel(identifier: str, request: Request) -> dict:
+        found = tasks.tasks.get(identifier)
+        if found is None or not (request.state.actor.owner or found["actor"] == who(request)):
             raise HTTPException(404, "Unknown task.")
         tasks.cancel(identifier)
         return {"ok": True}
 
     @app.post("/api/files/tasks/{identifier}/undo/{index}")
+    @needs(Permission.MANAGE_FILES)
     def undo_item(identifier: str, index: int, request: Request) -> dict:
+        found = tasks.tasks.get(identifier)
+        if found is not None and not (request.state.actor.owner or found["actor"] == who(request)):
+            raise HTTPException(404, "Unknown task.")
         try:
             return {"restored": tasks.undo(identifier, index, who(request))}
         except (StorageError, KeyError, IndexError) as error:

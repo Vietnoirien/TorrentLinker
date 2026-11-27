@@ -477,7 +477,14 @@ def create_app(
         chosen = [downloads.default, *downloads.by_category.values()]
         return library, [Path(p) for p in dict.fromkeys(chosen) if p]
 
-    file_routes(app, file_storage, storage_folders, notice=lambda *a: owner_notice(*a))
+    def follow(old: Path, new: Path) -> None:
+        from torrentlinker.path_follow import follow_move
+
+        follow_move(service, accounts, old, new)
+
+    file_routes(
+        app, file_storage, storage_folders, notice=lambda *a: owner_notice(*a), followed=follow
+    )
     from torrentlinker.library_replace import Replacements
     from torrentlinker.web.replace import replace_routes
 
@@ -1439,6 +1446,7 @@ def create_app(
                 *(["member-search"] if actor.holds(Permission.FILMS) else []),
                 *(["member-queue"] if actor.holds(Permission.QUEUE) else []),
                 *(["member-torrents"] if actor.holds(Permission.TORRENTS) else []),
+                *(["files"] if actor.holds(Permission.MANAGE_FILES) else []),
                 *(["setup"] if holder else []),
             ]
             viewer = actor.viewer not in ("", PICKING)

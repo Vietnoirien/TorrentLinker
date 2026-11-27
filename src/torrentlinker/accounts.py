@@ -46,6 +46,7 @@ class Permission(StrEnum):
     APPROVE = "approve"
     MANAGE_MEMBERS = "manage-members"
     EDIT_RATINGS = "edit-ratings"
+    MANAGE_FILES = "manage-files"  # move, rename and trash inside the granted Library Folders
 
 
 WATCH = (Permission.FILMS, Permission.SERIES, Permission.ANIME, Permission.MUSIC)

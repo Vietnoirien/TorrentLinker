@@ -71,6 +71,10 @@ const memberGroups = () => [
         "edit-ratings",
         say("Edit ratings and film details", "Modifier classements et fiches"),
       ],
+      [
+        "manage-files",
+        say("Manage files in the granted folders", "Gérer les fichiers des dossiers accordés"),
+      ],
     ],
   ],
 ];

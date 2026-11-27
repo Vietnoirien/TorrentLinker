@@ -113,6 +113,7 @@ function shared() {
     ["approve", say("Accept or refuse requests", "Accepter ou refuser les demandes")],
     ["manage-members", say("Manage members", "Gérer les membres")],
     ["edit-ratings", say("Edit ratings and film details", "Modifier classements et fiches")],
+    ["manage-files", say("Manage files in the granted folders", "Gérer les fichiers des dossiers accordés")],
   ];
   for (const [k, text] of simple) if (held.has(k)) lines.push(text);
   if (held.has("request")) {

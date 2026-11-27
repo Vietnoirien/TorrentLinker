@@ -5,7 +5,7 @@ const fr = () => (parent.document.documentElement.lang || "fr") === "fr";
 const say = (en, french) => (fr() ? french : en);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const DAY = 86400;
-const S = { tab: "explorer", panes: [{ path: "", entries: [], sel: new Set() }, { path: "", entries: [], sel: new Set() }], active: 0, roots: [], queue: [], tab0: "", disks: null, trash: null, tasks: [], filter: "all", busy: false, sim: 4.2 };
+const S = { owner: true, tab: "explorer", panes: [{ path: "", entries: [], sel: new Set() }, { path: "", entries: [], sel: new Set() }], active: 0, roots: [], queue: [], tab0: "", disks: null, trash: null, tasks: [], filter: "all", busy: false, sim: 4.2 };
 
 // The panel has no network of its own: the host forwards each request to /api/files/.
 const bridge = window.TLPanel.connect("files", { asynchronous: true });
@@ -41,7 +41,7 @@ function trashHTML() {
       `${esc(d.name)} is mounted read-only, so nothing can be trashed or restored there yet. ${esc(d.reason)} Make the folder writable (remove “:ro” from its volume in your compose file), then reload this page.`,
       `${esc(d.name)} est monté en lecture seule : rien ne peut y être mis à la corbeille ni restauré pour l’instant. ${esc(d.reason)} Rendez le dossier modifiable (retirez « :ro » de son volume dans votre fichier compose), puis rechargez cette page.`)}</div>`;
     return `<section class="sect"><h3>${say("Trash of", "Corbeille de")} ${esc(d.name)} <span class="badge">${size(total)}</span>
-      ${d.items.length ? `<button class="danger" data-k="empty" data-d="${esc(d.id)}">${say("Empty now", "Vider maintenant")}</button>` : ""}</h3>${notice}
+      ${S.owner && d.items.length ? `<button class="danger" data-k="empty" data-d="${esc(d.id)}">${say("Empty now", "Vider maintenant")}</button>` : ""}</h3>${notice}
       <div class="panel">${d.items.length ? `<table class="list"><thead><tr><th>${say("Name", "Nom")}</th><th>${say("Original location", "Emplacement d'origine")}</th><th>${say("Deleted", "Supprimé")}</th><th class="num">${say("Size", "Taille")}</th><th>${say("Purge", "Purge")}</th><th></th></tr></thead><tbody>
       ${d.items.map((i) => `<tr><td class="name">${esc(i.name)}${i.reason ? `<small>${esc(i.reason)}</small>` : ""}</td><td class="name" style="font-size:12.5px;color:var(--muted)">${esc(i.from)}</td>
         <td>${esc(i.by)}<small>${ago(i.at)}</small></td><td class="num">${size(i.size)}</td><td>${purge(i)}</td>
@@ -51,8 +51,8 @@ function trashHTML() {
   return `<p class="muted hint">${say(
     "Deleting, in Files, always means moving to the trash. Each disk has its own: the move is instant.",
     "Supprimer, dans Fichiers, veut toujours dire mettre à la corbeille. Chaque disque a la sienne : le déplacement est instantané.")}</p>
-    <section class="card sect"><div class="row"><h3>${say("Retention", "Conservation")}</h3><label class="row">${say("Purge after", "Purger après")} <select data-k="ret">${[1, 3, 7, 14, 30].map((n) => `<option value="${n}" ${t.retention_days === n ? "selected" : ""}>${n} ${say(n > 1 ? "days" : "day", n > 1 ? "jours" : "jour")}</option>`).join("")}</select></label>
-      <small style="display:inline">${say("7 days by default.", "7 jours par défaut.")}</small></div></section>${sections || `<div class="empty">${say("No storage folder is configured.", "Aucun dossier de stockage n'est configuré.")}</div>`}`;
+    ${S.owner ? `<section class="card sect"><div class="row"><h3>${say("Retention", "Conservation")}</h3><label class="row">${say("Purge after", "Purger après")} <select data-k="ret">${[1, 3, 7, 14, 30].map((n) => `<option value="${n}" ${t.retention_days === n ? "selected" : ""}>${n} ${say(n > 1 ? "days" : "day", n > 1 ? "jours" : "jour")}</option>`).join("")}</select></label>
+      <small style="display:inline">${say("7 days by default.", "7 jours par défaut.")}</small></div></section>` : ""}${sections || `<div class="empty">${say("No storage folder is configured.", "Aucun dossier de stockage n'est configuré.")}</div>`}`;
 }
 
 // ---- Disques --------------------------------------------------------------------------------
@@ -209,8 +209,10 @@ function tasksHTML() {
 }
 
 const TABS = [["explorer", "Explorer", "Explorateur"], ["disks", "Disks", "Disques"], ["trash", "Trash", "Corbeille"], ["tasks", "Tasks", "Tâches"]];
+// A Member with "Gérer les fichiers" gets Explorateur, Corbeille and Tâches, never Disques.
+const tabsFor = () => TABS.filter(([id]) => S.owner || id !== "disks");
 function render() {
-  const tabs = TABS.map(([id, en, french]) => `<button data-tab="${id}" class="${S.tab === id ? "selected" : ""}">${say(en, french)}${id === "trash" && S.trash ? `<span class="badge count">${S.trash.disks.reduce((a, d) => a + d.items.length, 0)}</span>` : ""}</button>`).join("");
+  const tabs = tabsFor().map(([id, en, french]) => `<button data-tab="${id}" class="${S.tab === id ? "selected" : ""}">${say(en, french)}${id === "trash" && S.trash ? `<span class="badge count">${S.trash.disks.reduce((a, d) => a + d.items.length, 0)}</span>` : ""}</button>`).join("");
   $("app").innerHTML = `<nav class="tabs" role="tablist">${tabs}</nav>${S.tab === "trash" ? trashHTML() : S.tab === "disks" ? disksHTML() : S.tab === "explorer" ? explorerHTML() : tasksHTML()}`;
 }
 async function load() {
@@ -220,7 +222,7 @@ async function load() {
       S.roots = r.roots;
       for (const [i, pane] of S.panes.entries()) if (!pane.path && r.roots[i] && !pane.chosen) { pane.chosen = true; await openPane(i, r.roots[i]); }
     } else if (S.tab === "disks") { S.disks = await api("disks"); await place(); }
-    else if (S.tab === "trash") S.trash = await api("trash");
+    else if (S.tab === "trash") { S.trash = await api("trash"); S.owner = S.trash.owner !== false; }
     else { S.tasks = (await api("journal")).operations; S.queue = (await api("tasks")).tasks; }
   } catch (e) { fail(e); }
   if (!document.querySelector("dialog[open]")) render();
@@ -297,6 +299,7 @@ function theme() {
 }
 theme();
 new MutationObserver(() => { theme(); render(); }).observe(parent.document.documentElement, { attributes: true, attributeFilter: ["data-theme", "lang"] });
+api("trash").then((t) => { S.owner = t.owner !== false; if (!S.owner && S.tab === "disks") S.tab = "explorer"; render(); }).catch(() => {});
 render();
 load();
 window.addEventListener("files-environment", () => load());

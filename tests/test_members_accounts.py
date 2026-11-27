@@ -213,6 +213,13 @@ def test_every_existing_route_without_a_declaration_is_the_owners(server):
         "/api/notifications",
         "/api/notifications/seen",
         "/api/notifications/preferences",
+        # Fichiers for a Member who may manage files (#209).
+        "/api/files/browse",
+        "/api/files/tasks",
+        "/api/files/tasks/{identifier}/cancel",
+        "/api/files/tasks/{identifier}/undo/{index}",
+        "/api/files/trash",
+        "/api/files/trash/{identifier}/restore",
         "/api/notifications/push-key",
         "/api/notifications/subscription",
         "/api/members/{account}/email-link",
