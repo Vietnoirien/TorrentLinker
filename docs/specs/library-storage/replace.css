@@ -1,0 +1,51 @@
+/* Injected into the Médias and Torrents panels (iframes) by replace.js. */
+.rp-badge-preview { display: inline-block; font: 700 10px/1 system-ui; letter-spacing: .08em; text-transform: uppercase;
+  padding: 3px 6px; border-radius: 5px; background: #edbf73; color: #2a1d00; vertical-align: middle; }
+.rp-card { margin-top: 14px; max-width: 760px; border: 1px dashed #edbf73aa; border-radius: 12px; padding: 12px 14px;
+  background: #0006; backdrop-filter: blur(8px); font-size: 13px; color: var(--text, #e2e9ed); }
+.rp-card > header { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; font-weight: 700; }
+.rp-compare { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: stretch; }
+.rp-version { border: 1px solid #ffffff2a; border-radius: 9px; padding: 8px 10px; min-width: 0; }
+.rp-version.new { border-color: #80bdb6; }
+.rp-version b { display: block; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; opacity: .7; margin-bottom: 2px; }
+.rp-version .name { display: block; word-break: break-all; font-weight: 600; }
+.rp-version small { display: block; opacity: .75; }
+.rp-arrow { align-self: center; color: #80bdb6; font-size: 20px; }
+.rp-score { display: inline-block; padding: 0 6px; border-radius: 6px; background: #4ad39433; color: #4ad394; font-weight: 700; }
+.rp-score.low { background: #edbf7333; color: #edbf73; }
+.rp-seed { display: inline-flex; gap: 6px; align-items: center; }
+.rp-seed i { width: 8px; height: 8px; border-radius: 50%; background: #4ad394; }
+.rp-seed.off i { background: #98aab7; }
+.rp-dest { margin: 8px 0 0; opacity: .85; }
+.rp-dest.warn { color: #edbf73; opacity: 1; }
+.rp-toggles { display: grid; gap: 8px; margin-top: 10px; }
+.rp-toggle { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; user-select: none; }
+.rp-toggle[aria-disabled="true"] { opacity: .45; cursor: default; }
+.rp-switch { position: relative; flex: none; width: 36px; height: 20px; border-radius: 10px; background: #5a6a76; margin-top: 1px; transition: background .15s; }
+.rp-switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.rp-toggle[aria-checked="true"] .rp-switch { background: #80bdb6; }
+.rp-toggle[aria-checked="true"] .rp-switch::after { transform: translateX(16px); }
+.rp-toggle small { display: block; opacity: .75; }
+.rp-link { background: none; border: 0; padding: 0; color: #80bdb6; text-decoration: underline; cursor: pointer; font: inherit; }
+.rp-timeline { margin-top: 12px; padding-top: 10px; border-top: 1px solid #ffffff22; display: grid; gap: 6px; }
+.rp-step { display: flex; gap: 9px; opacity: .55; }
+.rp-step.done, .rp-step.now { opacity: 1; }
+.rp-step b { width: 16px; text-align: center; }
+.rp-step.done b { color: #4ad394; } .rp-step.now b { color: #edbf73; }
+.rp-bar { height: 4px; width: 240px; max-width: 100%; margin-top: 4px; background: #ffffff2a; border-radius: 4px; overflow: hidden; }
+.rp-bar i { display: block; height: 100%; background: #80bdb6; }
+.rp-note { margin: 8px 0 0; opacity: .8; }
+.rp-dialog { background: #202932; color: #e2e9ed; border: 1px solid #33404b; border-radius: 14px; padding: 20px; width: min(480px, 92vw); font: 14px/1.4 system-ui, sans-serif; }
+.rp-dialog::backdrop { background: #0009; }
+.rp-dialog h2 { margin: 0 0 4px; font-size: 19px; }
+.rp-dialog p { margin: 0 0 12px; opacity: .75; font-size: 13px; }
+.rp-dialog label.rule { display: flex; align-items: center; gap: 8px; margin: 9px 0; }
+.rp-dialog input[type=number], .rp-dialog select { padding: 6px 8px; border-radius: 8px; border: 1px solid #33404b; background: #26323c; color: inherit; font: inherit; }
+.rp-dialog input[type=number] { width: 80px; }
+.rp-dialog input[type=checkbox] { width: 17px; height: 17px; accent-color: #80bdb6; }
+.rp-dialog .combine { margin: 4px 0 0 25px; display: flex; gap: 8px; align-items: center; }
+.rp-dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.rp-dialog button { padding: 8px 14px; border-radius: 8px; border: 1px solid #33404b; background: #26323c; color: inherit; font: inherit; cursor: pointer; }
+.rp-dialog button.primary { background: #80bdb6; color: #102a2b; border: 0; font-weight: 700; }
+.rp-fin-badge { display: inline-block; margin-left: 6px; padding: 2px 7px; border-radius: 6px; background: #edbf7333; color: #edbf73; font-size: 11px; font-weight: 600; }
+@media (max-width: 640px) { .rp-compare { grid-template-columns: 1fr; } .rp-arrow { transform: rotate(90deg); justify-self: center; } }

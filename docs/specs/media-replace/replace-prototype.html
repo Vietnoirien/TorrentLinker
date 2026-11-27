@@ -1,0 +1,174 @@
+<!doctype html>
+<!-- PROTOTYPE, throwaway. "Meilleures versions sur le tracker": Télécharger can replace the version in the library.
+     Two toggles next to the button: "Remplacer l'ancienne version" (the old torrent and its files go once the new one
+     is complete) and, only when the old version is actually seeding, "Attendre la fin de son partage".
+     Scenarios in the bottom bar. Shared palette (panel/base.css) embedded. Fictional films; nothing is sent. -->
+<html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Remplacer une version · aperçu</title>
+<style>
+/* Embedded copy of the dark token block of src/torrentlinker/web/static/panel/base.css (approved). */
+:root {
+  color-scheme: dark;
+  --bg: #161d23; --panel: #202932; --raised: #26323c; --line: #33404b; --text: #e2e9ed; --muted: #98aab7;
+  --accent: #80bdb6; --accent-text: #102a2b; --tint: #263e43; --danger: #ff9c9c; --warning: #edbf73; --success: #4ad394;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); padding-bottom: 90px; }
+button { font: inherit; color: inherit; cursor: pointer; }
+.feature { position: relative; min-height: 480px; padding: 70px 32px 34px; overflow: hidden; }
+.feature .art { position: absolute; inset: 0; background: linear-gradient(135deg, #2c4f63, #1b2433 55%, #3b2a3e); }
+.feature .art::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, #161d23f2 0, #161d23aa 50%, transparent 85%), linear-gradient(0deg, var(--bg) 0, transparent 45%); }
+.copy { position: relative; max-width: 620px; }
+.eyebrow { font-size: 11px; letter-spacing: .2em; color: var(--accent); font-weight: 700; }
+h2 { font-size: 46px; line-height: 1.05; margin: 8px 0; }
+.meta { color: var(--muted); font-size: 13px; }
+.compare { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; margin: 18px 0 6px; }
+.version { border: 1px solid var(--line); background: #0004; border-radius: 10px; padding: 10px 12px; font-size: 13px; }
+.version b { display: block; font-size: 14px; margin-bottom: 2px; }
+.version small { color: var(--muted); display: block; }
+.version.new { border-color: var(--accent); }
+.arrow { color: var(--accent); font-size: 20px; }
+.seed { display: inline-flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 12px; }
+.seed i { width: 8px; height: 8px; border-radius: 50%; background: var(--success); display: inline-block; }
+.seed.off i { background: var(--muted); }
+.actions { display: flex; align-items: center; gap: 18px; margin-top: 18px; flex-wrap: wrap; }
+.primary { background: var(--accent); color: var(--accent-text); border: 0; border-radius: 10px; padding: 11px 24px; font-weight: 700; }
+.primary:disabled { opacity: .5; cursor: default; }
+.toggles { display: grid; gap: 8px; }
+.toggle { display: flex; align-items: center; gap: 10px; font-size: 14px; cursor: pointer; user-select: none; }
+.toggle small { color: var(--muted); display: block; font-size: 12px; }
+.switch { position: relative; width: 38px; height: 22px; border-radius: 11px; background: var(--line); flex: none; transition: background .15s; }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.toggle[aria-checked="true"] .switch { background: var(--accent); }
+.toggle[aria-checked="true"] .switch::after { transform: translateX(16px); }
+.toggle[aria-disabled="true"] { opacity: .45; cursor: default; }
+.timeline { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 14px; display: grid; gap: 8px; font-size: 14px; }
+.step { display: flex; gap: 10px; align-items: baseline; color: var(--muted); }
+.step b { width: 18px; text-align: center; color: var(--muted); }
+.step.done { color: var(--text); } .step.done b { color: var(--success); }
+.step.now { color: var(--text); } .step.now b { color: var(--warning); }
+.bar { height: 4px; background: var(--line); border-radius: 4px; overflow: hidden; margin-top: 4px; width: 260px; }
+.bar i { display: block; height: 100%; background: var(--accent); }
+.torrents { padding: 24px 32px; }
+.torrents .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+.torrents .toolbar button { border: 1px solid var(--line); background: var(--raised); border-radius: 8px; padding: 7px 12px; font-size: 14px; }
+.torrents table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.torrents td, .torrents th { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); }
+.torrents th { color: var(--muted); font-weight: 600; }
+dialog { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 14px; padding: 22px; width: min(480px, 92vw); }
+dialog::backdrop { background: #0009; }
+dialog h2 { font-size: 20px; margin: 0 0 6px; }
+dialog p { color: var(--muted); font-size: 13px; margin: 0 0 14px; }
+.rule { display: flex; align-items: center; gap: 10px; margin: 10px 0; font-size: 14px; }
+.rule input[type=number] { width: 80px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--raised); color: var(--text); font: inherit; }
+.rule select { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--raised); color: var(--text); font: inherit; }
+.rule input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); }
+.combine { margin: 4px 0 0 28px; font-size: 14px; display: flex; gap: 8px; align-items: center; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.dialog-actions button { border: 1px solid var(--line); background: var(--raised); border-radius: 8px; padding: 8px 14px; }
+.dialog-actions .primary { border: 0; background: var(--accent); color: var(--accent-text); font-weight: 700; }
+.combine select { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--raised); color: var(--text); font: inherit; }
+.hidden { display: none !important; }
+#switcher { position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%); display: flex; gap: 6px; align-items: center; padding: 8px 10px; border-radius: 14px; background: #000e; color: #fff; font-size: 12px; flex-wrap: wrap; justify-content: center; max-width: calc(100vw - 16px); z-index: 9; }
+#switcher button { background: #ffffff1c; color: #fff; border: 0; border-radius: 8px; padding: 5px 9px; font-size: 12px; }
+#switcher button.on { background: var(--accent); color: var(--accent-text); }
+#switcher #state { width: 100%; text-align: center; color: #b7c6cf; }
+@media (max-width: 600px) { .feature { padding: 50px 18px 24px; } h2 { font-size: 34px; } .compare { grid-template-columns: 1fr; } .arrow { transform: rotate(90deg); justify-self: center; } }
+</style>
+<section class="feature" id="media-screen"><div class="art"></div><div class="copy" id="copy"></div></section>
+<section class="torrents hidden" id="torrents-screen"><div class="toolbar"><button>Colonnes</button><button>Actualiser</button><button>Trackers c411…</button><button>Audit c411</button><button id="open-seed-rule">Fin du partage…</button></div>
+ <table><tr><th>Nom</th><th>État</th><th>Partagé</th><th>Ratio</th></tr>
+ <tr><td>Nope.2022.720p.WEB.x264</td><td>En partage</td><td>31 h</td><td>0,6</td></tr>
+ <tr><td>Dune.Part.Two.2024.MULTi.2160p</td><td>En partage</td><td>6 j</td><td>2,3</td></tr></table></section>
+<dialog id="seed-rule"><h2>Fin du partage</h2><p>Quand une version remplacée a fini son partage et peut être retirée avec ses fichiers.</p>
+ <label class="rule"><input type="checkbox" id="use-time"> Partagée au moins <input type="number" id="hours" min="1" step="1"> <select id="unit"><option value="h">heures</option><option value="d">jours</option></select></label>
+ <label class="rule"><input type="checkbox" id="use-ratio"> Ratio d'au moins <input type="number" id="ratio" min="0.1" step="0.1"></label>
+ <div class="combine" id="combine-row">Il faut <select id="combine"><option value="any">l'un ou l'autre</option><option value="all">les deux</option></select></div>
+ <div class="dialog-actions"><button id="rule-cancel">Annuler</button><button class="primary" id="rule-save">Enregistrer</button></div></dialog>
+<div id="switcher"><b>Écran</b><button data-screen="media">Médias</button><button data-screen="torrents">Torrents</button><b>Scénario</b><button data-scenario="seeding">Ancienne en partage</button><button data-scenario="idle">Ancienne sans partage</button>
+ <button id="advance">Faire avancer le temps</button><button id="reset">Recommencer</button><span id="state"></span></div>
+<script>
+let scenario = new URLSearchParams(location.search).get("scenario") || "seeding";
+let replace = true, waitSeed = true, step = -1, progress = 0, screen = "media";
+// The Torrents page setting: time, ratio or both, combined by "l'un ou l'autre" or "les deux".
+let rule = { time: true, hours: 72, unit: "h", ratio: true, value: 1.0, combine: "any" };
+const num = n => String(n).replace(".", ",");
+function ruleText() {
+  const parts = [];
+  if (rule.time) parts.push(rule.unit === "d" ? `${rule.hours} j de partage` : `${rule.hours} h de partage`);
+  if (rule.ratio) parts.push(`un ratio de ${num(rule.value)}`);
+  if (!parts.length) return "sans attente";
+  return parts.length === 2 ? `${parts[0]} ${rule.combine === "all" ? "et" : "ou"} ${parts[1]}` : parts[0];
+}
+const OLD = { seeding: { name: "Nope.2022.720p.WEB.x264", size: "4,2 Go", seed: "en partage · 31 h · ratio 0,6" },
+              idle: { name: "Nope.2022.720p.WEB.x264", size: "4,2 Go", seed: "pas en partage" } };
+const toggle = (id, on, label, hint, disabled) => `<div class="toggle" role="switch" tabindex="0" data-toggle="${id}" aria-checked="${on}" aria-disabled="${!!disabled}"><span class="switch"></span><span>${label}<small>${hint}</small></span></div>`;
+function steps() {
+  const seeding = scenario === "seeding";
+  const list = [["send", "Envoyée au client"], ["download", "Téléchargement de la nouvelle version"], ["complete", "Nouvelle version complète, dans la médiathèque"]];
+  if (replace && seeding && waitSeed) list.push(["seed", `L'ancienne finit son partage (${ruleText()})`]);
+  if (replace) list.push(["remove", "Ancienne version retirée du client, fichiers supprimés"]);
+  return list;
+}
+function render() {
+  const old = OLD[scenario], seeding = scenario === "seeding", started = step >= 0, list = steps();
+  document.getElementById("copy").innerHTML = `<div class="eyebrow">MEILLEURE VERSION SUR LE TRACKER</div><h2>Nope</h2>
+   <div class="meta">2022 · 2 h 10 · Horreur, Science-Fiction · ★ 6.8</div>
+   <div class="compare"><div class="version"><b>Dans votre médiathèque</b>${old.name}<small>${old.size} · ReleaseScore 61</small>
+     <span class="seed ${seeding ? "" : "off"}"><i></i>${old.seed}</span></div><span class="arrow">→</span>
+    <div class="version new"><b>Sur le tracker</b>Nope.2022.MULTi.2160p.HDR.WEB<small>18,9 Go · ReleaseScore 94</small></div></div>
+   <div class="actions"><button class="primary" id="download" ${started ? "disabled" : ""}>${started ? "Envoyée" : "Télécharger"}</button>
+    <div class="toggles">
+     ${toggle("replace", replace, "Remplacer l'ancienne version", "Son torrent et ses fichiers sont supprimés quand la nouvelle est complète.", started)}
+     ${seeding ? toggle("seed", replace && waitSeed, "Attendre la fin de son partage", `Elle reste en partage jusqu'à ${ruleText()} · réglage dans Torrents → Fin du partage.`, started || !replace) : ""}
+    </div></div>
+   ${started ? `<div class="timeline">${list.map(([key, text], i) => `<div class="step ${i < step ? "done" : i === step ? "now" : ""}"><b>${i < step ? "✓" : i === step ? "●" : "○"}</b><span>${text}${key === "download" && i === step ? `<div class="bar"><i style="width:${progress}%"></i></div>` : ""}</span></div>`).join("")}</div>` : ""}`;
+  for (const button of document.querySelectorAll("[data-scenario]")) button.classList.toggle("on", button.dataset.scenario === scenario);
+  for (const button of document.querySelectorAll("[data-screen]")) button.classList.toggle("on", button.dataset.screen === screen);
+  document.getElementById("media-screen").classList.toggle("hidden", screen !== "media");
+  document.getElementById("torrents-screen").classList.toggle("hidden", screen !== "torrents");
+  const done = started && step >= list.length;
+  document.getElementById("state").textContent = `fin du partage : ${ruleText()} · remplacer : ${replace ? "oui" : "non"}${seeding ? ` · attendre le partage : ${replace && waitSeed ? "oui" : "non"}` : " · pas de bascule de partage (ancienne pas en partage)"} · ${!started ? "pas encore envoyée" : done ? "terminé" : `étape : ${list[step][1]}`}`;
+}
+document.getElementById("copy").addEventListener("click", event => {
+  const switchNode = event.target.closest("[data-toggle]");
+  if (switchNode && switchNode.getAttribute("aria-disabled") !== "true") {
+    if (switchNode.dataset.toggle === "replace") replace = !replace; else waitSeed = !waitSeed;
+    return render();
+  }
+  if (event.target.closest("#download") && step < 0) { step = 0; progress = 0; render(); }
+});
+document.getElementById("copy").addEventListener("keydown", event => { if ((event.key === " " || event.key === "Enter") && event.target.closest("[data-toggle]")) { event.preventDefault(); event.target.click(); } });
+document.getElementById("advance").onclick = () => {
+  if (step < 0) return;
+  const list = steps();
+  if (list[step]?.[0] === "download" && progress < 100) progress = Math.min(100, progress + 50);
+  else if (step < list.length) step += 1;
+  render();
+};
+document.getElementById("reset").onclick = () => { step = -1; progress = 0; render(); };
+for (const button of document.querySelectorAll("[data-scenario]")) button.onclick = () => {
+  scenario = button.dataset.scenario; step = -1; progress = 0;
+  const u = new URL(location); u.searchParams.set("scenario", scenario); history.replaceState(null, "", u); render();
+};
+for (const button of document.querySelectorAll("[data-screen]")) button.onclick = () => { screen = button.dataset.screen; render(); };
+const dialog = document.getElementById("seed-rule"), $ = id => document.getElementById(id);
+function dialogSync() {
+  $("hours").disabled = $("unit").disabled = !$("use-time").checked;
+  $("ratio").disabled = !$("use-ratio").checked;
+  $("combine-row").classList.toggle("hidden", !($("use-time").checked && $("use-ratio").checked));
+}
+$("open-seed-rule").onclick = () => {
+  $("use-time").checked = rule.time; $("hours").value = rule.hours; $("unit").value = rule.unit;
+  $("use-ratio").checked = rule.ratio; $("ratio").value = rule.value; $("combine").value = rule.combine;
+  dialogSync(); dialog.showModal();
+};
+for (const id of ["use-time", "use-ratio"]) $(id).onchange = dialogSync;
+$("rule-cancel").onclick = () => dialog.close();
+$("rule-save").onclick = () => {
+  rule = { time: $("use-time").checked, hours: Math.max(1, Number($("hours").value) || 1), unit: $("unit").value,
+           ratio: $("use-ratio").checked, value: Math.max(0.1, Number($("ratio").value) || 0.1), combine: $("combine").value };
+  dialog.close(); render();
+};
+render();
+</script>

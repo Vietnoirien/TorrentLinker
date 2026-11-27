@@ -1,0 +1,24 @@
+/* Library-storage previews: the bar, and what the screens add to the real page. */
+#ls-bar {
+  position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 2147483647;
+  display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; justify-content: center;
+  max-width: calc(100vw - 16px); padding: 6px 10px; border-radius: 12px;
+  background: #000d; color: #fff; font: 12px system-ui, sans-serif; box-shadow: 0 4px 20px #0008;
+}
+#ls-bar .ls-title { color: #80d6c5; }
+#ls-bar .ls-tabs, #ls-bar .ls-controls { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+#ls-bar button { padding: 4px 9px; border-radius: 6px; border: 0; cursor: pointer; font: inherit; background: #ffffff1a; color: #fff; }
+#ls-bar button:hover { background: #ffffff33; }
+#ls-bar button.on { background: #80d6c5; color: #0b1416; font-weight: 600; }
+#ls-bar .ls-sep { width: 1px; height: 16px; background: #fff4; margin: 0 2px; }
+#ls-bar .ls-state { max-width: 360px; color: #b7c6cf; }
+
+/* The new Fichiers page, hosted like the real panel pages (see the frame rules in app.css). */
+#ls-files-frame { flex: 1 1 0; min-height: 240px; width: 100%; border: 0; display: block; }
+#workspace main .view:has(> #ls-files-frame) { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+/* Injected into the real sidebar and Recherche frames. */
+.ls-mini { display: inline-block; margin-left: 6px; font: 700 9px/1 system-ui; letter-spacing: .08em; text-transform: uppercase; padding: 2px 5px; border-radius: 4px; background: #edbf73; color: #2a1d00; vertical-align: middle; }
+.ls-tabs { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin: 0 0 14px; border-bottom: 1px solid var(--line); }
+.ls-tabs button { border: 0; border-radius: 0; background: transparent; border-bottom: 2px solid transparent; }
+.ls-tabs button.selected { color: var(--accent); border-bottom-color: var(--accent); }
+#search-queue-link, #back-results { display: none !important; }
