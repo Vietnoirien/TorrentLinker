@@ -49,3 +49,6 @@
 .rp-dialog button.primary { background: #80bdb6; color: #102a2b; border: 0; font-weight: 700; }
 .rp-fin-badge { display: inline-block; margin-left: 6px; padding: 2px 7px; border-radius: 6px; background: #edbf7333; color: #edbf73; font-size: 11px; font-weight: 600; }
 @media (max-width: 640px) { .rp-compare { grid-template-columns: 1fr; } .rp-arrow { transform: rotate(90deg); justify-self: center; } }
+.rp-toggle .ls-info, .rp-step .ls-info, .rp-dest .ls-info { margin-left: 4px; }
+.rp-link[data-rule] { font-size: 15px; text-decoration: none; margin-left: 4px; }
+.rp-dialog h2 { display: flex; gap: 8px; align-items: center; }

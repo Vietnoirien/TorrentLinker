@@ -172,3 +172,39 @@ pre.code { white-space: pre-wrap; word-break: break-all; min-width: 0; margin: 8
 
 .disk, .disks > * { min-width: 0; }
 .panes > .pane { min-width: 0; }
+
+/* Organisation: simple table, ⓘ info box */
+.info { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; border-radius: 50%; font: italic 700 12px/1 Georgia, serif; color: var(--accent); background: var(--tint); border: 1px solid var(--line); flex: none; }
+.info[aria-expanded=true] { border-color: var(--accent); }
+.tip { position: fixed; z-index: 80; max-width: min(320px, calc(100vw - 16px)); padding: 10px 12px; background: var(--panel); border: 1px solid var(--accent); border-radius: 9px; box-shadow: 0 12px 40px #0006; font-size: 13px; display: grid; gap: 8px; }
+.tip button { justify-self: start; padding: 4px 10px; }
+button.small { padding: 3px 10px; font-size: 13px; }
+.orghead { margin-bottom: 10px; }
+.orghead select { min-width: 150px; }
+.orow { display: grid; grid-template-columns: 28px minmax(0, 1fr) minmax(0, 1fr) 24px; gap: 4px 10px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.orow:last-child { border-bottom: 0; }
+.orow .t { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.orow .cur { display: flex; align-items: center; gap: 6px; min-width: 0; color: var(--muted); }
+.orow .new { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.orow .new b { color: var(--success); font-weight: 600; }
+.orow .no { color: var(--warning); }
+.orow.unchanged .cur { opacity: .55; }
+.orow.ohead { background: var(--raised); font-size: 13px; padding: 6px 12px; }
+.orow .oc { display: flex; justify-content: center; }
+.warnmark { color: var(--warning); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); flex: none; }
+.tplline { margin: 10px 0; }
+.autorow { margin: 8px 0; }
+@media (max-width: 800px) {
+  .orow { grid-template-columns: 28px minmax(0, 1fr) 24px; }
+  .orow .new { grid-column: 2; grid-row: 2; }
+  .orow .oi { grid-column: 3; grid-row: 1 / span 2; }
+  .orow.ohead { grid-template-columns: 28px 1fr; }
+  .orghead .primary { flex: 1 1 100%; }
+}
+.grid2.one { grid-template-columns: 1fr; }
+dialog .tip { position: fixed; }
+
+.tip span { white-space: pre-line; }
+.info { cursor: pointer; }
+.tabtip { display: inline-flex; margin: 0 6px 0 -2px; }

@@ -23,11 +23,11 @@
       ["Déplacement d'un fichier en partage (Fichiers › Explorateur)",
         need ? "Pause, déplacement, re-pointage, revérification, reprise : fait par TorrentLinker, sans Dossier de liens, mais le client doit être arrêté pendant l'opération." : "Natif : le client déplace lui-même, le Dossier de liens n'intervient pas."],
     ];
-    return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="ls-mini" style="margin:0">Aperçu</span><b>À quoi sert le Dossier de liens avec ${esc(c.name)}</b>
+    const text = uses.map(([t, d]) => `${t} : ${d}`).join("\n\n") + "\n\nGardez le Dossier de liens hors de la bibliothèque tant que ses torrents partagent : les liens sont permanents.";
+    const todo = need && !root;
+    return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="ls-mini" style="margin:0">Aperçu</span><b>Dossier de liens · ${esc(c.name)}</b>${LSPreview.tipHTML(text, "À quoi sert le Dossier de liens")}
       <span style="margin-left:auto;padding:2px 9px;border-radius:6px;font-size:12px;font-weight:650;${need ? "background:#edbf7326;color:var(--warning)" : "background:#4ad39426;color:var(--success)"}">${need ? "Requis par ce client" : "Facultatif pour ce client"}</span></div>
-      <ul style="margin:10px 0 6px;padding-left:20px;display:grid;gap:8px">${uses.map(([t, d]) => `<li><b>${esc(t)}</b><br><span style="color:var(--muted)">${esc(d)}</span></li>`).join("")}</ul>
-      ${need && !root ? `<p style="margin:6px 0 0;color:var(--warning)"><b>Pas encore configuré :</b> indiquez le dossier ci-dessus, hors de la bibliothèque, pour que Remise en seed et Organisation puissent fonctionner avec ${esc(c.name)}.</p>`
-        : `<p style="margin:6px 0 0;color:var(--muted)">Gardez le Dossier de liens hors de la bibliothèque tant que ses torrents partagent : les liens sont permanents.</p>`}`;
+      ${todo ? `<div style="margin-top:8px;color:var(--warning)"><b>À configurer</b> ${LSPreview.tipHTML(`Indiquez le dossier ci-dessus, hors de la bibliothèque, pour que Remise en seed et Organisation puissent fonctionner avec ${c.name}.`, "Pourquoi")}</div>` : ""}`;
   }
   function enhance() {
     const doc = document.getElementById("settings-frame")?.contentDocument;
@@ -48,7 +48,8 @@
     old?.remove();
     const card = doc.createElement("div");
     card.id = "ls-links-card"; card.dataset.key = key;
-    card.style.cssText = "grid-column:1/-1;margin:12px 0;padding:12px 14px;border:1px dashed #edbf73aa;border-radius:10px;background:var(--raised);font-size:13.5px;max-width:760px";
+    card.style.cssText = "grid-column:1/-1;margin:12px 0;padding:10px 14px;border:1px dashed #edbf73aa;border-radius:10px;background:var(--raised);font-size:13.5px;max-width:760px";
+    LSPreview.tipInstall(doc);
     card.innerHTML = html(c, link.value.trim());
     const note = link.closest("label")?.nextElementSibling;
     (note?.classList.contains("file-access-note") ? note : link.closest("label")).after(card);
@@ -60,7 +61,7 @@
     controls(box) {
       const add = (t, on) => { const b = document.createElement("button"); b.type = "button"; b.textContent = t; b.onclick = on; box.append(b); };
       add("Ouvrir le client (Paramètres)", () => { opening = true; location.hash = "#/setup/connections"; });
-      const s = document.createElement("span"); s.className = "ls-state"; s.textContent = "Changez « Type de client » : l'explication suit, pour les six clients."; box.append(s);
+      const s = document.createElement("span"); s.className = "ls-state"; s.textContent = "Changez « Type de client » : la carte suit."; box.append(s);
     },
     activate() { opening = true; LSNav.ensure(); location.hash = "#/setup/connections"; timer = setInterval(() => { try { enhance(); } catch (e) { console.error(e); } }, 400); },
     deactivate() { clearInterval(timer); document.getElementById("settings-frame")?.contentDocument?.getElementById("ls-links-card")?.remove(); },

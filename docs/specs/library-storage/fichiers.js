@@ -26,7 +26,7 @@ const ago = ms => {
 const dur = sec => sec < 5 ? "quelques secondes" : sec < 90 ? `${Math.round(sec)} s` : sec < 5400 ? `${Math.round(sec / 60)} min` : `${num(sec / 3600)} h`;
 const SPEED = 0.15; // GB/s of a disk-to-disk copy, for the estimates
 Object.assign(FX, { esc, size, num, dateOf, ago, dur, $ });
-const toast = (text, kind) => window.TLToast ? TLToast.show(text, kind) : console.log(text);
+const toast = (text, kind) => typeof TLToast !== "undefined" ? TLToast.show(text, kind) : console.log(text);
 FX.toast = toast;
 
 // ---- tree ----------------------------------------------------------------------------------------------
@@ -121,6 +121,13 @@ const seedBadge = n => {
   return s ? `<span class="badge ok seed" title="Un torrent utilise ces fichiers">▲ ${esc(s.client)} · ratio ${num(s.ratio)}</span>` : "";
 };
 
+const tip = (text, label) => (FX.tipBtn ? FX.tipBtn(text, label) : "");
+const TAB_TIPS = {
+  explorer: () => "Cliquez pour sélectionner (Ctrl ou Maj pour plusieurs), double-clic pour ouvrir, glissez d'un panneau à l'autre, clic droit pour le menu." + (S.member ? " Vue membre : vous ne gérez que vos dossiers de bibliothèque accordés." : ""),
+  tasks: () => "Les opérations de Fichiers s'exécutent ici, en arrière-plan : vous pouvez fermer le navigateur. Chaque élément est vérifié, rien n'échoue en silence. Le journal garde qui, quoi et quand ; chaque déplacement ou renommage terminé peut être annulé. Dans l'aperçu, les durées sont accélérées.",
+  disks: () => "Chaque disque est monté séparément. La corbeille est comptée à part. Les alertes de santé viennent de smartctl ou de Scrutiny (réglages ⚙).",
+  trash: () => "Supprimer, dans Fichiers, veut toujours dire mettre à la corbeille. Chaque disque a la sienne : le déplacement est instantané." + (S.member ? " Vous ne voyez que ce qui vient de vos dossiers de bibliothèque accordés." : ""),
+};
 function explorerHTML() {
   const narrow = innerWidth < 800;
   const panesHTML = S.panes.map((p, i) => {
@@ -152,9 +159,8 @@ function explorerHTML() {
       <div class="pane-foot"><span>${rows.length} élément${rows.length > 1 ? "s" : ""} · ${p.sel.size} sélectionné${p.sel.size > 1 ? "s" : ""}</span><span>${esc(fullPath(p.disk, p.path))}</span></div>
     </section>`;
   }).join("");
-  const sw = narrow ? `<div class="row hint"><button data-switch="0" class="${S.active === 0 ? "on" : ""}">Panneau 1</button><button data-switch="1" class="${S.active === 1 ? "on" : ""}">Panneau 2</button><small>Un seul panneau sur un écran étroit : F5 et F6 visent l'autre.</small></div>` : "";
-  return `<p class="muted hint">Cliquez pour sélectionner (Ctrl, Maj pour plusieurs), double-clic pour ouvrir, glissez d'un panneau à l'autre, clic droit pour le menu.
-    ${S.member ? "<b>Vue membre : vous gérez uniquement vos dossiers de bibliothèque accordés.</b>" : ""}</p>${sw}
+  const sw = narrow ? `<div class="row hint"><button data-switch="0" class="${S.active === 0 ? "on" : ""}">Panneau 1</button><button data-switch="1" class="${S.active === 1 ? "on" : ""}">Panneau 2</button></div>` : "";
+  return `${sw}
     <div class="panes">${panesHTML}</div>
     <div class="fkeys"><button data-f="rename"><kbd>F2</kbd>Renommer</button><button data-f="copy"><kbd>F5</kbd>Copier</button><button data-f="move"><kbd>F6</kbd>Déplacer</button>
       <button data-f="mkdir"><kbd>F7</kbd>Nouveau dossier</button><button data-f="trash" class="danger"><kbd>Suppr</kbd>Mettre à la corbeille</button></div>`;
@@ -289,7 +295,7 @@ function renameDialog(i) {
   if (!n) return;
   const p = pane(i), dir = nodeAt(p.disk, p.path), s = seedOf(n);
   const d = modal(`<h2>Renommer</h2><p class="muted">${esc(fullPath(p.disk, p.path))}</p><input id="rn" style="width:100%" value="${esc(n.n)}">
-    ${s ? `<div class="note">En partage dans <b>${esc(s.client)}</b> : le nom est changé <b>dans le client</b> (chemin du torrent), pas seulement sur le disque. ${FX.clientOf(s.client)?.native ? "Aucune revérification nécessaire." : "Ce client ne sait pas renommer : le nom est changé sur le disque puis le torrent est re-pointé et revérifié, comme pour Remise en seed."}</div>` : ""}
+    ${s ? `<div class="note row">En partage dans <b>${esc(s.client)}</b> : renommé aussi dans le client ${tip("Le nom est changé dans le client (chemin du torrent), pas seulement sur le disque. " + (FX.clientOf(s.client)?.native ? "Aucune revérification nécessaire." : "Ce client ne sait pas renommer : le nom est changé sur le disque puis le torrent est re-pointé et revérifié, comme pour Remise en seed."), "Détails")}</div>` : ""}
     <p id="rnerr" style="color:var(--danger)"></p><div class="dialog-foot"><button data-close>Annuler</button><button class="primary" id="rnok">Renommer</button></div>`);
   const input = d.querySelector("#rn");
   input.focus(); input.setSelectionRange(0, n.d ? n.n.length : n.n.lastIndexOf(".") > 0 ? n.n.lastIndexOf(".") : n.n.length);
@@ -309,9 +315,9 @@ function trashDialog(i) {
   if (!items.length) return;
   const p = pane(i), seeded = items.filter(seedOf);
   const total = items.reduce((a, n) => a + sizeOf(n), 0);
-  const d = modal(`<h2>Mettre à la corbeille</h2><p>${items.length} élément${items.length > 1 ? "s" : ""} · ${size(total)}. Rien n'est effacé : ${items.length > 1 ? "ils vont" : "il va"} dans la corbeille de ${esc(S.disks[p.disk].name)} (déplacement instantané) et ${items.length > 1 ? "restent restaurables" : "reste restaurable"} ${S.retention} jours.</p>
+  const d = modal(`<h2>Mettre à la corbeille</h2><p class="row">${items.length} élément${items.length > 1 ? "s" : ""} · ${size(total)} → corbeille de ${esc(S.disks[p.disk].name)} ${tip(`Rien n'est effacé : ${items.length > 1 ? "ils vont" : "il va"} dans la corbeille du disque (déplacement instantané) et ${items.length > 1 ? "restent restaurables" : "reste restaurable"} ${S.retention} jours.`, "Détails")}</p>
     <div class="dlg-list">${items.map(n => `<div class="dlg-item"><span>${esc(n.n)}</span><small>${size(sizeOf(n))}</small></div>`).join("")}</div>
-    ${seeded.length ? `<div class="note warn">${seeded.length} élément${seeded.length > 1 ? "s sont" : " est"} en partage (${[...new Set(seeded.map(n => seedOf(n).client))].join(", ")}) : le torrent est retiré du client <b>sans ses données</b>, comme pour « Remplacer ». Pour le garder, restaurez-le depuis la corbeille puis re-pointez-le.</div>` : ""}
+    ${seeded.length ? `<div class="note warn row">${seeded.length} en partage (${[...new Set(seeded.map(n => seedOf(n).client))].join(", ")}) : retiré du client ${tip("Le torrent est retiré du client sans ses données, comme pour « Remplacer ». Pour le garder, restaurez-le depuis la corbeille puis re-pointez-le.", "Détails")}</div>` : ""}
     <div class="dialog-foot"><button data-close>Annuler</button><button class="primary danger" id="ok">Mettre à la corbeille</button></div>`);
   d.onclick = e => {
     if (e.target.closest("[data-close]")) d.close();
@@ -360,21 +366,18 @@ FX.pickFolder = pickFolder;
 function describeItem(n, from, to, mode) {
   const sz = sizeOf(n), seed = seedOf(n), same = from.disk === to.disk;
   const info = { n, sz, seed, same };
+  const dest = S.disks[to.disk].name;
+  const copyBit = `Copie vers ${dest} · ${size(sz)} · ~${dur(sz / SPEED)}`;
   if (seed) {
     const client = FX.clientOf(seed.client), native = client?.native;
     info.client = seed.client; info.native = native;
     const how = { qBittorrent: "setLocation", Transmission: "torrent-set-location", Deluge: "move_storage" }[seed.client];
-    const timeBit = same ? "déplacement instantané (même disque)" : `copie sur ${S.disks[to.disk].name} : ${size(sz)} · environ ${dur(sz / SPEED)}`;
-    if (mode === "copy") info.lines = [`Copie ${same ? "sur le même disque" : "vers " + S.disks[to.disk].name} (${size(sz)}${same ? "" : " · environ " + dur(sz / SPEED)}). Le torrent reste en place et continue de partager l'original ; la copie n'est pas partagée.`];
-    else if (native) info.lines = [`En partage dans ${seed.client} (ratio ${num(seed.ratio)}). Le déplacement passe par le client : <b>déplacement natif</b> (${how}), le client déplace lui-même les fichiers et continue de partager. ${same ? "<b>Déplacement instantané</b> (même disque)." : `<b>Copie</b> sur ${esc(S.disks[to.disk].name)} : ${size(sz)} · environ ${dur(sz / SPEED)}, puis le client supprime l'original.`}`];
-    else info.lines = [`En partage dans ${seed.client} (ratio ${num(seed.ratio)}). Ce client ne déplace pas ses fichiers : TorrentLinker le fait à sa place.`,
-      `<span class="steps"><span>Pause</span><i>→</i><span>Déplacement</span><i>→</i><span>Re-pointage</span><i>→</i><span>Revérification</span><i>→</i><span>Reprise</span></span>`,
-      `${same ? "<b>Déplacement instantané</b> (même disque)" : `<b>Copie</b> sur ${esc(S.disks[to.disk].name)} : ${size(sz)} · environ ${dur(sz / SPEED)}`}, puis revérification d'environ ${dur(sz / (SPEED * 1.4))}. La reprise est toujours tentée, même après une erreur.`];
-    info.timeBit = timeBit;
+    if (mode === "copy") { info.short = same ? `Copie sur le même disque · ${size(sz)}` : copyBit; info.tip = "Le torrent reste en place et continue de partager l'original ; la copie n'est pas partagée."; }
+    else if (native) { info.short = same ? `Instantané · ${seed.client} déplace` : `${copyBit} · ${seed.client} déplace`; info.tip = `En partage dans ${seed.client} (ratio ${num(seed.ratio)}). Le client déplace lui-même les fichiers (${how}) et continue de partager.${same ? "" : " Il supprime l'original après la copie."}`; }
+    else { info.short = same ? `Instantané · géré par TorrentLinker` : `${copyBit} · géré par TorrentLinker`; info.tip = `En partage dans ${seed.client} (ratio ${num(seed.ratio)}). Ce client ne déplace pas ses fichiers : TorrentLinker le fait à sa place. Pause → Déplacement → Re-pointage → Revérification (~${dur(sz / (SPEED * 1.4))}) → Reprise. La reprise est toujours tentée, même après une erreur.`; }
   } else {
-    info.lines = [same && mode === "move" ? "<b>Déplacement instantané</b> (même disque) : seul le chemin change."
-      : same ? `<b>Copie</b> sur le même disque : ${size(sz)} · environ ${dur(sz / SPEED)}.`
-      : `<b>Copie</b> sur ${esc(S.disks[to.disk].name)} : ${size(sz)} · environ ${dur(sz / SPEED)}${mode === "move" ? ", puis l'original est supprimé après vérification" : ""}.`];
+    info.short = same && mode === "move" ? "Instantané (même disque)" : same ? `Copie sur le même disque · ${size(sz)} · ~${dur(sz / SPEED)}` : copyBit;
+    info.tip = same && mode === "move" ? "Seul le chemin change." : mode === "move" ? "L'original est supprimé après vérification de la copie." : "";
   }
   info.instant = same && mode === "move";
   return info;
@@ -413,13 +416,13 @@ function confirmTransfer(mode, items, from, to, i) {
     d.querySelector("h2").textContent = `${verb} ${items.length} élément${items.length > 1 ? "s" : ""}`;
     d.querySelector("#sum").textContent = `${size(items.reduce((a, n) => a + sizeOf(n), 0))} · de ${fullPath(from.disk, from.path)}`;
     d.querySelector("#dest").textContent = fullPath(to.disk, to.path);
-    d.querySelector("#list").innerHTML = st.infos.map(x => `<div class="dlg-item"><b style="word-break:break-all">${esc(x.n.n)}</b><div class="mode ${x.instant ? "instant" : "copy"}">${x.lines.map(l => `<div>${l}</div>`).join("")}</div></div>`).join("");
+    d.querySelector("#list").innerHTML = st.infos.map(x => `<div class="dlg-item"><b style="word-break:break-all">${esc(x.n.n)}</b><div class="mode row ${x.instant ? "instant" : "copy"}">${esc(x.short)}${x.tip ? " " + tip(x.tip, "Détails") : ""}</div></div>`).join("");
     const w = [];
-    if (st.sameFolder) w.push(`<div class="note warn">La destination est le dossier d'origine.</div>`);
-    if (st.inside) w.push(`<div class="note warn">Un dossier ne peut pas être placé dans lui-même.</div>`);
-    if (st.lowFree) w.push(`<div class="note warn">Pas assez de place sur ${esc(S.disks[to.disk].name)} : ${size(st.u.free)} libres, ${size(st.cross)} nécessaires. L'élément sera marqué en échec dans Tâches, sans rien perdre.</div>`);
-    else if (st.lowMargin) w.push(`<div class="note warn">Cela ferait passer ${esc(S.disks[to.disk].name)} sous la marge de 10 % d'espace libre (${size(st.u.usable)} utilisables).</div>`);
-    if (st.eta > 0) w.push(`<div class="note">Durée estimée : environ ${dur(st.eta)} (copie à ${Math.round(SPEED * 1000)} Mo/s). L'opération continue en arrière-plan dans l'onglet Tâches ; chaque élément est vérifié.</div>`);
+    if (st.sameFolder) w.push(`<div class="note warn">Même dossier que l'origine.</div>`);
+    if (st.inside) w.push(`<div class="note warn">Un dossier ne peut pas entrer dans lui-même.</div>`);
+    if (st.lowFree) w.push(`<div class="note warn row">Place insuffisante sur ${esc(S.disks[to.disk].name)} : ${size(st.u.free)} libres, ${size(st.cross)} nécessaires ${tip("L'élément sera marqué en échec dans Tâches, sans rien perdre.", "Détails")}</div>`);
+    else if (st.lowMargin) w.push(`<div class="note warn row">${esc(S.disks[to.disk].name)} passerait sous la marge de 10 % ${tip(`Il reste ${size(st.u.usable)} utilisables avant la marge de 10 % d'espace libre.`, "Détails")}</div>`);
+    if (st.eta > 0) w.push(`<div class="note row">Durée : ~${dur(st.eta)} ${tip(`Copie à ${Math.round(SPEED * 1000)} Mo/s. L'opération continue en arrière-plan dans l'onglet Tâches ; chaque élément est vérifié.`, "Détails")}</div>`);
     d.querySelector("#warn").innerHTML = w.join("");
     const go = d.querySelector("#go");
     go.textContent = verb;
@@ -457,9 +460,9 @@ function conflictDialog(n, old, same, many) {
     const row = (label, x) => `<div class="dlg-item"><b>${label}</b><span style="word-break:break-all">${esc(x.n)}</span><small>${size(sizeOf(x))} · ${dateOf(x.age || 0)}${x.hash ? " · " + esc(x.hash.slice(0, 10)) + "…" : ""}</small></div>`;
     const d = modal(`<h2>« ${esc(n.n)} » existe déjà</h2>
       <div class="dlg-list">${row("Déjà dans la destination", old)}${row("À déplacer ou copier", n)}</div>
-      ${same ? `<div class="note">Les deux sont <b>identiques</b> (même somme SHA-1) : inutile d'en garder deux.</div>` : `<div class="note warn">Les contenus sont <b>différents</b>.</div>`}
+      ${same ? `<div class="note row">Les deux sont <b>identiques</b> ${tip("Même somme SHA-1 : inutile d'en garder deux.", "Détails")}</div>` : `<div class="note warn">Les contenus sont <b>différents</b>.</div>`}
       <label class="row"><input type="checkbox" id="all"> Appliquer à tous les conflits suivants</label>
-      <div class="dialog-foot"><button data-c="skip">Ignorer</button><button data-c="replace" class="danger" title="L'ancien fichier va à la corbeille">Remplacer (l'ancien va à la corbeille)</button><button data-c="rename">Renommer (« ${esc(n.n)} (2) »)</button>
+      <div class="dialog-foot">${tip("Remplacer envoie l'ancien fichier à la corbeille. Renommer garde les deux, le nouveau devient « " + n.n + " (2) ». Ignorer ne touche à rien.", "Aide")}<span class="grow"></span><button data-c="skip">Ignorer</button><button data-c="replace" class="danger">Remplacer</button><button data-c="rename">Renommer</button>
         ${same ? `<button data-c="keepone" class="primary">Garder un seul</button>` : ""}<button data-close>Annuler tout</button></div>`);
     if (!many) d.querySelector("#all").closest("label").hidden = true;
     let done = false;
@@ -688,9 +691,8 @@ let taskFilter = "all";
 function tasksHTML() {
   const f = { all: () => true, active: t => t.state === "running" || t.state === "queued", done: t => t.state === "done", failed: t => t.state === "failed" || t.state === "partial" || t.state === "cancelled" };
   const filters = [["all", "Toutes"], ["active", "En cours"], ["done", "Terminées"], ["failed", "Échecs et annulations"]];
-  return `<p class="muted hint">Les opérations de Fichiers s'exécutent ici, en arrière-plan : vous pouvez fermer le navigateur. Chaque élément est vérifié, rien n'échoue en silence. Le journal est conservé (qui, quoi, quand) et chaque déplacement ou renommage terminé peut être annulé. <small style="display:inline">Dans l'aperçu, les durées sont accélérées.</small></p>
-    <div class="filters">${filters.map(([k, l]) => `<button class="chip ${taskFilter === k ? "on" : ""}" data-filter="${k}">${l}</button>`).join("")}
-      <span class="grow"></span><label class="row" title="Aperçu : fait échouer la vérification du prochain élément copié"><input type="checkbox" id="failnext" ${S.failNext ? "checked" : ""}> Simuler un échec de vérification au prochain transfert</label></div>
+  return `<div class="filters">${filters.map(([k, l]) => `<button class="chip ${taskFilter === k ? "on" : ""}" data-filter="${k}">${l}</button>`).join("")}
+      <span class="grow"></span><label class="row" title="Aperçu : fait échouer la vérification du prochain élément copié"><input type="checkbox" id="failnext" ${S.failNext ? "checked" : ""}> Simuler un échec</label></div>
     <div class="tasks" id="tasklist">${S.tasks.filter(f[taskFilter]).map(taskHTML).join("") || `<div class="empty">Aucune tâche pour ce filtre.</div>`}</div>`;
 }
 function paintTasks() {
@@ -705,7 +707,7 @@ const TABS = [["explorer", "Explorateur", false], ["disks", "Disques", true], ["
 function tabsHTML() {
   const active = S.tasks.filter(t => t.state === "running" || t.state === "queued").length;
   return TABS.filter(([, , owner]) => !(S.member && owner)).map(([id, label]) =>
-    `<button data-tab="${id}" class="${S.tab === id ? "selected" : ""}">${label}${id === "tasks" && active ? `<span class="badge count">${active}</span>` : ""}${id === "trash" ? `<span class="badge count">${S.trash.filter(t => !S.member || t.from.includes("/Films/")).length}</span>` : ""}</button>`).join("");
+    `<button data-tab="${id}" class="${S.tab === id ? "selected" : ""}">${label}${id === "tasks" && active ? `<span class="badge count">${active}</span>` : ""}${id === "trash" ? `<span class="badge count">${S.trash.filter(t => !S.member || t.from.includes("/Films/")).length}</span>` : ""}</button>${S.tab === id && TAB_TIPS[id] && FX.tipBtn ? `<span class="tabtip">${FX.tipBtn(TAB_TIPS[id](), "Aide sur cet onglet")}</span>` : ""}`).join("");
 }
 function refreshTabs() { const t = $("tabs"); if (t) t.innerHTML = tabsHTML(); }
 function render() {

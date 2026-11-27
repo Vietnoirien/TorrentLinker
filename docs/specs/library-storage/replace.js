@@ -20,6 +20,7 @@
     if (!parts.length) return "sans attente";
     return parts.length === 2 ? parts.join(r.combine === "all" ? " et " : " ou ") : parts[0];
   }
+  const tip = (text, label) => LSPreview.tipHTML(text, label);
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
   const mediaDoc = () => document.getElementById("media-frame")?.contentDocument;
   const torrentsDoc = () => document.getElementById("torrents-frame")?.contentDocument;
@@ -27,11 +28,11 @@
   const fallback = film => film.free < film.upgrade.size;
 
   function stepsFor(run, film) {
-    const list = [["send", "Envoyée au client"], ["download", "Téléchargement de la nouvelle version"],
-      ["done", "Terminé : la nouvelle version joue, votre état de lecture est conservé"]];
+    const list = [["send", "Envoyée au client"], ["download", "Téléchargement"],
+      ["done", "Terminé", "La nouvelle version joue et votre état de lecture est conservé."]];
     if (run.replace && run.wait && oldSeeds(film))
-      list.push(["fin", `Ancienne version en fin de partage (règle : ${ruleText()}) : cachée de Médias, visible dans Torrents`]);
-    if (run.replace) list.push(["trash", "Ancienne version retirée du client, ses fichiers à la corbeille (restaurables 7 jours)"]);
+      list.push(["fin", "Ancienne version en fin de partage", `Règle : ${ruleText()}. Elle est cachée de Médias et reste visible dans Torrents.`]);
+    if (run.replace) list.push(["trash", "Ancienne version à la corbeille", "Retirée du client, ses fichiers sont restaurables 7 jours."]);
     return list;
   }
 
@@ -41,10 +42,10 @@
     const seeds = oldSeeds(film), up = film.upgrade;
     const seedText = seeds ? `en partage · ${film.old.seed.hours} h · ratio ${num(film.old.seed.ratio)}` : "ne partage plus";
     const dest = fallback(film)
-      ? `<p class="rp-dest warn">Pas assez de place sur ${film.disk} (${free(film.free)} libres, ${size(up.size)} nécessaires) : la nouvelle version ira dans le Dossier de téléchargement, <b>${DOWNLOAD_FOLDER.path}</b> · ${DOWNLOAD_FOLDER.disk} · ${free(DOWNLOAD_FOLDER.free)} libres.</p>`
-      : `<p class="rp-dest">La nouvelle version se télécharge à côté de l'ancienne : <b>${esc(film.folder)}</b> · ${film.disk} · ${free(film.free)} libres.</p>`;
+      ? `<p class="rp-dest warn">Téléchargé dans <b>${DOWNLOAD_FOLDER.path}</b> ${tip(`Pas assez de place sur ${film.disk} (${free(film.free)} libres, ${size(up.size)} nécessaires) : la nouvelle version va dans le Dossier de téléchargement, ${DOWNLOAD_FOLDER.disk} (${free(DOWNLOAD_FOLDER.free)} libres).`)}</p>`
+      : `<p class="rp-dest">Téléchargé dans <b>${esc(film.folder)}</b> ${tip(`La nouvelle version se télécharge à côté de l'ancienne, sur ${film.disk} (${free(film.free)} libres).`)}</p>`;
     const toggle = (id, on, label, hint, disabled) =>
-      `<div class="rp-toggle" role="switch" tabindex="0" data-toggle="${id}" aria-checked="${on}" aria-disabled="${disabled}"><span class="rp-switch"></span><span>${label}<small>${hint}</small></span></div>`;
+      `<div class="rp-toggle" role="switch" tabindex="0" data-toggle="${id}" aria-checked="${on}" aria-disabled="${disabled}"><span class="rp-switch"></span><span>${label} ${hint}</span></div>`;
     let html = `<header><span class="rp-badge-preview">Aperçu</span>Remplacer l'ancienne version</header>
       <div class="rp-compare">
         <div class="rp-version"><b>Dans votre médiathèque</b><span class="name">${esc(film.old.name)}</span>
@@ -55,23 +56,23 @@
           <small>${size(up.size)} · ReleaseScore <span class="rp-score">${film.newScore ?? "?"}</span></small></div>
       </div>${dest}<div class="rp-toggles">`;
     html += toggle("replace", replace, "Remplacer l'ancienne version",
-      seeds ? "Quand la nouvelle est complète, l'ancienne quitte Médias puis part à la corbeille." : "Elle ne partage plus : elle part à la corbeille dès que la nouvelle est complète.", started);
+      tip(seeds ? "Quand la nouvelle est complète, l'ancienne quitte Médias puis part à la corbeille." : "Elle ne partage plus : elle part à la corbeille dès que la nouvelle est complète."), started);
     if (seeds) {
       html += toggle("wait", replace && wait, "Attendre la fin de son partage",
-        `Règle : ${ruleText()} · <button type="button" class="rp-link" data-rule>Modifier</button>`, started || !replace);
+        `${tip(`Règle : ${ruleText()}. L'ancienne version reste en partage jusque-là.`)} <button type="button" class="rp-link" data-rule aria-label="Régler la fin du partage" title="Régler">⚙</button>`, started || !replace);
     }
     html += "</div>";
     if (started) {
       const list = stepsFor(run, film);
-      html += `<div class="rp-timeline">${list.map(([key, text], i) => {
+      html += `<div class="rp-timeline">${list.map(([key, text, why], i) => {
         const cls = i < run.step ? "done" : i === run.step ? "now" : "";
         let extra = "";
         if (key === "download" && i === run.step) extra = `<div class="rp-bar"><i style="width:${run.progress}%"></i></div>`;
         if (key === "fin" && i === run.step) extra = ` <button type="button" class="rp-link" data-torrents>Voir dans Torrents</button>`;
         if (key === "trash" && i <= run.step) extra = run.restored
-          ? " <i>Restaurée : ses fichiers sont revenus dans le dossier.</i>"
+          ? " <i>Restaurée</i>"
           : ` <button type="button" class="rp-link" data-restore>Restaurer</button>`;
-        return `<div class="rp-step ${cls}"><b>${i < run.step ? "✓" : i === run.step ? "●" : "○"}</b><span>${text}${extra}</span></div>`;
+        return `<div class="rp-step ${cls}"><b>${i < run.step ? "✓" : i === run.step ? "●" : "○"}</b><span>${text}${why ? " " + tip(why) : ""}${extra}</span></div>`;
       }).join("")}</div>`;
       if (run.step >= list.length) html += `<p class="rp-note">Terminé.</p>`;
     }
@@ -82,14 +83,14 @@
     const d = doc.createElement("dialog");
     d.className = "rp-dialog";
     const r = S.rule;
-    d.innerHTML = `<h2>Fin du partage</h2><p>Quand l'ancienne version, remplacée, a fini son partage et peut être retirée.</p>
+    d.innerHTML = `<h2>Fin du partage ${tip("Quand l'ancienne version, remplacée, a fini son partage et peut être retirée.")}</h2>
       <label class="rule"><input type="checkbox" id="rp-use-time" ${r.useTime ? "checked" : ""}> Partagée au moins
         <input type="number" id="rp-amount" min="1" step="1" value="${r.amount}">
         <select id="rp-unit"><option value="h" ${r.unit === "h" ? "selected" : ""}>heures</option><option value="d" ${r.unit === "d" ? "selected" : ""}>jours</option></select></label>
       <label class="rule"><input type="checkbox" id="rp-use-ratio" ${r.useRatio ? "checked" : ""}> Ratio d'au moins
         <input type="number" id="rp-ratio" min="0.1" step="0.1" value="${r.ratio}"></label>
       <div class="combine" id="rp-combine-row">Il faut <select id="rp-combine"><option value="any" ${r.combine === "any" ? "selected" : ""}>l'un ou l'autre</option><option value="all" ${r.combine === "all" ? "selected" : ""}>les deux</option></select></div>
-      <p id="rp-none" hidden>Aucune condition cochée : l'ancienne version est retirée dès que la nouvelle est complète.</p>
+      <div id="rp-none" hidden>Sans attente ${tip("Aucune condition cochée : l'ancienne version est retirée dès que la nouvelle est complète.")}</div>
       <div class="actions"><button type="button" id="rp-cancel">Annuler</button><button type="button" class="primary" id="rp-save">Enregistrer</button></div>`;
     const $ = id => d.querySelector("#" + id);
     const sync = () => {
@@ -105,6 +106,7 @@
       S.rev++; d.close();
     };
     d.addEventListener("close", () => d.remove());
+    LSPreview.tipInstall(doc);
     doc.body.append(d);
     d.showModal();
   }
@@ -138,6 +140,7 @@
     }
     const content = doc.querySelector(".media-feature-content");
     if (!content) return;
+    LSPreview.tipInstall(doc);
     const title = content.querySelector("h2")?.textContent.trim();
     S.title = title;
     const film = S.fixture.films[title];
@@ -168,10 +171,11 @@
     box = doc.createElement("div");
     box.className = "rp-card"; box.dataset.key = key;
     if (S.member) {
-      box.innerHTML = `<header><span class="rp-badge-preview">Aperçu</span>Vue membre</header><p class="rp-note" style="margin:0">Le remplacement d'une version est réservé au propriétaire : un membre ne voit aucune option ici.</p>`;
+      box.innerHTML = `<header><span class="rp-badge-preview">Aperçu</span>Vue membre</header><p class="rp-note" style="margin:0">Réservé au propriétaire ${tip("Le remplacement d'une version est réservé au propriétaire : un membre ne voit aucune option ici.")}</p>`;
     } else {
       box.innerHTML = card(title, film, doc);
       box.addEventListener("click", event => {
+        if (event.target.closest(".ls-info")) return;
         if (event.target.closest("[data-rule]")) { event.stopPropagation(); return ruleDialog(doc); }
         if (event.target.closest("[data-torrents]")) return LSPreview.go("#/torrents");
         if (event.target.closest("[data-restore]")) { S.runs[title].restored = true; S.rev++; return; }
@@ -181,7 +185,7 @@
         S.rev++;
       });
       box.addEventListener("keydown", event => {
-        if ((event.key === " " || event.key === "Enter") && event.target.closest("[data-toggle]")) { event.preventDefault(); event.target.click(); }
+        if ((event.key === " " || event.key === "Enter") && event.target.closest("[data-toggle]") && !event.target.closest(".ls-info")) { event.preventDefault(); event.target.click(); }
       });
     }
     actions.after(box);
