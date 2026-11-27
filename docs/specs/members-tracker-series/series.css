@@ -1,0 +1,53 @@
+/* Only what the Tracker Series preview adds; the rest is the real panel's own CSS. */
+.ts-preview { display: inline-block; vertical-align: middle; margin-left: 8px; padding: 1px 7px; border-radius: 999px; background: #f59e0b; color: #1a1202; font: 700 10px/16px system-ui, sans-serif; letter-spacing: .04em; text-transform: uppercase; }
+.ts-seasons-box { padding-top: 8px; }
+.ts-head { align-items: baseline; gap: 4px; }
+.ts-seasons { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ts-season { border: 1px solid var(--line, rgba(255,255,255,.14)); border-radius: 12px; background: var(--panel, rgba(255,255,255,.04)); }
+.ts-season-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 10px; }
+.ts-toggle { display: inline-flex; align-items: center; gap: 8px; background: transparent; border: 0; color: inherit; font: inherit; cursor: pointer; padding: 2px; text-align: left; }
+.ts-caret { width: 12px; opacity: .7; }
+.ts-count { opacity: .65; font-size: .85em; font-weight: 400; }
+.ts-pills { display: inline-flex; flex-wrap: wrap; gap: 6px; flex: 1 1 auto; }
+.ts-pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600; border: 1px solid transparent; white-space: nowrap; }
+.ts-pill.ok { background: rgba(80,200,130,.15); color: #7fdca3; border-color: rgba(80,200,130,.35); }
+.ts-pill.integ { background: rgba(120,150,255,.15); color: #a9bcff; border-color: rgba(120,150,255,.4); }
+.ts-pill.eps { background: rgba(245,158,11,.14); color: #f2b552; border-color: rgba(245,158,11,.4); }
+.ts-pill.own { background: rgba(128,189,182,.18); color: var(--accent, #80bdb6); border-color: rgba(128,189,182,.45); }
+.ts-pill.asked { background: rgba(245,158,11,.2); color: #f6c16a; border-color: rgba(245,158,11,.5); }
+html[data-theme="light"] .ts-pill.ok { color: #19613a; } html[data-theme="light"] .ts-pill.integ { color: #2d3f9a; } html[data-theme="light"] .ts-pill.eps, html[data-theme="light"] .ts-pill.asked { color: #8a5a00; } html[data-theme="light"] .ts-pill.own { color: #0b5d56; }
+.ts-get { margin-left: auto; padding: 4px 12px; font-size: 12.5px; }
+.ts-season-body { padding: 4px 12px 12px 34px; display: flex; flex-direction: column; gap: 8px; }
+.ts-releases { display: flex; flex-direction: column; gap: 6px; }
+.ts-episodes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.ts-episode { display: grid; grid-template-columns: 1fr auto auto; gap: 4px 12px; align-items: start; padding: 8px 0; border-top: 1px solid var(--line, rgba(255,255,255,.1)); }
+.ts-episode p { margin: 2px 0 0; opacity: .75; font-size: .88em; line-height: 1.4; }
+.ts-integrale { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 10px 12px; margin: 8px 0; border: 1px dashed rgba(120,150,255,.5); border-radius: 12px; }
+.ts-integrale .media-tracker-release { flex: 1 1 280px; }
+.ts-releases-title { margin: 14px 0 4px; font-size: 1rem; }
+/* The request sheet */
+dialog.ts-sheet { max-width: 560px; width: calc(100% - 24px); }
+.ts-sheet-form { display: flex; flex-direction: column; gap: 10px; }
+.ts-sheet-seasons { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.ts-check { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border: 1px solid var(--line, rgba(255,255,255,.14)); border-radius: 10px; cursor: pointer; flex-wrap: wrap; }
+.ts-check input { width: 20px; height: 20px; flex: none; }
+.ts-check .ts-pill { margin-left: auto; }
+.ts-check.off { opacity: .55; cursor: not-allowed; }
+.ts-whole { background: rgba(128,189,182,.1); }
+.ts-follow { align-items: flex-start; }
+.ts-follow > span { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.ts-note { opacity: .75; font-size: .85em; line-height: 1.4; margin: 0; }
+.ts-quota p { margin: 4px 0; }
+@media (max-width: 640px) {
+  dialog.ts-sheet { margin: auto 0 0; width: 100%; max-width: none; border-radius: 18px 18px 0 0; max-height: 92vh; overflow-y: auto; }
+  .ts-season-body { padding-left: 12px; }
+  .ts-episode { grid-template-columns: 1fr; }
+  .ts-get { margin-left: 0; }
+}
+/* The real "Dans la bibliothèque" badge, as the banner's title draws it, with the title's tight spacing undone. */
+.media-feature-content h2 .media-poster-badge { letter-spacing: 0; word-spacing: normal; font-weight: 600; white-space: nowrap; }
+.media-feature-content h2 .ts-preview { letter-spacing: .04em; }
+.media-home-row-header .ts-preview { margin-left: 4px; margin-right: 4px; }
+.ts-sheet-form .media-row-note { margin: 0; }
+.ts-sheet-form h2 { margin: 0; }
+.ts-episode .ts-pill { justify-self: start; }
