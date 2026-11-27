@@ -15,7 +15,9 @@ INTERACTIVE = frozenset(
     }
 )
 # The film index fills for hours, so it has its own worker: it must not hold up the batch lane.
-FILMS = frozenset({"films-index", "series-index"})
+FILMS = frozenset({"films-index"})
+# The series index too, apart from the films: its first sync parses ~200,000 release names.
+SERIES = frozenset({"series-index"})
 BACKGROUND = frozenset(
     {"check-all", "reseed-all", "search-library", "plan", "catalogue", "reseed-workspace"}
 )
@@ -30,6 +32,8 @@ def job_lane(kind: str, parameters: dict | None = None) -> str:
         return "interactive"
     if kind in FILMS:
         return "films"
+    if kind in SERIES:
+        return "series"
     if (
         kind == "candidate-inspector"
         and parameters.get("inspector_action", "review") in READ_INSPECTOR_ACTIONS

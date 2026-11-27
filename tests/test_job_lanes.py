@@ -327,3 +327,23 @@ def test_reseed_scan_pipelines_discoveries_without_publishing_partial_library(tm
     assert result["done"] == 2
     assert str(discovered) in {row["path"] for row in board.library.rows()}
     assert not any("Scan the Library" in error["message"] for error in result["errors"])
+
+
+def test_the_series_index_has_its_own_lane_and_never_holds_settings(tmp_path):
+    """Its first fill parses ~200,000 names: it must hold neither the films nor the settings."""
+    import threading
+
+    from torrentlinker.job_lanes import job_lane
+    from torrentlinker.web.jobs import Jobs
+
+    assert job_lane("series-index") == "series"
+    assert job_lane("films-index") == "films"
+    jobs = Jobs(tmp_path)
+    release = threading.Event()
+    try:
+        jobs.submit("series-index", lambda stop, progress: release.wait(5), client_id="default")
+        assert jobs.running("series-index", "default")
+        assert not jobs.active()
+    finally:
+        release.set()
+        jobs.close()

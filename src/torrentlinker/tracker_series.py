@@ -26,6 +26,8 @@ import json
 import re
 import threading
 import time
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
 
@@ -34,6 +36,15 @@ from guessit import guessit
 from torrentlinker import age_ratings
 from torrentlinker.media_ratings import AgeRatings
 from torrentlinker.media_tracker import TrackerRows, plain
+
+# The first sync parses every series release of the Catalogues (~200,000 names, ~9 ms each):
+# it saves them in batches and pauses between batches, so pages keep answering meanwhile.
+SYNC_BATCH = 500
+SYNC_PAUSE = 0.05
+# Below this many names, parsing in this process is quicker than starting another.
+POOL_FROM = 200
+# While it fills, the index's revision moves at most this often (seconds).
+REVISION_EVERY = 10.0
 
 # Catalogue category -> the kind of series it holds, per Tracker.
 SERIES_KINDS: dict[str, dict[int, str]] = {
@@ -112,6 +123,23 @@ def parse_series_release(name: str) -> SeriesRelease:
     return SeriesRelease(title, year, "", ())
 
 
+def parse_many(names: list[str]) -> list[SeriesRelease]:
+    return [parse_series_release(name) for name in names]
+
+
+@contextmanager
+def parser_pool(count: int) -> Iterator[Callable[[list[str]], list[SeriesRelease]]]:
+    """Parse names in a worker process when there are many, here when there are few."""
+    if count < POOL_FROM:
+        yield parse_many
+        return
+    import multiprocessing
+    from concurrent.futures import ProcessPoolExecutor
+
+    with ProcessPoolExecutor(1, mp_context=multiprocessing.get_context("spawn")) as pool:
+        yield lambda names: pool.submit(parse_many, names).result()
+
+
 def coverage(
     releases: list[dict[str, Any]], seasons: dict[int, int], episodes: dict[int, set[int]]
 ) -> dict[int, dict[str, Any]]:
@@ -155,6 +183,7 @@ class TrackerSeries(TrackerRows, AgeRatings):
 
     def create_series(self) -> None:
         self._series_generation = int(time.time())
+        self._series_bumped = 0.0
         self._series_working = threading.Lock()  # one identification at a time
         self._series_resting: dict[str, float] = {}
         with self.db:
@@ -186,6 +215,7 @@ class TrackerSeries(TrackerRows, AgeRatings):
 
     def _series_changed(self) -> None:
         self._series_generation += 1
+        self._series_bumped = time.monotonic()
 
     def series_revision(self) -> int:
         return self._series_generation
@@ -214,41 +244,58 @@ class TrackerSeries(TrackerRows, AgeRatings):
                     )
                 }
             gone = [(site, h) for h in known.keys() - current.keys()]
-            inserts, updates = [], []
-            for infohash, (row, order) in current.items():
-                if infohash not in known:
+            updates = [
+                (row.size, row.seeders, site, h)
+                for h, (row, _) in current.items()
+                if h in known and known[h] != (row.size, row.seeders)
+            ]
+            new = [(h, row, order) for h, (row, order) in current.items() if h not in known]
+            changed = changed or bool(gone or new or updates)
+            self._series_save(site, gone, [], updates)
+            # Parsing a name costs ~9 ms of regular expressions that hold the interpreter: the
+            # names are parsed in another process, a batch at a time, and each batch is saved
+            # so the page shows the series as they come while the server keeps answering.
+            with parser_pool(len(new)) as parse:
+                for start in range(0, len(new), SYNC_BATCH):
                     if stop.is_set():
                         break
-                    parsed = parse_series_release(row.title)
-                    tkey = series_key(parsed.title, parsed.year) if parsed.title else ""
-                    inserts.append(
-                        (
-                            site, infohash, row.title, row.size, row.seeders, row.category,
-                            kinds.get(row.category or 0, "series"), order, tkey, parsed.title,
-                            parsed.year, parsed.pack, json.dumps(list(parsed.seasons)),
-                            parsed.season, parsed.episode, row.download_url,
-                        )
-                    )  # fmt: skip
-                elif known[infohash] != (row.size, row.seeders):
-                    updates.append((row.size, row.seeders, site, infohash))
-            with self.lock, self.db:
-                self.db.executemany(
-                    "DELETE FROM series_release WHERE tracker=? AND infohash=?", gone
-                )
-                self.db.executemany(
-                    "INSERT OR REPLACE INTO series_release (tracker, infohash, name, size,"
-                    " seeders, category, kind, position, tkey, title, year, pack, seasons,"
-                    " season, episode, download_url) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                    inserts,
-                )
-                self.db.executemany(
-                    "UPDATE series_release SET size=?, seeders=? WHERE tracker=? AND infohash=?",
-                    updates,
-                )
-            changed = changed or bool(gone or inserts or updates)
-            if gone or inserts:
-                self._series_changed()
+                    batch = new[start : start + SYNC_BATCH]
+                    inserts = []
+                    for (infohash, row, order), parsed in zip(
+                        batch, parse([row.title for _, row, _ in batch]), strict=True
+                    ):
+                        tkey = series_key(parsed.title, parsed.year) if parsed.title else ""
+                        inserts.append(
+                            (
+                                site, infohash, row.title, row.size, row.seeders, row.category,
+                                kinds.get(row.category or 0, "series"), order, tkey, parsed.title,
+                                parsed.year, parsed.pack, json.dumps(list(parsed.seasons)),
+                                parsed.season, parsed.episode, row.download_url,
+                            )
+                        )  # fmt: skip
+                    self._series_save(site, [], inserts, [])
+                    stop.wait(SYNC_PAUSE)
+        if changed:
+            self._series_changed()
         return changed
+
+    def _series_save(self, site: str, gone, inserts, updates) -> None:
+        with self.lock, self.db:
+            self.db.executemany("DELETE FROM series_release WHERE tracker=? AND infohash=?", gone)
+            self.db.executemany(
+                "INSERT OR REPLACE INTO series_release (tracker, infohash, name, size,"
+                " seeders, category, kind, position, tkey, title, year, pack, seasons,"
+                " season, episode, download_url) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                inserts,
+            )
+            self.db.executemany(
+                "UPDATE series_release SET size=?, seeders=? WHERE tracker=? AND infohash=?",
+                updates,
+            )
+        if (gone or inserts) and time.monotonic() - self._series_bumped >= REVISION_EVERY:
+            # Pages poll the revision and rebuild the index on a change: once in a while is
+            # enough while the first sync fills it; the sync bumps it again when done.
+            self._series_changed()
 
     # -- Identification ---------------------------------------------------------------------
 
@@ -382,6 +429,12 @@ class TrackerSeries(TrackerRows, AgeRatings):
             saved = self.db.execute("SELECT body FROM media_options WHERE key=?", (key,)).fetchone()
         if saved and time.time() - json.loads(saved[0]) < RUN_INTERVAL:
             return "waiting"
+        with self.lock:
+            filled = self.db.execute("SELECT 1 FROM series_release LIMIT 1").fetchone()
+        if not filled:
+            # The first fill parses every series of the Catalogues for half an hour: it is the
+            # series job's (its own lane), never the Médias refresh's, which holds settings.
+            return "waiting"
         if not self._series_working.acquire(blocking=False):
             return "waiting"
         try:
@@ -469,7 +522,17 @@ class TrackerSeries(TrackerRows, AgeRatings):
 
     def series_index(self) -> list[dict[str, Any]]:
         """One entry per series with its releases grouped by season. A tr4ker release counts
-        only once TMDb identified its series; the rest of a series' kinds never mix."""
+        only once TMDb identified its series; the rest of a series' kinds never mix. Built once
+        per revision: pages ask for it on every request, and it reads every release."""
+        cached = getattr(self, "_series_built", None)
+        if cached and cached[0] == self._series_generation:
+            return cached[1]
+        generation = self._series_generation
+        built = self._series_build()
+        self._series_built = (generation, built)
+        return built
+
+    def _series_build(self) -> list[dict[str, Any]]:
         with self.lock:
             releases = [dict(r) for r in self.db.execute("SELECT * FROM series_release")]
             ids = {r["tkey"]: r["tmdb"] for r in self.db.execute("SELECT * FROM series_title")}

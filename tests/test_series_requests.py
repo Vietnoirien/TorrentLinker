@@ -105,6 +105,7 @@ def test_following_a_series_asks_for_each_new_pack_and_notifies_the_member(serve
     assert app.state.series_follows.tick("default") == 0  # nothing new yet
     with media.lock, media.db:
         add(media.db, 4, "Severance.S03.MULTi.1080p", "season", [3])
+    media._series_changed()  # the index is built once per revision
     assert app.state.series_follows.tick("default") == 1
     assert app.state.series_follows.tick("default") == 0  # once per pack
     [row] = browser.get("/api/requests").json()["requests"]

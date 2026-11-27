@@ -39,6 +39,9 @@ class Jobs:
         self.films_executor = ThreadPoolExecutor(
             max_workers=1, thread_name_prefix="torrentlinker-films"
         )
+        self.series_executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="torrentlinker-series"
+        )
         self.stops: dict[str, JobStop] = {}
         # Pending work never survives restart. Keep only digests in memory, not
         # request bodies that may contain paths, confirmation tokens or credentials.
@@ -65,13 +68,13 @@ class Jobs:
             )
 
     def active(self) -> bool:
-        """Whether work is pending; the film index fills in the background and is resumable,
-        so it never counts."""
+        """Whether work is pending; the film and series indexes fill in the background and are
+        resumable, so they never count."""
         with self.lock:
             return bool(
                 self.db.execute(
                     "SELECT 1 FROM jobs WHERE status IN ('queued','running')"
-                    " AND lane<>'films' LIMIT 1"
+                    " AND lane NOT IN ('films','series') LIMIT 1"
                 ).fetchone()
             )
 
@@ -156,9 +159,11 @@ class Jobs:
                     "DELETE FROM jobs WHERE status NOT IN ('queued','running') AND id "
                     "NOT IN (SELECT id FROM jobs ORDER BY created DESC LIMIT 200)"
                 )
-            executor = {"interactive": self.interactive_executor, "films": self.films_executor}.get(
-                lane, self.executor
-            )
+            executor = {
+                "interactive": self.interactive_executor,
+                "films": self.films_executor,
+                "series": self.series_executor,
+            }.get(lane, self.executor)
             executor.submit(self._run, identifier, stop, work)
             return identifier
 
@@ -295,6 +300,7 @@ class Jobs:
         self.executor.shutdown(wait=True)
         self.interactive_executor.shutdown(wait=True)
         self.films_executor.shutdown(wait=True)
+        self.series_executor.shutdown(wait=True)
         self.db.close()
 
 
