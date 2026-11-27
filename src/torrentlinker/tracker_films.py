@@ -935,7 +935,12 @@ class TrackerFilms(TrackerRows, AgeRatings):
             for facts in found.values()
             if facts["original_title"] and facts["year"]
         }
-        keys = [tkey for tkey in aliases if tkey not in found]
+        # A key the facts already name keeps its own, unless they are empty.
+        keys = [
+            tkey
+            for tkey in aliases
+            if tkey not in found or not (found[tkey]["overview"] or found[tkey]["poster"])
+        ]
         held: set[str] = set()
         with self._bulk() as db:
             for start in range(0, len(keys), 500):
@@ -954,7 +959,7 @@ class TrackerFilms(TrackerRows, AgeRatings):
         """Facts stored before the original-title keys existed take those keys too, once."""
         with self.lock:
             if self.db.execute(
-                "SELECT 1 FROM media_options WHERE key='films-original-keys-2'"
+                "SELECT 1 FROM media_options WHERE key='films-original-keys-3'"
             ).fetchone():
                 return
         with self._bulk() as db:
@@ -973,7 +978,7 @@ class TrackerFilms(TrackerRows, AgeRatings):
         self._films_save(found, replace=False)
         with self.lock, self.db:
             self.db.execute(
-                "INSERT OR REPLACE INTO media_options VALUES ('films-original-keys-2', '1')"
+                "INSERT OR REPLACE INTO media_options VALUES ('films-original-keys-3', '1')"
             )
 
     def _films_unasked(self, client_id) -> tuple[str, str, str] | None:

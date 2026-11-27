@@ -506,20 +506,16 @@ def test_a_file_from_another_tracker_takes_the_facts_c411_filed_under_its_french
             " 0, '', NULL, 0)",
             (film_key("The Hobbit The Battle of the Five Armies", "2014"),),
         )
-    # c411's French facts name the original title: they fill that empty row.
-    films._films_save(
-        {
-            film_key("Le Hobbit : La Bataille des Cinq Armées", "2014"): {
-                "title": "Le Hobbit : La Bataille des Cinq Armées",
-                "original_title": "The Hobbit: The Battle of the Five Armies",
-                "year": "2014",
-                "overview": "Smaug attaque.",
-                "genres": ["Aventure"],
-                "runtime": 144,
-                "poster": POSTER.format("hobbit"),
-            }
-        }
-    )
+        # c411's French facts, stored too, name the original title.
+        films.db.execute(
+            "INSERT INTO film_c411 (tkey, title, original_title, year, overview, genres,"
+            " runtime, poster, artwork, fetched) VALUES (?, 'Le Hobbit : La Bataille des Cinq"
+            " Armées', 'The Hobbit: The Battle of the Five Armies', '2014', 'Smaug attaque.',"
+            " '[\"Aventure\"]', 144, ?, NULL, 0)",
+            (film_key("Le Hobbit : La Bataille des Cinq Armées", "2014"), POSTER.format("hobbit")),
+        )
+    # The catch-up fills the empty row from them.
+    films._films_stored()
     films.library_facts("default")
     _, body = library_body(films)
     assert body["description"] == "Smaug attaque."
