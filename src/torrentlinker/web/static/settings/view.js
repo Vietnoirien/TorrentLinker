@@ -879,22 +879,21 @@ function linkFolderCard(type, required, root) {
   ];
   const card = element("div", undefined, "link-folder-card");
   const head = element("div", undefined, "link-folder-head");
+  const text = uses.map(([title, detail]) => `${title} : ${detail}`).join("\n\n") + "\n\n" + say("Keep the Link Folder outside the library for as long as its torrents seed: links are permanent.", "Gardez le Dossier de liens hors de la bibliothèque tant que ses torrents partagent : les liens sont permanents.");
+  const info = document.createElement("span");
+  info.innerHTML = TLInfo.html(text, say("What the Link Folder is used for", "À quoi sert le Dossier de liens"));
   head.append(
-    element("b", say(`What the Link Folder is used for with ${name}`, `À quoi sert le Dossier de liens avec ${name}`)),
-    element("span", required ? say("Required by this client", "Requis par ce client") : say("Optional for this client", "Facultatif pour ce client"), required ? "link-folder-badge required" : "link-folder-badge"),
+    element("b", say(`Link Folder · ${name}`, `Dossier de liens · ${name}`)), info.firstChild,
+    element("span", required ? say("Required", "Requis") : say("Optional", "Facultatif"), required ? "link-folder-badge required" : "link-folder-badge"),
   );
-  const list = element("ul");
-  for (const [title, detail] of uses) {
-    const item = element("li");
-    item.append(element("b", title), document.createElement("br"), element("span", detail, "muted"));
-    list.append(item);
+  card.append(head);
+  if (required && !String(root || "").trim()) {
+    const todo = element("p", undefined, "link-folder-warn");
+    const why = document.createElement("span");
+    why.innerHTML = TLInfo.html(say(`Enter the folder above, outside the library, so that Reseed and Organisation can work with ${name}.`, `Indiquez le dossier ci-dessus, hors de la bibliothèque, pour que Remise en seed et Organisation puissent fonctionner avec ${name}.`), say("Why", "Pourquoi"));
+    todo.append(element("b", say("To set up", "À configurer")), " ", why.firstChild);
+    card.append(todo);
   }
-  card.append(head, list);
-  card.append(
-    required && !String(root || "").trim()
-      ? element("p", say(`Not configured yet: enter the folder above, outside the library, so that Reseed and Organisation can work with ${name}.`, `Pas encore configuré : indiquez le dossier ci-dessus, hors de la bibliothèque, pour que Remise en seed et Organisation puissent fonctionner avec ${name}.`), "link-folder-warn")
-      : element("p", say("Keep the Link Folder outside the library for as long as its torrents seed: links are permanent.", "Gardez le Dossier de liens hors de la bibliothèque tant que ses torrents partagent : les liens sont permanents."), "muted"),
-  );
   return card;
 }
 function servicesTab(form) {
