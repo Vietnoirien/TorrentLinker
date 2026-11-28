@@ -26,7 +26,7 @@ from typing import Any
 from torrentlinker.disk_report import place, usage
 from torrentlinker.domain import ContentKind, LibraryFolder
 from torrentlinker.file_storage import TRASH_NAME, FileStorage, StorageError
-from torrentlinker.library_items import Item, SeedIndex, discover, fixed_kind, one
+from torrentlinker.library_items import Item, SeedIndex, discover, fixed_kind, one, part_number
 from torrentlinker.media import VIDEO
 from torrentlinker.organisation import (
     DEFAULTS,
@@ -670,7 +670,11 @@ class Board:
         biggest = max(sizes.values())
         main = [p for p in videos if sizes[p] >= biggest * 0.1 and "sample" not in p.stem.lower()]
         if item.kind == "film":
-            main = sorted(main, key=lambda p: -sizes[p])
+            parts = {p: part_number(p.name) for p in main}
+            if len(main) > 1 and None not in parts.values():
+                main = sorted(main, key=lambda p: (parts[p], p.name))  # CD1, CD2… in order
+            else:
+                main = sorted(main, key=lambda p: -sizes[p])
         targets: dict[Path, Path] = {}
         for index, video in enumerate(main):
             relative = (

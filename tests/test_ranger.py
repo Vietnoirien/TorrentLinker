@@ -442,3 +442,25 @@ def test_the_board_s_counts_follow_a_batch_as_it_runs(world: World):
     )
     assert len(world.board.items(str(world.old))) == before - 1
     assert len(world.board.items(str(world.films))) == 1
+
+
+def test_a_film_cut_in_parts_is_one_film_with_its_parts_in_order(tmp_path: Path):
+    """ "CD1.avi … CD8.avi" in a film's folder are its parts: one item named after the folder,
+    the parts kept in order as "- part1", "- part2"…, never eight films called "CD1"."""
+    world = World(tmp_path)
+    folder = world.old / "Comédie" / "Ze inconnus story - Le bocôup meilleur FR Divx"
+    folder.mkdir(parents=True)
+    for n, name in enumerate(("CD1.avi", "Cd2.avi", "cd3.avi"), start=1):
+        (folder / name).write_bytes(b"p" * (100 - n))  # sizes would put them out of order
+    found = [i for i in discover(world.old) if "inconnus" in i.name]
+    assert len(found) == 1 and found[0].path == str(folder)
+    world.organise()
+    item = next(i for i in world.board.items(str(world.old)) if "inconnus" in i.name)
+    world.queue.enqueue(
+        "Ranger", "owner", [{"top": item.path, "prov": str(world.old), "kind": "film"}]
+    )
+    [moved] = [p for p in world.films.iterdir() if "inconnus" in p.name.lower()]
+    assert sorted(p.name.rsplit(" - ", 1)[1] for p in moved.iterdir()) == [
+        "part1.avi", "part2.avi", "part3.avi",
+    ]  # fmt: skip
+    assert not readable("CD1.avi", {"title": "CD1"})

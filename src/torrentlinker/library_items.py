@@ -82,11 +82,25 @@ def _main(videos: list[tuple[str, int]]) -> list[tuple[str, int]]:
     ]  # fmt: skip
 
 
+# One film cut in parts: "CD1.avi", "Film.Disc2.mkv", "partie 3".
+PART = re.compile(
+    r"(?:^|[ ._-])(?:cd|disc|disque|dvd|part|partie|pt)[ ._-]?(\d{1,2})(?=$|[ ._-])", re.I
+)
+
+
+def part_number(name: str) -> int | None:
+    found = PART.search(Path(name).stem)
+    return int(found.group(1)) if found else None
+
+
 def _is_release(name: str, videos: list[tuple[str, int]]) -> bool:
-    """A folder that is one item (a film and its extras, or a series' episodes) rather than a
-    folder that groups several."""
+    """A folder that is one item (a film and its extras, a film cut in parts, or a series'
+    episodes) rather than a folder that groups several."""
     main = _main(videos)
     if len(main) <= 1:
+        return True
+    # Parts lie side by side in the film's own folder; a folder above them groups films.
+    if all(part_number(p) is not None and Path(p).parent.name == name for p, _ in main):
         return True
     guesses = [guessit(Path(p).name) for p, _ in main]
     if all(g.get("type") == "episode" for g in guesses):
@@ -106,6 +120,8 @@ def readable(name: str, guessed: dict[str, Any]) -> bool:
     title = str(guessed.get("title") or "").strip()
     plain = re.sub(r"[._]+", " ", Path(name).stem if Path(name).suffix.lower() in VIDEO else name)
     if len(re.findall(r"[^\W\d_]", title)) < 2 or GENERIC.match(plain.strip()):
+        return False
+    if PART.fullmatch(" " + plain.strip()):  # "CD1" names a part, never a film
         return False
     technical = any(
         guessed.get(k)
