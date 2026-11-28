@@ -123,6 +123,16 @@ def embedded_title(path: str) -> str:
     return str((general[0].title or general[0].movie_name or "") if general else "")
 
 
+def plain_title(text: str) -> str:
+    """The work a name gives, without its release words: its title, and the number and the
+    subtitle that tell a saga's films apart; empty when it gives none."""
+    if not text:
+        return ""
+    guessed = guessit(text)
+    parts = (guessed.get("title"), guessed.get("episode"), guessed.get("episode_title"))
+    return " ".join(str(p) for p in parts if p).casefold()
+
+
 def episode_number(path: str) -> int | None:
     """An episode's number from its name, else from the title the video carries."""
     for text in (Path(path).stem, embedded_title(path)):
@@ -143,9 +153,14 @@ def _is_release(path: str, videos: list[tuple[str, int]]) -> bool:
     main = _main(videos)
     if len(main) <= 1:
         return True
-    # Parts lie side by side in the film's own folder; a folder above them groups films.
+    # Parts lie side by side in the film's own folder; a folder above them groups films. Parts
+    # whose videos name different films (an old run's "Star Wars - part1…6") are those films.
     if all(part_number(p) is not None and Path(p).parent.name == name for p, _ in main):
-        return True
+        titles = [embedded_title(p) for p, _ in main]
+        if all(EPISODE.search(t) for t in titles):
+            return True  # one series' episodes ("Session #12"): together, as a series
+        said = {plain_title(t) for t in titles} - {""}
+        return len(said) <= 1
     # A folder holding releases of their own ("Futurama S01", "MONTY…-Saison 2-…") groups
     # them; only bare "Saison 2" folders belong to the series around them.
     depths = [Path(p).relative_to(path).parts for p, _ in main]
@@ -224,6 +239,16 @@ def _item(path: str, base: str, videos, bodies, titles, series_folder: bool = Fa
     if guessed_title.isdigit() or (numbered and guessed_title.startswith(files[0].stem[:2])):
         stem = numbered.group(1) if numbered else files[0].stem
         guessed_title = str(guessit(stem).get("title") or stem)
+    if part_number(files[0].name) is not None and len(files) == 1:
+        # One part of a split saga ("Star Wars - part1"): its video names the film.
+        said = embedded_title(str(files[0]))
+        if said and not EPISODE.search(said):
+            named_by = guessit(said)
+            words = [named_by.get("title"), named_by.get("episode"), named_by.get("episode_title")]
+            guessed_title = " ".join(str(w) for w in words if w) or guessed_title
+    if not guessed_title and kind == "film":
+        # "Episode 50 (2011)": guessit takes the title for an episode number.
+        guessed_title = re.sub(r"\s*[\[(]\d{4}[\])].*$", "", files[0].stem).strip()
     title = fixed or str(known or "") or str(named or guessed_title)
     if kind == "series" and not (fixed or known):
         # "tenjo tenge e01m", "Cowboy Bebop Session": the series' name stops at the episode.

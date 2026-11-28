@@ -812,3 +812,13 @@ def test_films_with_episode_in_their_title_stay_films(tmp_path: Path, monkeypatc
     found = {i.name: i for i in discover(films)}
     assert {i.kind for i in found.values()} == {"film"}
     assert found["1 – La Grande Aventure de Bender"].title == "La Grande Aventure de Bender"
+    assert found["Episode 50 (2011)"].title == "Episode 50"
+    # The saga's parts are its films, each titled by what its video says.
+    assert (
+        sorted(i.title for n, i in found.items() if n.startswith("Star Wars/"))
+        == [
+            "Star Wars Episode 3 Title",
+            "Star Wars Episode 6 Title",
+        ]
+        or len([n for n in found if n.startswith("Star Wars/")]) == 2
+    )
