@@ -125,3 +125,16 @@ def test_a_slow_request_is_logged_by_route_and_never_by_url(tmp_path, caplog, mo
     logged = [record.getMessage() for record in caplog.records]
     assert any("/static/app.js answered in" in line for line in logged), logged
     assert not any("secret-should-never-be-logged" in line for line in logged)
+
+
+def test_pages_name_their_scripts_and_styles_with_the_start_s_token(tmp_path):
+    """A kept script is never an old one: the pages, never kept, name each with this start's
+    token, frames included, so a new build loads at once."""
+    from torrentlinker.web.app import ASSETS_TOKEN
+
+    with TestClient(create_app(tmp_path, password="test-password-long")) as browser:
+        page = browser.get("/static/files/view.html")
+        assert page.headers["cache-control"] == "no-cache"
+        assert f'src="view.js?v={ASSETS_TOKEN}"' in page.text
+        assert f'href="../panel/base.css?v={ASSETS_TOKEN}"' in page.text
+        assert f"app.js?v={ASSETS_TOKEN}" in browser.get("/").text

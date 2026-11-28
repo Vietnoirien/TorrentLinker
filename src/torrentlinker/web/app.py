@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import threading
 import time
 from collections import Counter
@@ -78,6 +79,27 @@ from torrentlinker.web.zen_preferences import ZenPreferences
 # markup is never cached, so a new build is picked up on the next load; this only bounds how
 # long that build's assets may lag behind it.
 STATIC_MAX_AGE = 600
+# Scripts and styles are kept for STATIC_MAX_AGE; the pages that load them are not, and name
+# them with this start's token, so a new build is loaded at once, frames included.
+ASSETS_TOKEN = format(time.time_ns(), "x")
+ASSET_LINK = re.compile(r'(\b(?:src|href)=")(?![a-z]+:|/|#|\{\{)([^"?]+\.(?:js|css))(")')
+
+
+def versioned(html: str) -> str:
+    return ASSET_LINK.sub(rf"\1\2?v={ASSETS_TOKEN}\3", html)
+
+
+class VersionedStatic(StaticFiles):
+    """The bundled files; a page names its scripts and styles with the start's token."""
+
+    async def get_response(self, path: str, scope):  # type: ignore[no-untyped-def]
+        response = await super().get_response(path, scope)
+        if not path.endswith((".html", ".htm")) or response.status_code != 200:
+            return response
+        full, _ = self.lookup_path(path)
+        return HTMLResponse(versioned(Path(full).read_text(encoding="utf-8")))
+
+
 # A request that takes at least this long is logged by route and duration. Long enough
 # that ordinary work stays quiet, short enough to catch a page that feels slow.
 SLOW_REQUEST = 2.0  # seconds
@@ -1965,7 +1987,7 @@ def create_app(
     community_site_routes(app, service)
 
     assets = Path(__file__).parent / "static"
-    app.mount("/static", StaticFiles(directory=assets), name="static")
+    app.mount("/static", VersionedStatic(directory=assets), name="static")
 
     @app.get("/notifications-worker.js")
     @needs(Audience.PUBLIC)
@@ -1993,9 +2015,9 @@ def create_app(
     def shell() -> HTMLResponse:
         html = (assets / "index.html").read_text(encoding="utf-8")
         return HTMLResponse(
-            html.replace("{{ app_version }}", app_version).replace(
-                "{{ members_enabled }}", str(members_enabled).lower()
-            )
+            versioned(html)
+            .replace("{{ app_version }}", app_version)
+            .replace("{{ members_enabled }}", str(members_enabled).lower())
         )
 
     return app
