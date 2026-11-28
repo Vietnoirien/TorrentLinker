@@ -90,7 +90,8 @@ def test_a_season_pack_is_reattached_file_by_file(tmp_path: Path):
     )
     assert repair.unmatched == ["Black.Mirror.S03/info.nfo"]  # fetched again, nothing more
     client = Client(torrent)
-    assert apply(client, repair, wait=lambda s: None) == "partial"  # the nfo is missing
+    # The nfo (7 bytes of 410) is missing: 98 %, too much to trust, left paused.
+    assert apply(client, repair, wait=lambda s: None) == "paused"
 
 
 def test_nothing_is_guessed_when_the_copy_is_not_found_or_found_twice(tmp_path: Path):

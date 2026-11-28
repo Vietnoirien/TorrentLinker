@@ -131,4 +131,8 @@ def apply(
     if torrent.progress >= 0.9999:
         client.start(repair.hash)
         return "seeding"
-    return "partial"
+    if torrent.progress >= 0.99:
+        # The videos are whole; an nfo or a subtitle the library lacks is fetched again.
+        client.start(repair.hash)
+        return "partial"
+    return "paused"  # too much missing to trust the match: left paused for the Owner
