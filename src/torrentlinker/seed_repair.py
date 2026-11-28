@@ -29,16 +29,23 @@ class Repair:
     hash: str
     name: str
     save_path: Path  # where the torrent will point: the library root that holds its data
+    left: list[Path] = field(default_factory=list)  # what it fetched again at the old place
     renames: list[tuple[str, str]] = field(default_factory=list)  # old → new, relative
     unmatched: list[str] = field(default_factory=list)  # small files the library lacks
 
 
 def missing(torrent: Torrent) -> bool:
-    """A finished torrent whose largest file is not where it points any more."""
-    if not torrent.files or torrent.progress < 1.0:
+    """A torrent whose largest file is not whole where it points: gone, or being fetched
+    again by the client that found it gone (it re-downloads what the library holds)."""
+    if not torrent.files:
         return False
     main = max(torrent.files, key=lambda name: torrent.files[name])
-    return not os.path.exists(Path(torrent.save_path) / main)
+    path = Path(torrent.save_path) / main
+    try:
+        whole = path.stat().st_size == torrent.files[main] and torrent.progress >= 1.0
+    except OSError:
+        return True
+    return not whole
 
 
 def library_index(roots: Iterable[Path]) -> dict[int, list[Path]]:
@@ -68,7 +75,8 @@ def plan(torrent: Torrent, index: dict[int, list[Path]], roots: list[Path]) -> R
     if root is None:
         return None
     home = found[0].parent
-    repair = Repair(torrent.hash, torrent.name, root)
+    tops = {Path(torrent.save_path) / PurePosixPath(n).parts[0] for n in torrent.files}
+    repair = Repair(torrent.hash, torrent.name, root, [p for p in sorted(tops) if p.exists()])
     used = {found[0]}
     for name, size in sorted(torrent.files.items()):
         if name == main:

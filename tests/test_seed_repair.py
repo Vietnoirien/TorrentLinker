@@ -103,3 +103,20 @@ def test_nothing_is_guessed_when_the_copy_is_not_found_or_found_twice(tmp_path: 
     assert plan(torrent, library_index([films, series]), [films, series]) is None
     present = Torrent("d" * 40, "x.mkv", films / "Gourou (2026)", files={"Gourou (2026).mkv": 300})
     assert not missing(present)  # a torrent whose data is there is left alone
+
+
+def test_a_torrent_fetching_again_what_the_library_holds_is_reattached(tmp_path: Path):
+    """The client found the files gone and started over: its partial copy is left aside and
+    the torrent points at the library's whole one."""
+    films, series = library(tmp_path)
+    old = tmp_path / "windocs" / "Film"
+    old.mkdir(parents=True)
+    (old / "Gourou.2026.mkv").write_bytes(b"g" * 120)  # 40 % fetched again
+    torrent = Torrent(
+        "e" * 40, "Gourou.2026.mkv", old, files={"Gourou.2026.mkv": 300}, progress=0.4,
+        state="error",
+    )  # fmt: skip
+    assert missing(torrent)
+    repair = plan(torrent, library_index([films, series]), [films, series])
+    assert repair is not None and repair.left == [old / "Gourou.2026.mkv"]
+    assert apply(Client(torrent), repair, wait=lambda s: None) == "seeding"
