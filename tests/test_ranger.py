@@ -599,3 +599,27 @@ def test_a_series_joins_its_folder_whatever_its_case(world: World):
     )
     assert sorted(p.name for p in world.series.iterdir()) == ["Black mirror"]
     assert (world.series / "Black mirror" / "Saison 01").is_dir()
+
+
+def test_a_series_joins_its_folder_under_another_of_its_titles(world: World):
+    """The series indexes know "L'Attaque des Titans" is "Shingeki no Kyojin": a season named
+    in French joins the folder the library has under the original title."""
+    with world.media.lock:
+        world.media.db.execute(
+            "CREATE TABLE series_c411 (tkey TEXT, title TEXT, original_title TEXT, year TEXT)"
+        )
+        world.media.db.execute(
+            "INSERT INTO series_c411 VALUES (?, ?, ?, ?)",
+            ("", "L'Attaque des Titans", "Shingeki no Kyojin", "2013"),
+        )
+    world.organise()
+    (world.series / "Shingeki no Kyojin" / "Saison 02").mkdir(parents=True)
+    season = world.old / "L.Attaque.des.Titans.S03.1080p"
+    season.mkdir()
+    (season / "L.Attaque.des.Titans.S03E50.1080p.mkv").write_bytes(b"t" * 40)
+    world.board.scan([str(world.old)])
+    item = next(i for i in world.board.items(str(world.old)) if "Titans" in i.name)
+    row = {"top": item.path, "prov": str(world.old), "kind": "series"}
+    world.queue.enqueue("Ranger", "owner", [row])
+    assert sorted(p.name for p in world.series.iterdir()) == ["Shingeki no Kyojin"]
+    assert len(list((world.series / "Shingeki no Kyojin" / "Saison 03").iterdir())) == 1

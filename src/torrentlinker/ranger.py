@@ -457,7 +457,7 @@ class Board:
         rows: list[dict[str, Any]] = []
         with self.media.lock:
             for table, kind in (("film_meta", "film"), ("film_c411", "film"),
-                                ("series_c411", "series")):  # fmt: skip
+                                ("series_meta", "series"), ("series_c411", "series")):  # fmt: skip
                 try:
                     found = self.media.db.execute(
                         f"SELECT title, original_title, year FROM {table} WHERE title <> ''"
@@ -472,6 +472,18 @@ class Board:
         rows.sort(key=lambda r: r["year"], reverse=True)
         self._titles = (time.monotonic(), rows)
         return rows
+
+    def series_names(self, name: str) -> set[str]:
+        """Every name a series goes by, compared plainly: its own, and the French and original
+        titles the series indexes (TMDb, c411) give it."""
+        from torrentlinker.media_tracker import plain
+
+        wanted = plain(re.sub(r"\s*\(\d{4}\)$", "", name))
+        names = {plain(name), wanted}
+        for row in self._known_titles():
+            if row["kind"] == "series" and wanted in row["keys"]:
+                names.update(row["keys"])
+        return names - {""}
 
     def proposals(self, item: Item, limit: int = 4) -> list[dict[str, str]]:
         """What an unrecognised item might be, guessed from its file name."""
@@ -726,10 +738,10 @@ class Board:
             # "Shingeki No Kyojin" goes into "Shingeki no Kyojin".
             from torrentlinker.media_tracker import plain
 
-            twin = next(
-                (d for d in lib.iterdir() if d.is_dir() and plain(d.name) == plain(new_top.name)),
-                None,
-            )
+            # Or under another of its names: the indexes know a series' French and original
+            # titles, so "L'Attaque des Titans" joins "Shingeki no Kyojin".
+            names = self.series_names(new_top.name)
+            twin = next((d for d in lib.iterdir() if d.is_dir() and plain(d.name) in names), None)
             if twin is not None:
                 renamed = base / twin.name
                 targets = {
