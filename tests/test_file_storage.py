@@ -176,3 +176,43 @@ def test_routes_are_the_owners_and_emptying_needs_confirmation(
         assert browser.post(f"/api/files/journal/{entry['id']}/undo").status_code == 409
         assert browser.post("/api/files/trash", json={"path": "/etc"}).status_code == 409
         assert browser.get("/api/files/journal").json()["operations"][0]["kind"] == "restore"
+
+
+def test_a_full_disk_trashes_in_place_and_emptying_deletes_it_there(
+    tmp_path: Path, library: Path, monkeypatch
+) -> None:
+    """A disk too full for a trash folder still takes an item in its trash: it stays where it
+    lies, the trash lists it, emptying deletes it there, restoring only takes it off the list,
+    and something else found there since is never deleted."""
+    import errno
+
+    storage = make(tmp_path, library)
+    film = library / "Film (2020)"
+    film.mkdir()
+    (film / "Film (2020).mkv").write_bytes(b"x" * 10)
+    other = library / "Other.mkv"
+    other.write_bytes(b"y" * 5)
+    real_mkdir = Path.mkdir
+
+    def full(self, *args, **kwargs):
+        if ".corbeille" in str(self):
+            raise OSError(errno.ENOSPC, "No space left on device")
+        return real_mkdir(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", full)
+    first = storage.trash(film, "owner")
+    second = storage.trash(other, "owner")
+    assert first["in_place"] and film.exists()
+    assert storage.trashed_in_place() == [film, other] or set(storage.trashed_in_place()) == {
+        film,
+        other,
+    }
+    assert storage.restore(second["id"], "owner") == str(other) and other.exists()
+    assert storage.trashed_in_place() == [film]
+    (film / "extra.txt").write_bytes(b"new")  # changed since: kept
+    with pytest.raises(StorageError, match="changed"):
+        storage.empty("owner")
+    assert film.exists()
+    (film / "extra.txt").unlink()
+    assert storage.empty("owner") == 1
+    assert not film.exists() and storage.trashed_in_place() == []

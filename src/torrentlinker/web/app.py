@@ -650,7 +650,12 @@ def create_app(
     organisation_routes(app, file_storage, board, ranger)
     ranger.resume()
     replacements.on_complete = replaced
-    agent_service.media.hidden_paths = replacements.hidden_paths
+    # Médias lists neither the old releases a replacement leaves seeding nor what the trash
+    # holds where it lay on a full disk.
+    agent_service.media.hidden_paths = lambda client_id: [
+        *replacements.hidden_paths(client_id),
+        *file_storage.trashed_in_place(),
+    ]
     agent_service.torrents_workspace.ending = replacements.ending
     app.mount("/mcp", mcp_app)
     owner_routes(app, agent_access, service, agent_service)

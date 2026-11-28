@@ -8,6 +8,7 @@ Only emptying the trash deletes data for good.
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import re
@@ -330,8 +331,16 @@ class FileStorage:
             os.rename(path, stored)
         except OSError as error:
             shutil.rmtree(stored.parent, ignore_errors=True)
-            self.finish(operation, "failed", error.strerror or str(error))
-            raise StorageError(f"Could not trash {path.name}: {error.strerror or error}") from error
+            if error.errno != errno.ENOSPC:
+                self.finish(operation, "failed", error.strerror or str(error))
+                raise StorageError(
+                    f"Could not trash {path.name}: {error.strerror or error}"
+                ) from error
+            # A full disk cannot even take a trash folder: the item is put in the trash where
+            # it lies. The trash lists it, emptying it or the purge deletes it, and restoring
+            # only takes it off the list.
+            stored = path
+            reason = reason or "Disque plein : mis à la corbeille sur place"
         with self._lock, self._db:
             self._db.execute(
                 "INSERT INTO trash VALUES (?,?,?,?,?,?,?,?,?,?)",
@@ -369,6 +378,7 @@ class FileStorage:
             "size": row["size"],
             "dir": bool(row["is_dir"]),
             "reason": row["reason"],
+            "in_place": row["stored"] == row["original"],
             "days_left": int(-(-left // DAY)),
         }
 
@@ -397,6 +407,10 @@ class FileStorage:
         row = self._row(identifier)
         original, stored = Path(row["original"]), Path(row["stored"])
         self.under_roots(original)
+        if original == stored:  # put in the trash where it lay: it only leaves the list
+            with self._lock, self._db:
+                self._db.execute("DELETE FROM trash WHERE id=?", (identifier,))
+            return str(original)
         if os.path.lexists(original):
             raise StorageError(f"{original} exists already; rename or move it first.")
         if not os.path.lexists(stored):
@@ -417,12 +431,36 @@ class FileStorage:
         return str(original)
 
     def _erase(self, row: sqlite3.Row) -> None:
+        if row["stored"] == row["original"]:
+            return self._erase_in_place(row)
         folder = Path(row["stored"]).parent
         if folder.parent.name != TRASH_NAME:
             raise StorageError("Refusing to delete outside a trash folder.")
         shutil.rmtree(folder, ignore_errors=False)
         with self._lock, self._db:
             self._db.execute("DELETE FROM trash WHERE id=?", (row["id"],))
+
+    def _erase_in_place(self, row: sqlite3.Row) -> None:
+        """Delete an item trashed where it lay, only if it is still what was trashed: the same
+        kind and the same size. Anything else there now is left alone."""
+        path = Path(row["original"])
+        self.under_roots(path)
+        if os.path.lexists(path):
+            if path.is_symlink() or path.is_dir() != bool(row["is_dir"]):
+                raise StorageError(f"{path} changed since it was trashed: it is kept.")
+            if self._size(path) != row["size"]:
+                raise StorageError(f"{path} changed since it was trashed: it is kept.")
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+        with self._lock, self._db:
+            self._db.execute("DELETE FROM trash WHERE id=?", (row["id"],))
+
+    def trashed_in_place(self) -> list[Path]:
+        """What the trash holds where it lay: listings and scans leave it out."""
+        rows = self._db.execute("SELECT original FROM trash WHERE stored = original").fetchall()
+        return [Path(r["original"]) for r in rows]
 
     def empty(self, actor: str, disk: str | None = None) -> int:
         """Delete trashed data for good: the Owner's explicit action."""

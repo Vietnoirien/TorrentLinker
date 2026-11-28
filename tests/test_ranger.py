@@ -558,3 +558,44 @@ def test_a_verified_copy_keeps_its_original_when_the_disk_cannot_take_a_trash(
     )
     assert (world.films / "Alien (1979)" / "Alien (1979).mkv").exists()
     assert Path(alien.path).exists()  # kept, not deleted, not failed
+
+
+def test_a_folder_of_releases_groups_them_and_a_season_folder_is_one_series(tmp_path: Path):
+    """ "Futurama saisons 1 à 6" holds a release per season: it groups them. "Futurama S03",
+    whose episodes are named after themselves, is one season of Futurama, not a series per
+    episode title. A folder of mixed releases ("film sonia") is never moved as one series."""
+    root = tmp_path / "Séries"
+    show = root / "Futurama saisons 1 à 6 + films"
+    s03 = show / "Futurama S03"
+    s03.mkdir(parents=True)
+    for n, title in ((1, "La Voiture Garoute"), (2, "La Guerre C'est L'enfer")):
+        (s03 / f"Saison 03 - Episode {n:02d} - {title}.mkv").write_bytes(b"f" * 50)
+    s01 = show / "Futurama S01"
+    s01.mkdir()
+    (s01 / "Futurama.S01E01.mkv").write_bytes(b"f" * 50)
+    mixed = tmp_path / "film sonia"
+    for season in (2, 3):
+        folder = mixed / f"MONTY PYTHONS-FLYING CIRCUS-Saison {season}-VOSTFR-DVDRIP"
+        folder.mkdir(parents=True)
+        (folder / f"Monty Python S0{season}E01.mp4").write_bytes(b"m" * 50)
+    (mixed / "notes.pdf").write_bytes(b"p")
+    found = {i.name: i for i in discover(root, series_folder=True)}
+    season = found["Futurama saisons 1 à 6 + films/Futurama S03"]
+    assert season.kind == "series" and season.title == "Futurama"
+    assert "Futurama saisons 1 à 6 + films" not in found
+    names = {i.name for i in discover(tmp_path)}
+    assert "film sonia" not in names
+    assert {n for n in names if "MONTY" in n} == {
+        f"film sonia/MONTY PYTHONS-FLYING CIRCUS-Saison {n}-VOSTFR-DVDRIP" for n in (2, 3)
+    }
+
+
+def test_a_series_joins_its_folder_whatever_its_case(world: World):
+    world.organise()
+    (world.series / "Black mirror" / "Saison 05").mkdir(parents=True)
+    pack = next(i for i in world.board.items(str(world.old)) if "Black.Mirror" in i.name)
+    world.queue.enqueue(
+        "Ranger", "owner", [{"top": pack.path, "prov": str(world.old), "kind": "series"}]
+    )
+    assert sorted(p.name for p in world.series.iterdir()) == ["Black mirror"]
+    assert (world.series / "Black mirror" / "Saison 01").is_dir()

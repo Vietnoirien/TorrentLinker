@@ -93,21 +93,6 @@ def part_number(name: str) -> int | None:
     return int(found.group(1)) if found else None
 
 
-def _is_release(name: str, videos: list[tuple[str, int]]) -> bool:
-    """A folder that is one item (a film and its extras, a film cut in parts, or a series'
-    episodes) rather than a folder that groups several."""
-    main = _main(videos)
-    if len(main) <= 1:
-        return True
-    # Parts lie side by side in the film's own folder; a folder above them groups films.
-    if all(part_number(p) is not None and Path(p).parent.name == name for p, _ in main):
-        return True
-    guesses = [guessit(Path(p).name) for p, _ in main]
-    if all(g.get("type") == "episode" for g in guesses):
-        return len({str(g.get("title", "")).casefold() for g in guesses}) == 1
-    return False
-
-
 # What only a series' release spells out: S01E02, S01, 1x02, "Saison 2", "Season 2", an
 # Intégrale. guessit alone reads "1080" as S10E80, "[40-45]" or "20 Years" as episodes.
 SERIES_MARK = re.compile(
@@ -115,6 +100,34 @@ SERIES_MARK = re.compile(
     r"[ ._-]?\d{1,2}|int[ée]grale|complete[ ._-]series)(?=$|[ ._\])-])",
     re.I,
 )
+# A season folder named only by its number, inside a series' folder.
+SEASON_ONLY = re.compile(r"^(?:saison|season|s)[ ._-]?\d{1,2}$", re.I)
+
+
+def _is_release(path: str, videos: list[tuple[str, int]]) -> bool:
+    """A folder that is one item (a film and its extras, a film cut in parts, a series or one
+    of its seasons) rather than a folder that groups several."""
+    name = Path(path).name
+    main = _main(videos)
+    if len(main) <= 1:
+        return True
+    # Parts lie side by side in the film's own folder; a folder above them groups films.
+    if all(part_number(p) is not None and Path(p).parent.name == name for p, _ in main):
+        return True
+    # A folder holding releases of their own ("Futurama S01", "MONTY…-Saison 2-…") groups
+    # them; only bare "Saison 2" folders belong to the series around them.
+    depths = [Path(p).relative_to(path).parts for p, _ in main]
+    inner = {parts[0] for parts in depths if len(parts) > 1}
+    if any(SERIES_MARK.search(f" {sub}") and not SEASON_ONLY.match(sub) for sub in inner):
+        return False
+    guesses = [guessit(Path(p).name) for p, _ in main]
+    if all(g.get("type") == "episode" for g in guesses):
+        # Episodes named after themselves ("Saison 03 - Episode 01 - La Voiture Garoute") in a
+        # folder that names the season are that season, whatever their titles.
+        if SERIES_MARK.search(f" {name}") and not inner:
+            return True
+        return len({str(g.get("title", "")).casefold() for g in guesses}) == 1
+    return False
 
 
 def kind_of(path: str, videos: list[tuple[str, int]], series_folder: bool = False) -> str:
@@ -162,7 +175,11 @@ def _item(path: str, base: str, videos, bodies, titles, series_folder: bool = Fa
     body = next((bodies[str(f)] for f in files if str(f) in bodies), None)
     fixed = titles.get(path, "")
     known = body and (body.get("series") if kind == "series" else body.get("title"))
-    title = fixed or str(known or "") or str(guessed.get("title") or "")
+    # A series' folder names it: its episodes may each carry their own title.
+    named = (
+        guessit(Path(path).name).get("title") if kind == "series" and Path(path).is_dir() else ""
+    )
+    title = fixed or str(known or "") or str(named or guessed.get("title") or "")
     folder_guess = guessit(Path(path).name) if Path(path).is_dir() else guessed
     ok = (
         bool(fixed or known)
@@ -217,7 +234,7 @@ def discover(
             videos = _videos(entry.path)
             if not videos:
                 continue
-            if _is_release(entry.name, videos):
+            if _is_release(entry.path, videos):
                 items.append(_item(entry.path, base, videos, bodies, titles, series_folder))
             else:
                 items.extend(

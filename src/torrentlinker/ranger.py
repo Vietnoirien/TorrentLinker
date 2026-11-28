@@ -279,6 +279,12 @@ class Board:
             for f in self.library_folders()
         )  # fmt: skip
         items = discover(Path(path), bodies, board["titles"], series_folder=series)
+        # What the trash holds where it lay (a full disk) is no longer to be ranged.
+        trashed = self.storage.trashed_in_place()
+        items = [
+            i for i in items
+            if not any(Path(i.path) == t or Path(i.path).is_relative_to(t) for t in trashed)
+        ]  # fmt: skip
         index = SeedIndex(self.seeds())
         for item in items:
             item.torrents = index.under(item.path)
@@ -715,6 +721,22 @@ class Board:
                 if neighbour.suffix.lower() in SIDECARS and neighbour.name.startswith(video.stem):
                     tail = neighbour.name[len(video.stem) :]
                     targets[neighbour] = targets[video].with_name(targets[video].stem + tail)
+        if item.kind == "series" and not os.path.lexists(lib / new_top.name):
+            # The series already in the library under another case or accent joins it:
+            # "Shingeki No Kyojin" goes into "Shingeki no Kyojin".
+            from torrentlinker.media_tracker import plain
+
+            twin = next(
+                (d for d in lib.iterdir() if d.is_dir() and plain(d.name) == plain(new_top.name)),
+                None,
+            )
+            if twin is not None:
+                renamed = base / twin.name
+                targets = {
+                    a: renamed / b.relative_to(new_top) if b.is_relative_to(new_top) else b
+                    for a, b in targets.items()
+                }
+                new_top = renamed
         renames = [{"from": str(a), "to": str(b)} for a, b in targets.items() if a != b]
         if top.is_dir() and not layered and any(p not in targets for p in files):
             if item.torrents:
