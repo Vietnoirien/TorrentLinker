@@ -32,7 +32,7 @@ const ochips = (p) => {
 };
 
 // Titles to give in one tap: guessed from the name, then from what is typed.
-const picks = (found, path) => found.map((t) => `<button type="button" class="small og-pick" data-o="pick" data-i="${esc(path)}" data-t="${esc(t.year ? `${t.title} (${t.year})` : t.title)}">${esc(t.title)}${t.year ? ` <span class="muted">${esc(t.year)}</span>` : ""}${t.kind === "series" ? ` <span class="muted">· ${say("series", "série")}</span>` : ""}</button>`).join("");
+const picks = (found, path) => found.map((t) => `<button type="button" class="small og-pick" data-o="titlepick" data-i="${esc(path)}" data-t="${esc(t.year ? `${t.title} (${t.year})` : t.title)}">${esc(t.title)}${t.year ? ` <span class="muted">${esc(t.year)}</span>` : ""}${t.kind === "series" ? ` <span class="muted">· ${say("series", "série")}</span>` : ""}</button>`).join("");
 function reviewHTML() {
   const rows = S.org.provenances.flatMap((p) => p.review.map((r) => ({ p, r })));
   return `<section class="og-review card" id="og-review"><div class="row"><h3>${say("To check", "À vérifier")}</h3><span class="badge ${rows.length ? "warn" : "ok"}">${rows.length}</span>${tip("These items have no recognisable title (for example IMG_3310.mov). They stay where they are until you fix them. Give them a title so they are tidied, or keep them as they are.", "Ces éléments n'ont pas de titre reconnaissable (par exemple IMG_3310.mov). Ils restent où ils sont tant que vous ne les avez pas corrigés. Donnez-leur un titre pour qu'ils soient rangés, ou gardez-les tel quel.", say("Help on To check", "Aide sur À vérifier"))}<span class="grow"></span>
@@ -184,7 +184,7 @@ document.addEventListener("click", async (e) => {
   else if (k === "link") { O.linking = O.linking === p ? null : p; render(); if (O.linking) document.querySelector(".og-lib")?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
   else if (k === "cancellink") { O.linking = null; render(); }
   else if (k === "pick") { const from = O.linking; O.linking = null; link(from, el.dataset.l); }
-  else if (k === "pick") { await post("review", { path: el.dataset.i, title: el.dataset.t }, say("Title given.", "Titre attribué.")); }
+  else if (k === "titlepick") { await post("review", { path: el.dataset.i, title: el.dataset.t }, say("Title given.", "Titre attribué.")); }
   else if (k === "unlink") link(p, "");
   else if (k === "dolink") { $("dialog").close(); link(p, el.dataset.l); }
   else if (k === "ranger" || k === "rangerall") {
