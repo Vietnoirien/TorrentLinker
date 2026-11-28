@@ -201,7 +201,7 @@
       box.disabled = !can; checks.set(season.n, box);
       const note = season.owned ? say("In the Library", "Dans la médiathèque") : asked.includes(season.n) ? say("Already requested", "Déjà demandée")
         : season.state === "episodes" ? say("Episodes only, no pack", "Épisodes seulement, pas de pack") : season.state === "none" ? say("Not on the tracker", "Pas sur le tracker") : kindOf(season)[0];
-      label.append(box, element("strong", say(`Season ${season.n}`, `Saison ${season.n}`)), element("span", say(`${season.count} episodes`, `${season.count} épisodes`), "ts-count"), element("span", note, `ts-pill ${can ? "ok" : season.owned ? "own" : asked.includes(season.n) ? "asked" : "eps"}`));
+      label.append(box, element("strong", say(`Season ${season.n}`, `Saison ${season.n}`)), element("span", season.count ? say(`${season.count} episodes`, `${season.count} épisodes`) : "", "ts-count"), element("span", note, `ts-pill ${can ? "ok" : season.owned ? "own" : asked.includes(season.n) ? "asked" : "eps"}`));
       if (!can) label.classList.add("off");
       box.onchange = () => { box.checked ? picked.add(season.n) : picked.delete(season.n); sync(); };
       line.append(label); list.append(line);
@@ -283,7 +283,7 @@
   function seasonsList(root, s) {
     root.replaceChildren();
     const episodes = s.seasons.reduce((a, x) => a + x.count, 0), header = element("div", undefined, "media-episodes-header ts-head");
-    header.append(element("h2", say("Seasons", "Saisons")), element("span", say(`${s.seasons.length} seasons · ${episodes} episodes`, `${s.seasons.length} saisons · ${episodes} épisodes`), "media-row-note"));
+    header.append(element("h2", say("Seasons", "Saisons")), element("span", episodes ? say(`${s.seasons.length} seasons · ${episodes} episodes`, `${s.seasons.length} saisons · ${episodes} épisodes`) : say(`${s.seasons.length} seasons`, `${s.seasons.length} saisons`), "media-row-note"));
     root.append(header);
     if (typeof TS.beforeSeasons === "function") TS.beforeSeasons(root, s);
     const list = element("ul", undefined, "ts-seasons");
@@ -296,7 +296,7 @@
     const head = element("div", undefined, "ts-season-head");
     const toggle = button("", () => { open.has(key) ? open.delete(key) : open.add(key); seasonsList($("media-episodes"), s); }, "ts-toggle");
     toggle.setAttribute("aria-expanded", String(open.has(key)));
-    toggle.append(element("span", open.has(key) ? "▾" : "▸", "ts-caret"), element("strong", say(`Season ${season.n}`, `Saison ${season.n}`)), element("span", say(`${season.count} episodes`, `${season.count} épisodes`), "ts-count"));
+    toggle.append(element("span", open.has(key) ? "▾" : "▸", "ts-caret"), element("strong", say(`Season ${season.n}`, `Saison ${season.n}`)), element("span", season.count ? say(`${season.count} episodes`, `${season.count} épisodes`) : "", "ts-count"));
     const [kind, tone] = kindOf(season), pills = element("span", undefined, "ts-pills");
     if (season.state !== "none") pills.append(element("span", kind, `ts-pill ${tone}`));
     if (season.owned) pills.append(element("span", say("In the Library", "Dans la médiathèque"), "ts-pill own"));

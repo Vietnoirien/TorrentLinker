@@ -31,7 +31,7 @@ class SeriesFollows:
 
     def _packs(self, series: str) -> dict[int, dict[str, Any]]:
         """The seasons with a full pack on a Tracker now, with their best pack."""
-        entry = next((e for e in self.media.series_index() if e["id"] == series), None)
+        entry = next((e for e in self.media.series_index(fresh=True) if e["id"] == series), None)
         if entry is None:
             return {}
         found: dict[int, dict[str, Any]] = {}
@@ -74,7 +74,8 @@ class SeriesFollows:
             fresh = sorted(set(packs) - known)
             if not fresh:
                 continue
-            entry = next((e for e in self.media.series_index() if e["id"] == row["series"]), None)
+            index = self.media.series_index(fresh=True)
+            entry = next((e for e in index if e["id"] == row["series"]), None)
             if entry is None:
                 continue
             owned = view._owned(entry, library)

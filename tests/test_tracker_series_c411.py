@@ -104,7 +104,7 @@ def member():
 
 
 def by_title(series, title):
-    return next(e for e in series.series_index() if e["title"] == title)
+    return next(e for e in series.series_index(fresh=True) if e["title"] == title)
 
 
 def test_c411_identifies_series_without_a_key_with_poster_synopsis_genres_and_named_seasons(
@@ -265,3 +265,32 @@ def test_a_key_set_later_takes_over_and_an_id_c411_gave_is_kept(series, monkeypa
     assert arrow["tmdb"] == "10" and arrow["c411"] == "" and arrow["meta"]["rating"] == "12"
     assert naruto["tmdb"] == "20" and naruto["meta"]["overview"] == "Synopsis de Naruto."
     assert series.tmdb.lookups == [("Arrow", None)] or ("Naruto", None) not in series.tmdb.lookups
+
+
+def test_names_spelling_one_series_two_ways_are_one_series_once_c411_knows_it(series):
+    """'Dexter Resurrection 2025' and 'Dexter: Résurrection' are one series, once c411 gave
+    both the same facts: one card, its releases together, and a stable id."""
+    with series.lock, series.db:
+        for n, (name, title, year) in enumerate(
+            (("Dexter.Resurrection.2025.S01.1080p", "Dexter Resurrection", "2025"),
+             ("Dexter.Resurrection.S01E02.1080p", "Dexter Résurrection", ""))
+        ):  # fmt: skip
+            tkey = tracker_series.series_key(title, year)
+            series.db.execute(
+                "INSERT INTO series_release (tracker, infohash, name, size, seeders, category,"
+                " kind, position, tkey, title, year, pack, seasons, season, episode)"
+                " VALUES ('c411', ?, ?, 1, 5, 5000, 'series', ?, ?, ?, ?, 'season', '[1]', 0, 0)",
+                (f"{n:040x}", name, n, tkey, title, year),
+            )
+            series.db.execute(
+                "INSERT INTO series_c411 (tkey, title, original_title, year, overview, genres,"
+                " poster, fetched) VALUES (?, 'Dexter - Résurrection', '', '2025', '', '[]', ?, 0)",
+                (tkey, POSTER.format("dexter")),
+            )
+    series._series_changed()
+    dexter = [e for e in series.series_index(fresh=True) if "Dexter" in e["title"]]
+    assert len(dexter) == 1 and len(dexter[0]["releases"]) == 2
+    assert dexter[0]["id"] == min(
+        tracker_series.series_id("", tracker_series.series_key(t, y), "", "")
+        for t, y in (("Dexter Resurrection", "2025"), ("Dexter Résurrection", ""))
+    )

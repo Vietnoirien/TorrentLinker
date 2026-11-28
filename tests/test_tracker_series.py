@@ -146,7 +146,7 @@ def test_only_seeded_series_categories_are_indexed(series):
 
 def test_releases_group_under_their_series_with_packs_integrales_and_episodes(series):
     run(series)
-    index = {e["title"]: e for e in series.series_index()}
+    index = {e["title"]: e for e in series.series_index(fresh=True)}
     assert set(index) == {"Arrow", "Naruto"}  # tr4ker's unidentified TV show stays out
     arrow = index["Arrow"]
     assert arrow["tmdb"] == "10" and arrow["kind"] == "series"
@@ -158,11 +158,11 @@ def test_releases_group_under_their_series_with_packs_integrales_and_episodes(se
 
 def test_coverage_is_checked_against_tmdbs_seasons_and_episodes(series):
     run(series)
-    arrow = next(e for e in series.series_index() if e["title"] == "Arrow")
+    arrow = next(e for e in series.series_index(fresh=True) if e["title"] == "Arrow")
     states = {n: c["state"] for n, c in arrow["coverage"].items()}
     # S01 has its own pack, S02 too; the Intégrale covers both, and S03 (tr4ker) is unknown to TMDb.
     assert states == {1: "pack", 2: "pack"}
-    naruto = next(e for e in series.series_index() if e["title"] == "Naruto")
+    naruto = next(e for e in series.series_index(fresh=True) if e["title"] == "Naruto")
     assert naruto["coverage"][1]["state"] == "episodes"
     assert naruto["coverage"][1]["episodes"] == {1, 2}
 
@@ -178,7 +178,7 @@ def test_an_integrale_covers_the_seasons_without_a_pack_of_their_own(series):
         )
         series.db.execute("INSERT INTO series_title VALUES ('[\"arrow\", \"\"]', '10', 0, 0)")
     series._series_fetch_meta(series.tmdb, "10")
-    arrow = series.series_index()[0]
+    arrow = series.series_index(fresh=True)[0]
     assert {n: c["state"] for n, c in arrow["coverage"].items()} == {1: "complete", 2: "complete"}
 
 

@@ -50,6 +50,8 @@ SYNC_BATCH = 500
 SYNC_PAUSE = 0.05
 # Below this many names, parsing in this process is quicker than starting another.
 POOL_FROM = 200
+# A page never waits for the index to be regrouped: it is rebuilt aside, at most this often.
+REBUILD_EVERY = 30.0
 # While it fills, the index's revision moves at most this often (seconds).
 REVISION_EVERY = 10.0
 
@@ -925,33 +927,59 @@ class TrackerSeries(TrackerRows, AgeRatings):
         answer: dict[str, Any] = {"revision": self._series_generation, "running": running}
         if owner:
             answer["identified"], answer["total"] = self.series_progress()
+            # A walk resting after a limit is not finished: the Owner sees when it resumes.
+            rest = max(self._series_resting.values(), default=0.0) - time.monotonic()
+            if rest > 0 and not running:
+                answer["resume_at"] = time.time() + rest
         return answer
 
     # -- Reading the index ------------------------------------------------------------------
 
-    def series_index(self) -> list[dict[str, Any]]:
+    def series_index(self, fresh: bool = False) -> list[dict[str, Any]]:
         """One entry per series with its releases grouped by season. A tr4ker release counts
         only once TMDb identified its series; the rest of a series' kinds never mix. Built once
         per revision: pages ask for it on every request, and it reads every release."""
         cached = getattr(self, "_series_built", None)
-        if cached and cached[0] == self._series_generation:
-            return cached[1]
         generation = self._series_generation
+        if cached and cached[0] == generation:
+            return cached[1]
+        if cached and not fresh:
+            # 200,000 releases take seconds to group: a page gets the previous index at once,
+            # and the new one is built aside, at most every REBUILD_EVERY seconds.
+            self._series_rebuild_aside()
+            return cached[1]
         built = self._series_build()
         self._series_built = (generation, built)
         return built
 
+    def _series_rebuild_aside(self) -> None:
+        guard = self.__dict__.setdefault("_series_rebuilding", threading.Lock())
+        if time.monotonic() - self.__dict__.get("_series_rebuilt_at", 0.0) < REBUILD_EVERY:
+            return
+        if not guard.acquire(blocking=False):
+            return
+
+        def build() -> None:
+            try:
+                generation = self._series_generation
+                self._series_built = (generation, self._series_build())
+                self._series_rebuilt_at = time.monotonic()
+            finally:
+                guard.release()
+
+        threading.Thread(target=build, daemon=True, name="series-index").start()
+
     def _series_build(self) -> list[dict[str, Any]]:
-        with self.lock:
-            releases = [dict(r) for r in self.db.execute("SELECT * FROM series_release")]
-            ids = {r["tkey"]: r["tmdb"] for r in self.db.execute("SELECT * FROM series_title")}
-            metas = {r["tmdb"]: dict(r) for r in self.db.execute("SELECT * FROM series_meta")}
-            c411s = {r["tkey"]: dict(r) for r in self.db.execute("SELECT * FROM series_c411")}
+        with self._bulk() as db:  # type: ignore[attr-defined]
+            releases = [dict(r) for r in db.execute("SELECT * FROM series_release")]
+            ids = {r["tkey"]: r["tmdb"] for r in db.execute("SELECT * FROM series_title")}
+            metas = {r["tmdb"]: dict(r) for r in db.execute("SELECT * FROM series_meta")}
+            c411s = {r["tkey"]: dict(r) for r in db.execute("SELECT * FROM series_c411")}
             seasons: dict[str, dict[int, int]] = {}
-            for r in self.db.execute("SELECT tmdb, season, episodes FROM series_season"):
+            for r in db.execute("SELECT tmdb, season, episodes FROM series_season"):
                 seasons.setdefault(r["tmdb"], {})[r["season"]] = r["episodes"]
             episodes: dict[str, dict[int, set[int]]] = {}
-            for r in self.db.execute("SELECT tmdb, season, episode FROM series_episode"):
+            for r in db.execute("SELECT tmdb, season, episode FROM series_episode"):
                 episodes.setdefault(r["tmdb"], {}).setdefault(r["season"], set()).add(r["episode"])
         groups: dict[str, dict[str, Any]] = {}
         for r in releases:
@@ -959,8 +987,16 @@ class TrackerSeries(TrackerRows, AgeRatings):
             if r["tracker"] in IDENTIFIED_ONLY and not tmdb and r["tkey"] not in c411s:
                 continue
             identifier = series_id(tmdb, r["tkey"], r["tracker"], r["infohash"])
+            facts = None if tmdb else c411s.get(r["tkey"])
+            # Release names spell one series several ways ("Dexter Resurrection 2025",
+            # "Dexter: Résurrection"): what c411 identified them as is the same series.
+            key = (
+                "c411:" + (facts["poster"] or json.dumps([plain(facts["title"]), facts["year"]]))
+                if facts
+                else identifier
+            )
             group = groups.setdefault(
-                identifier,
+                key,
                 {
                     "id": identifier,
                     "tmdb": tmdb,
@@ -970,6 +1006,8 @@ class TrackerSeries(TrackerRows, AgeRatings):
                 },
             )
             group["tkeys"].add(r["tkey"])
+            if facts and identifier < group["id"]:
+                group["id"] = identifier  # the same id whichever release is read first
             r["seasons"] = tuple(json.loads(r["seasons"]))
             group["releases"].append(r)
         result = []

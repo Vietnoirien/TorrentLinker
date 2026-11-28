@@ -304,12 +304,14 @@ async function filmsMerge() {
 // The Owner's one line on the landing, while the index is being identified.
 function filmsProgressLine() {
   const root = $("media-home-rows"), answer = filmsLive.progress;
-  const shown = filmsOwner() && media.view === "tracker" && !media.films?.grid && answer?.running && answer.identified < answer.total;
+  const shown = filmsOwner() && media.view === "tracker" && !media.films?.grid && (answer?.running || answer?.resume_at) && answer.identified < answer.total;
   let line = root.querySelector(".films-progress");
   if (!shown) { line?.remove(); return; }
   if (!line) { line = element("p", undefined, "films-progress muted"); root.querySelector(".films-landing")?.after(line); }
   const number = value => value.toLocaleString(language === "fr" ? "fr-FR" : "en-GB");
-  line.textContent = say(`Film identification: ${number(answer.identified)} / ${number(answer.total)}`, `Identification des films : ${number(answer.identified)} / ${number(answer.total)}`);
+  const resume = answer.running ? "" : new Date(answer.resume_at * 1000).toLocaleTimeString(language === "fr" ? "fr-FR" : "en-GB", {hour: "2-digit", minute: "2-digit"});
+  line.textContent = say(`Film identification: ${number(answer.identified)} / ${number(answer.total)}`, `Identification des films : ${number(answer.identified)} / ${number(answer.total)}`)
+    + (resume ? say(` · paused, resumes at ${resume}`, ` · en pause, reprend à ${resume}`) : "");
 }
 async function filmsPoll() {
   if (filmsLive.busy) return;
