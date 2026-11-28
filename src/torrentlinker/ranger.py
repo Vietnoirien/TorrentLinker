@@ -919,9 +919,15 @@ class Board:
         if item is not None:
             item.torrents = SeedIndex(self.seeds()).under(path)
             return item
-        match = one(
-            Path(path), self._bodies.get(entry.get("prov", ""), {}), self.storage.board()["titles"]
+        # Read again after a restart: as the provenance reads it (a folder of series), and
+        # never turned from the series it was queued as into a film.
+        prov = entry.get("prov", "")
+        series = entry.get("kind") == "series" or any(
+            str(f.path) == prov and f.kind == ContentKind.SERIES for f in self.library_folders()
         )
+        match = one(Path(path), self._bodies.get(prov, {}), self.storage.board()["titles"], series)
+        if match is not None and entry.get("kind") == "series":
+            match.kind = "series"
         if match is not None:
             match.torrents = SeedIndex(self.seeds()).under(path)
         return match

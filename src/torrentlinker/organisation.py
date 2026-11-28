@@ -69,7 +69,14 @@ def facts_of(body: dict[str, Any], filename: str) -> dict[str, str]:
     languages = languages if isinstance(languages, list) else [languages]
     series = bool(body.get("series"))
     season = body.get("season") or guessed.get("season") or 1
-    episode = body.get("episode") or guessed.get("episode") or 1
+    episode = body.get("episode") or guessed.get("episode")
+    if not episode:  # "tenjo.tenge.e01m", "oav02": a number guessit misses
+        from torrentlinker.library_items import EPISODE
+
+        found = EPISODE.search(Path(filename).stem)
+        episode = int(found.group(1)) if found else 1
+        if found and re.search(r"o[av]{2}", found.group(0), re.I):
+            season = 0  # an OAV is a special: season 0, as Jellyfin files them
     return {
         "titre": str(
             (body.get("series") if series else body.get("title")) or guessed.get("title") or ""

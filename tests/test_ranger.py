@@ -710,3 +710,45 @@ def test_an_organised_library_ranges_what_it_holds_unorganised_in_place(world: W
     show = world.series / "Monty Python's Flying Circus"
     assert (show / "Saison 03" / "Monty Python's Flying Circus S03E27.mp4").exists()
     assert sorted(p.name for p in world.series.iterdir()) == ["Monty Python's Flying Circus"]
+
+
+def test_episodes_named_e01m_and_oav_are_one_series_and_numbered_films_keep_their_title(
+    tmp_path: Path,
+):
+    """ "oki-tenjo.tenge.e01m.mkv", "e02m", "oav01m" side by side are Tenjou Tenge's episodes
+    and its special, not one film each; "1 - La Grande Aventure de Bender" is that film."""
+    from torrentlinker.organisation import facts_of
+
+    anime = tmp_path / "Anime"
+    show = anime / "Tenjou.Tenge.MULTi.DVDRiP.X264-OOKAMI"
+    show.mkdir(parents=True)
+    for name in (
+        "oki-tenjo.tenge.e01m..mkv",
+        "oki-tenjo.tenge.e02m.mkv",
+        "oki-tenjo.tenge.oav01m.mkv",
+    ):
+        (show / name).write_bytes(name.encode() * 3)
+    films = anime / "Futurama saisons 1 à 6 + films"
+    films.mkdir()
+    (films / "1 - La Grande Aventure de Bender.avi").write_bytes(b"f" * 30)
+    (films / "Futurama S01").mkdir()
+    (films / "Futurama S01" / "Futurama.S01E01.mkv").write_bytes(b"e" * 30)
+    found = {i.name: i for i in discover(anime, series_folder=True)}
+    tenjou = found["Tenjou.Tenge.MULTi.DVDRiP.X264-OOKAMI"]
+    assert tenjou.kind == "series" and tenjou.title == "Tenjou Tenge"
+    bender = found["Futurama saisons 1 à 6 + films/1 - La Grande Aventure de Bender.avi"]
+    assert bender.kind == "film" and bender.title == "La Grande Aventure de Bender"
+    e02 = facts_of({"series": "Tenjou Tenge"}, "Tenjou/oki-tenjo.tenge.e02m.mkv")
+    oav = facts_of({"series": "Tenjou Tenge"}, "Tenjou/oki-tenjo.tenge.oav01m.mkv")
+    assert (e02["saison"], e02["épisode"]) == ("01", "02")
+    assert (oav["saison"], oav["épisode"]) == ("00", "01")
+
+
+def test_a_series_queued_before_a_restart_is_still_a_series(world: World):
+    """A batch read again after a restart keeps what it queued: a series stays a series."""
+    world.organise()
+    pack = next(i for i in world.board.items(str(world.old)) if "Black.Mirror" in i.name)
+    world.board._scans.clear()  # as after a restart: the board has not read the folder yet
+    row = {"top": pack.path, "prov": str(world.old), "kind": "series"}
+    world.queue.enqueue("Ranger", "owner", [row])
+    assert (world.series / "Black Mirror").is_dir()

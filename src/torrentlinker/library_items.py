@@ -100,6 +100,12 @@ SERIES_MARK = re.compile(
     r"[ ._-]?\d{1,2}|int[ée]grale|complete[ ._-]series)(?=$|[ ._\])-])",
     re.I,
 )
+# An episode's number in a name guessit misses: "tenjo.tenge.e01m", "oav02", "Session 05".
+EPISODE = re.compile(
+    r"(?:^|[ ._-])(?:s\d{1,2})?(?:e|ep|episode|oav|ova|session)[ ._-]?(\d{1,3})"
+    r"(?=[a-z]?(?:$|[ ._-]))",
+    re.I,
+)
 # A season folder named only by its number, inside a series' folder.
 SEASON_ONLY = re.compile(r"^(?:saison|season|s)[ ._-]?\d{1,2}$", re.I)
 
@@ -120,6 +126,9 @@ def _is_release(path: str, videos: list[tuple[str, int]]) -> bool:
     inner = {parts[0] for parts in depths if len(parts) > 1}
     if any(SERIES_MARK.search(f" {sub}") and not SEASON_ONLY.match(sub) for sub in inner):
         return False
+    # Files that each carry an episode number side by side are one series' episodes.
+    if not inner and all(EPISODE.search(Path(p).stem) for p, _ in main):
+        return True
     guesses = [guessit(Path(p).name) for p, _ in main]
     if all(g.get("type") == "episode" for g in guesses):
         # Episodes named after themselves ("Saison 03 - Episode 01 - La Voiture Garoute") in a
@@ -138,7 +147,9 @@ def kind_of(path: str, videos: list[tuple[str, int]], series_folder: bool = Fals
     named = f"{Path(path).name}/{first}" if main and Path(path).is_dir() else first
     guessed = guessit(named)
     marked = any(SERIES_MARK.search(Path(part).stem) for part in named.split("/"))
-    return "series" if guessed.get("type") == "episode" and (marked or series_folder) else "film"
+    numbered = len(main) > 1 and all(EPISODE.search(Path(p).stem) for p, _ in main)
+    episode = guessed.get("type") == "episode" and (marked or series_folder)
+    return "series" if episode or numbered else "film"
 
 
 def readable(name: str, guessed: dict[str, Any]) -> bool:
@@ -179,7 +190,11 @@ def _item(path: str, base: str, videos, bodies, titles, series_folder: bool = Fa
     named = (
         guessit(Path(path).name).get("title") if kind == "series" and Path(path).is_dir() else ""
     )
-    title = fixed or str(known or "") or str(named or guessed.get("title") or "")
+    guessed_title = str(guessed.get("title") or "")
+    if guessed_title.isdigit():  # "1 - La Grande Aventure de Bender": a number, then the title
+        stem = re.sub(r"^\s*\d{1,3}\s*[-–.]\s*", "", files[0].stem)
+        guessed_title = str(guessit(stem).get("title") or stem)
+    title = fixed or str(known or "") or str(named or guessed_title)
     folder_guess = guessit(Path(path).name) if Path(path).is_dir() else guessed
     ok = (
         bool(fixed or known)
@@ -191,7 +206,7 @@ def _item(path: str, base: str, videos, bodies, titles, series_folder: bool = Fa
     return Item(path, relative, kind, sum(s for _, s in videos), videos, title, ok, group=group)
 
 
-def one(path: Path, bodies=None, titles=None) -> Item | None:
+def one(path: Path, bodies=None, titles=None, series_folder: bool = False) -> Item | None:
     """The item at a path (a video file, or a folder holding one film or one series)."""
     bodies, titles = bodies or {}, titles or {}
     if path.is_dir():
@@ -201,7 +216,9 @@ def one(path: Path, bodies=None, titles=None) -> Item | None:
             videos = [(str(path), path.stat().st_size)] if path.suffix.lower() in VIDEO else []
         except OSError:
             videos = []
-    return _item(str(path), str(path.parent), videos, bodies, titles) if videos else None
+    if not videos:
+        return None
+    return _item(str(path), str(path.parent), videos, bodies, titles, series_folder)
 
 
 def discover(
