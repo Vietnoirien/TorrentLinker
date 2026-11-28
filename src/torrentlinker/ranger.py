@@ -34,6 +34,7 @@ from torrentlinker.library_items import (
     fixed_kind,
     one,
     part_number,
+    video_height,
 )
 from torrentlinker.media import VIDEO
 from torrentlinker.organisation import (
@@ -563,6 +564,30 @@ class Board:
         self._titles = (time.monotonic(), rows)
         return rows
 
+    def better(self, source: Path, other: Path) -> str:
+        """Which of two versions of a film to keep, the one that goes into the library: the
+        higher picture; at equal picture the one a torrent seeds; else the larger. "source"
+        or "library"."""
+
+        def main(path: Path) -> Path | None:
+            files = [path] if path.is_file() else [p for p in path.rglob("*") if p.is_file()]
+            videos = [p for p in files if p.suffix.lower() in VIDEO]
+            return max(videos, key=lambda p: p.stat().st_size, default=None)
+
+        mine, theirs = main(source), main(other)
+        if theirs is None:
+            return "source"
+        if mine is None:
+            return "library"
+        heights = video_height(str(mine)), video_height(str(theirs))
+        if heights[0] != heights[1]:
+            return "source" if heights[0] > heights[1] else "library"
+        index = SeedIndex(self.seeds())
+        seeded = bool(index.under(str(source))), bool(index.under(str(other)))
+        if seeded[0] != seeded[1]:
+            return "source" if seeded[0] else "library"
+        return "source" if mine.stat().st_size > theirs.stat().st_size else "library"
+
     def series_names(self, name: str) -> set[str]:
         """Every name a series goes by, compared plainly: its own, and the French and original
         titles the series indexes (TMDb, c411) give it."""
@@ -882,6 +907,15 @@ class Board:
                     "renames": renames, "new_top": str(new_top), "dest": str(lib),
                     "duplicate": str(other), "error": "",
                 }  # fmt: skip
+        holds_video = landed.is_dir() and any(
+            p.suffix.lower() in VIDEO for p in landed.rglob("*") if p.is_file()
+        )
+        if item.kind == "film" and holds_video and new_top != landed and top != landed:
+            # Another version of the film is in the library already: the better one stays.
+            return {
+                "renames": renames, "new_top": str(new_top), "dest": str(lib),
+                "duplicate": str(landed), "keep": self.better(top, landed), "error": "",
+            }  # fmt: skip
         merge = False
         if os.path.lexists(landed) and new_top != landed:
             # Another season, or another part of a season, of a series already in the library

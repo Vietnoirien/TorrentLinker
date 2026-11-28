@@ -133,6 +133,18 @@ def plain_title(text: str) -> str:
     return " ".join(str(p) for p in parts if p).casefold()
 
 
+@functools.lru_cache(maxsize=4096)
+def video_height(path: str) -> int:
+    """The picture height of a video (1080, 2160…), 0 when MediaInfo cannot tell."""
+    try:
+        from pymediainfo import MediaInfo
+
+        tracks = MediaInfo.parse(path).video_tracks
+        return int(tracks[0].height or 0) if tracks else 0
+    except Exception:  # noqa: BLE001 - no MediaInfo, or an unreadable file
+        return 0
+
+
 def episode_number(path: str) -> int | None:
     """An episode's number from its name, else from the title the video carries."""
     for text in (Path(path).stem, embedded_title(path)):

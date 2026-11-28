@@ -54,6 +54,11 @@ class Qb:
     def pause(self, hash):
         self.calls.append(("pause", hash))
 
+    def remove(self, hash, delete_files=False):
+        assert not delete_files  # the app never deletes data through the client here
+        self.calls.append(("remove", hash))
+        del self.torrents[hash]
+
     def start(self, hash):
         self.calls.append(("start", hash))
 
@@ -258,7 +263,8 @@ def test_a_seeded_release_moves_and_renames_through_its_client_and_keeps_seeding
 
 def test_a_failed_move_puts_the_names_back(world: World, monkeypatch):
     world.organise()
-    (world.films / "Alien (1979)").mkdir()  # the name is taken in the library
+    (world.films / "Alien (1979)").mkdir()  # the name is taken in the library, by no video
+    (world.films / "Alien (1979)" / "notes.pdf").write_bytes(b"p")
     item = next(i for i in world.board.items(str(world.old)) if i.name.startswith("Alien"))
     world.queue.enqueue(
         "Ranger", "owner", [{"top": item.path, "prov": str(world.old), "kind": "film"}]
@@ -854,3 +860,54 @@ def test_an_empty_folder_a_stopped_attempt_left_does_not_block_the_move(world: W
     world.queue.enqueue("Ranger", "owner", [row])
     assert (world.series / "Black Mirror").is_dir()
     assert not (world.series / Path(pack.path).name).exists()
+
+
+def test_of_two_versions_of_a_film_the_better_one_stays(world: World, monkeypatch):
+    """The library has an older copy of the film: the higher picture is kept, and the other
+    version goes to the trash; a version a torrent seeds is never deleted."""
+    from torrentlinker import ranger
+
+    heights = {}
+    monkeypatch.setattr(ranger, "video_height", lambda path: heights.get(path, 1080))
+    world.organise()
+    alien = next(i for i in world.board.items(str(world.old)) if i.name.startswith("Alien"))
+    old = world.films / "Alien (1979)"
+    old.mkdir()
+    (old / "Alien (1979).mkv").write_bytes(b"o" * 20)  # another, smaller copy
+    heights[str(old / "Alien (1979).mkv")] = 720
+    row = {"top": alien.path, "prov": str(world.old), "kind": "film"}
+    world.queue.enqueue("Ranger", "owner", [row])
+    kept = (world.films / "Alien (1979)" / "Alien (1979).mkv").read_bytes()
+    assert kept == b"a" * 50  # the 1080p version, ranged in place of the 720p one
+    assert not Path(alien.path).exists()
+
+
+@pytest.mark.parametrize("library_height", [720, 2160])
+def test_one_version_stays_the_better_one_and_at_equal_picture_the_seeded_one(
+    tmp_path: Path, monkeypatch, library_height
+):
+    """One version stays and goes into the library: the higher picture; at equal picture the
+    one a torrent seeds. The other goes to the trash, its torrent out of the client."""
+    from torrentlinker import ranger
+
+    torrent = Torrent(
+        "a" * 40, DUNE, tmp_path / "disk" / "Old", state="uploading", progress=1.0,
+        files={f"{DUNE}/{DUNE}.mkv": 100, f"{DUNE}/{DUNE}.fr.srt": 1, f"{DUNE}/info.nfo": 1},
+    )  # fmt: skip
+    world = World(tmp_path, torrent)
+    copy = world.films / "Dune (2021) [tmdbid-438631]"
+    copy.mkdir()
+    (copy / "Dune (2021) [tmdbid-438631].mkv").write_bytes(b"c" * 300)
+    monkeypatch.setattr(
+        ranger, "video_height", lambda path: library_height if str(copy) in path else 720
+    )
+    world.organise()
+    item = next(i for i in world.board.items(str(world.old)) if i.name == DUNE)
+    row = {"top": item.path, "prov": str(world.old), "kind": "film"}
+    world.queue.enqueue("Ranger", "owner", [row])
+    kept = (copy / "Dune (2021) [tmdbid-438631].mkv").stat().st_size
+    if library_height == 720:  # equal picture: the seeded version, moved in, still seeding
+        assert kept == 100 and world.client.torrents["a" * 40].save_path == world.films
+    else:  # the library's 2160p stays; the seeded 720p leaves the client and the disk
+        assert kept == 300 and "a" * 40 not in world.client.torrents
+        assert not (world.old / DUNE).exists()

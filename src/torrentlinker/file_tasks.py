@@ -344,6 +344,18 @@ class Tasks:
         is kept, so the seed goes on; otherwise the library's, and the other goes to its
         trash (where it lies when its disk is full)."""
         top, other = Path(item["from"]), Path(plan["duplicate"])
+        keep = plan.get("keep")
+        if keep == "source":  # a better version than the library's: only it stays
+            self._unseed(other, task["actor"])  # its torrent leaves the client, data kept
+            self.storage.trash(other, "system", "Remplacée par une meilleure version")
+            item["meta"].pop("plan", None)
+            return self._ranger(task, item, cancelled, allowed)
+        if keep == "library":  # the library's is better: only it stays
+            self._unseed(top, task["actor"])  # its torrent leaves the client, data kept
+            self.storage.trash(top, "system", "Une meilleure version est dans la bibliothèque")
+            item.update(verified=True, final=str(other), progress=1.0, undo=None,
+                        note="Moins bonne version : à la corbeille")  # fmt: skip
+            return None
         if self.seeds(top) and self.seeds(other):
             raise StorageError(
                 f"« {other.name} » est déjà dans la bibliothèque et les deux sont partagés : "
