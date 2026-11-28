@@ -79,6 +79,8 @@ from torrentlinker.web.zen_preferences import ZenPreferences
 # markup is never cached, so a new build is picked up on the next load; this only bounds how
 # long that build's assets may lag behind it.
 STATIC_MAX_AGE = 600
+# How long Fichiers trusts the clients' list of what they seed before asking again (seconds).
+SEEDING_FOR = 15.0
 # Scripts and styles are kept for STATIC_MAX_AGE; the pages that load them are not, and name
 # them with this start's token, so a new build is loaded at once, frames included.
 ASSETS_TOKEN = format(time.time_ns(), "x")
@@ -518,17 +520,35 @@ def create_app(
 
         follow_move(service, accounts, old, new)
 
-    def seeding() -> list[tuple[Path, dict[str, Any]]]:
-        from torrentlinker.file_annotations import seeds_of
+    seeding_cache: dict[str, Any] = {"at": 0.0, "seeds": []}
 
+    def seeding() -> list[tuple[Path, dict[str, Any]]]:
+        """What each torrent puts on disk, read from the clients themselves every few seconds.
+        Fichiers moves a seeded file through its client and copies a free one: a client that
+        cannot answer stops the move rather than have its files taken for free."""
+        from torrentlinker.file_annotations import seeds_of
+        from torrentlinker.file_storage import StorageError
+        from torrentlinker.paths import MappedQbit, PathMapper
+
+        if time.monotonic() - seeding_cache["at"] < SEEDING_FOR:
+            return seeding_cache["seeds"]
         names = {p.id: p.name for p in service.settings.client_profiles if p.enabled}
-        return seeds_of(
-            [
-                (client_id, name, torrent)
-                for client_id, name in names.items()
-                for torrent in for_client(client_id).observed
-            ]
-        )
+        rows = []
+        for client_id, name in names.items():
+            try:
+                target = service.for_client(client_id)
+                if not target.configured:
+                    continue  # no client set up: nothing seeds
+                mapped = MappedQbit(target.client(), PathMapper(target.settings.path_mappings))
+                live = mapped.torrents(with_files=False)
+            except Exception as error:  # noqa: BLE001 - any client failure stops the moves
+                raise StorageError(
+                    f"{name} ne répond pas : rien n'est déplacé tant qu'on ne sait pas "
+                    "quels fichiers il partage."
+                ) from error
+            rows += [(client_id, name, torrent) for torrent in live]
+        seeding_cache.update(at=time.monotonic(), seeds=seeds_of(rows))
+        return seeding_cache["seeds"]
 
     def annotate_entries(folder: Path, entries: list[dict[str, Any]]) -> None:
         """Explorateur's rows know their film and the torrent that seeds them."""

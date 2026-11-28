@@ -15,9 +15,12 @@ def seeds_of(torrents: list[tuple[str, str, Any]]) -> list[tuple[Path, dict[str,
     `torrents` holds (client id, client name, Torrent)."""
     found: list[tuple[Path, dict[str, Any]]] = []
     for client_id, client_name, torrent in torrents:
-        for top in sorted(
-            {Path(torrent.save_path) / Path(name).parts[0] for name in torrent.files}
-        ):
+        # Without its file list a torrent still says where its content is: its folder and its
+        # name. Never "no torrent here" for want of a list (the files would be taken for free).
+        tops = {Path(torrent.save_path) / Path(name).parts[0] for name in torrent.files} or {
+            Path(torrent.save_path) / torrent.name
+        }
+        for top in sorted(tops):
             found.append(
                 (
                     top,

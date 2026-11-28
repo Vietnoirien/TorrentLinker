@@ -911,3 +911,18 @@ def test_one_version_stays_the_better_one_and_at_equal_picture_the_seeded_one(
     else:  # the library's 2160p stays; the seeded 720p leaves the client and the disk
         assert kept == 300 and "a" * 40 not in world.client.torrents
         assert not (world.old / DUNE).exists()
+
+
+def test_a_torrent_read_without_its_file_list_still_holds_its_content(tmp_path: Path):
+    """The clients' quick list carries no file list: a torrent is then found by its folder
+    and its name, so its files are never taken for free ones and copied away (#223)."""
+    from torrentlinker.file_annotations import seeds_of, seeds_under
+
+    films = tmp_path / "Film"
+    films.mkdir()
+    lone = Torrent("a" * 40, "Gourou.2026.mkv", films, state="uploading", progress=1.0)
+    pack = Torrent("b" * 40, "Black.Mirror.S03", tmp_path / "Séries", state="stalledUP")
+    seeds = seeds_of([("c", "qBittorrent", lone), ("c", "qBittorrent", pack)])
+    assert [info["hash"] for _, info in seeds_under(films / "Gourou.2026.mkv", seeds)] == ["a" * 40]
+    inside = tmp_path / "Séries" / "Black.Mirror.S03" / "E01.mkv"
+    assert [info["hash"] for _, info in seeds_under(inside, seeds)] == ["b" * 40]
