@@ -26,7 +26,15 @@ from typing import Any
 from torrentlinker.disk_report import place, usage
 from torrentlinker.domain import ContentKind, LibraryFolder
 from torrentlinker.file_storage import TRASH_NAME, FileStorage, StorageError
-from torrentlinker.library_items import Item, SeedIndex, discover, fixed_kind, one, part_number
+from torrentlinker.library_items import (
+    Item,
+    SeedIndex,
+    discover,
+    episode_number,
+    fixed_kind,
+    one,
+    part_number,
+)
 from torrentlinker.media import VIDEO
 from torrentlinker.organisation import (
     DEFAULTS,
@@ -433,8 +441,8 @@ class Board:
         """The organised library an item goes to, and why not when none."""
         libs = self.libraries()
         own = next((lib for lib in libs if lib["path"] == prov), None)
-        if own is not None:  # what an organised library holds is ranged where it is
-            return {"lib": own, "why": "", "routed": False}
+        if own is not None and own["kind"] in {_wanted(item.kind), "other"}:
+            return {"lib": own, "why": "", "routed": False}  # ranged where it is
         want = _wanted(item.kind)
         fitting = [lib for lib in libs if lib["kind"] == want] or [
             lib for lib in libs if lib["kind"] == "other"
@@ -791,7 +799,13 @@ class Board:
             relative = (
                 f"{top.name}/{video.relative_to(top).as_posix()}" if top.is_dir() else video.name
             )
-            segments = fill(template, facts_of(self._body(item, str(video)), relative))
+            body = self._body(item, str(video))
+            if item.kind == "series" and not body.get("episode"):
+                # "Cowboy Bebop Session - part1.mkv" lost its number; the video still says
+                # "Session #12".
+                if (number := episode_number(str(video))) is not None:
+                    body = {**body, "episode": number}
+            segments = fill(template, facts_of(body, relative))
             segments[-1] += f" - part{index + 1}" if item.kind == "film" and len(main) > 1 else ""
             segments[-1] += video.suffix.lower()
             targets[video] = base.joinpath(*segments)

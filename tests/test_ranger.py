@@ -752,3 +752,37 @@ def test_a_series_queued_before_a_restart_is_still_a_series(world: World):
     row = {"top": pack.path, "prov": str(world.old), "kind": "series"}
     world.queue.enqueue("Ranger", "owner", [row])
     assert (world.series / "Black Mirror").is_dir()
+
+
+def test_episodes_filed_as_films_go_back_to_their_series(world: World, monkeypatch):
+    """What an earlier run filed in Films is set right by ranging Films: "Cowboy Bebop
+    Session - part1" whose video says "Session #12" becomes episode 12 of Cowboy Bebop in
+    Séries, and "tenjo tenge e01m" joins the others as Tenjo Tenge."""
+    from torrentlinker import library_items
+
+    world.organise()
+    bebop = world.films / "Cowboy Bebop Session"
+    bebop.mkdir()
+    says = {}
+    for part, session in ((1, 12), (2, 3)):
+        video = bebop / f"Cowboy Bebop Session - part{part}.mkv"
+        video.write_bytes(bytes([part]) * 30)
+        says[str(video)] = f"Cowboy Bebop Collector - Session #{session:02d} by [XCT] eva01"
+    for n in (1, 2):
+        folder = world.films / f"tenjo tenge e0{n}m"
+        folder.mkdir()
+        (folder / f"tenjo tenge e0{n}m.mkv").write_bytes(bytes([n + 5]) * 30)
+    library_items.embedded_title.cache_clear()
+    monkeypatch.setattr(library_items, "embedded_title", lambda path: says.get(path, ""))
+    world.board.scan([str(world.films)])
+    rows = [
+        {"top": i.path, "prov": str(world.films), "kind": i.kind}
+        for i in world.board.todo(str(world.films))
+    ]
+    assert {r["kind"] for r in rows} == {"series"}
+    world.queue.enqueue("Ranger", "owner", rows)
+    assert sorted(p.name for p in (world.series / "Cowboy Bebop" / "Saison 01").iterdir()) == [
+        "Cowboy Bebop S01E03.mkv", "Cowboy Bebop S01E12.mkv",
+    ]  # fmt: skip
+    assert len(list((world.series / "tenjo tenge" / "Saison 01").iterdir())) == 2
+    assert not bebop.exists()

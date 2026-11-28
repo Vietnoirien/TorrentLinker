@@ -10,6 +10,7 @@ gives it a title or keeps it as it is.
 from __future__ import annotations
 
 import bisect
+import functools
 import os
 import re
 from dataclasses import dataclass, field
@@ -102,10 +103,34 @@ SERIES_MARK = re.compile(
 )
 # An episode's number in a name guessit misses: "tenjo.tenge.e01m", "oav02", "Session 05".
 EPISODE = re.compile(
-    r"(?:^|[ ._-])(?:s\d{1,2})?(?:e|ep|episode|oav|ova|session)[ ._-]?(\d{1,3})"
+    r"(?:^|[ ._-])(?:s\d{1,2})?(?:e|ep|episode|oav|ova|session)[ ._-]?#?(\d{1,3})"
     r"(?=[a-z]?(?:$|[ ._-]))",
     re.I,
 )
+
+
+@functools.lru_cache(maxsize=4096)
+def embedded_title(path: str) -> str:
+    """The title a video carries inside it ("Cowboy Bebop Collector - Session #12"): what
+    tells an episode when its file name was lost. Empty when MediaInfo cannot read it."""
+    try:
+        from pymediainfo import MediaInfo
+
+        general = MediaInfo.parse(path).general_tracks
+    except Exception:  # noqa: BLE001 - no MediaInfo, or an unreadable file: nothing to tell
+        return ""
+    return str((general[0].title or general[0].movie_name or "") if general else "")
+
+
+def episode_number(path: str) -> int | None:
+    """An episode's number from its name, else from the title the video carries."""
+    for text in (Path(path).stem, embedded_title(path)):
+        found = EPISODE.search(text)
+        if found:
+            return int(found.group(1))
+    return None
+
+
 # A season folder named only by its number, inside a series' folder.
 SEASON_ONLY = re.compile(r"^(?:saison|season|s)[ ._-]?\d{1,2}$", re.I)
 
@@ -147,7 +172,9 @@ def kind_of(path: str, videos: list[tuple[str, int]], series_folder: bool = Fals
     named = f"{Path(path).name}/{first}" if main and Path(path).is_dir() else first
     guessed = guessit(named)
     marked = any(SERIES_MARK.search(Path(part).stem) for part in named.split("/"))
-    numbered = len(main) > 1 and all(EPISODE.search(Path(p).stem) for p, _ in main)
+    numbered = (len(main) > 1 or bool(main and EPISODE.search(Path(main[0][0]).stem))) and all(
+        episode_number(p) is not None for p, _ in main
+    )
     episode = guessed.get("type") == "episode" and (marked or series_folder)
     return "series" if episode or numbered else "film"
 
@@ -195,6 +222,10 @@ def _item(path: str, base: str, videos, bodies, titles, series_folder: bool = Fa
         stem = re.sub(r"^\s*\d{1,3}\s*[-–.]\s*", "", files[0].stem)
         guessed_title = str(guessit(stem).get("title") or stem)
     title = fixed or str(known or "") or str(named or guessed_title)
+    if kind == "series" and not (fixed or known):
+        # "tenjo tenge e01m", "Cowboy Bebop Session": the series' name stops at the episode.
+        title = EPISODE.split(f" {title}", maxsplit=1)[0].strip() or title
+        title = re.sub(r"\s+(?:session|episode|ep)$", "", title, flags=re.I) or title
     folder_guess = guessit(Path(path).name) if Path(path).is_dir() else guessed
     ok = (
         bool(fixed or known)
