@@ -44,6 +44,23 @@ SPEED = 150e6  # bytes per second of a copy to another disk, for the estimate
 ROLES = ("lib", "prov", "none")
 # What Windows and macOS leave in folders: never moved with an item, never a season.
 JUNK = {"thumbs.db", "desktop.ini", ".ds_store"}
+
+
+def junk(name: str) -> bool:
+    """What a system or a client leaves beside media: never moved with an item, never a
+    season (uTorrent's ~uTorrentPartFile_….dat holds pieces of files it skipped)."""
+    lowered = name.lower()
+    return lowered in JUNK or lowered.startswith("~utorrentpartfile")
+
+
+def folded(name: str) -> str:
+    """A title compared as people read it: no case, accent, punctuation or spaces, so
+    "MONTY PYTHONS-FLYING CIRCUS" is "Monty Python's Flying Circus"."""
+    from torrentlinker.media_tracker import plain
+
+    return plain(name).replace(" ", "")
+
+
 LIBRARY_RECOUNT = 10.0  # seconds between two readings of a library a batch fills
 TITLES_FOR = 300.0  # seconds the suggestions keep the indexes' titles
 KINDS = {ContentKind.MOVIE: "films", ContentKind.SERIES: "series"}
@@ -476,13 +493,13 @@ class Board:
     def series_names(self, name: str) -> set[str]:
         """Every name a series goes by, compared plainly: its own, and the French and original
         titles the series indexes (TMDb, c411) give it."""
-        from torrentlinker.media_tracker import plain
 
-        wanted = plain(re.sub(r"\s*\(\d{4}\)$", "", name))
-        names = {plain(name), wanted}
+        wanted = folded(re.sub(r"\s*\(\d{4}\)$", "", name))
+        names = {folded(name), wanted}
         for row in self._known_titles():
-            if row["kind"] == "series" and wanted in row["keys"]:
-                names.update(row["keys"])
+            keys = {k.replace(" ", "") for k in row["keys"]}
+            if row["kind"] == "series" and wanted in keys:
+                names.update(keys)
         return names - {""}
 
     def proposals(self, item: Item, limit: int = 4) -> list[dict[str, str]]:
@@ -686,7 +703,7 @@ class Board:
         if top.is_dir():
             files = sorted(
                 p for p in top.rglob("*")
-                if p.is_file() and not p.is_symlink() and p.name.lower() not in JUNK
+                if p.is_file() and not p.is_symlink() and not junk(p.name)
             )  # fmt: skip
         else:
             files = [top]
@@ -736,12 +753,11 @@ class Board:
         if item.kind == "series" and not os.path.lexists(lib / new_top.name):
             # The series already in the library under another case or accent joins it:
             # "Shingeki No Kyojin" goes into "Shingeki no Kyojin".
-            from torrentlinker.media_tracker import plain
 
             # Or under another of its names: the indexes know a series' French and original
             # titles, so "L'Attaque des Titans" joins "Shingeki no Kyojin".
             names = self.series_names(new_top.name)
-            twin = next((d for d in lib.iterdir() if d.is_dir() and plain(d.name) in names), None)
+            twin = next((d for d in lib.iterdir() if d.is_dir() and folded(d.name) in names), None)
             if twin is not None:
                 renamed = base / twin.name
                 targets = {

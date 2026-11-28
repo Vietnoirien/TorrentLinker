@@ -388,6 +388,16 @@ class Tasks:
                     folder.rmdir()
             with contextlib.suppress(OSError):
                 moved.rmdir()
+            # What a release folder keeps once its media left (Thumbs.db, uTorrent's part file)
+            # goes to the trash rather than staying in the library as a folder of its own.
+            from torrentlinker.ranger import junk
+
+            left = [p for p in moved.rglob("*") if p.is_file()] if moved.is_dir() else []
+            if moved.is_dir() and all(junk(p.name) for p in left):
+                with contextlib.suppress(StorageError):
+                    self.storage.trash(
+                        moved, "system", "Fichiers sans intérêt laissés par un rangement"
+                    )
         item.update(verified=True, final=str(landed), progress=1.0, undo=None,
                     note=item.get("note") or "Rangé")  # fmt: skip
         if clients:

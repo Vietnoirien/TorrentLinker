@@ -623,3 +623,22 @@ def test_a_series_joins_its_folder_under_another_of_its_titles(world: World):
     world.queue.enqueue("Ranger", "owner", [row])
     assert sorted(p.name for p in world.series.iterdir()) == ["Shingeki no Kyojin"]
     assert len(list((world.series / "Shingeki no Kyojin" / "Saison 03").iterdir())) == 1
+
+
+def test_a_series_joins_its_folder_whatever_its_punctuation(world: World):
+    """ "MONTY PYTHONS-FLYING CIRCUS-Saison 2" is "Monty Python's Flying Circus"; uTorrent's
+    part file and a Thumbs.db stay behind."""
+    world.organise()
+    (world.series / "Monty Python's Flying Circus" / "Saison 01").mkdir(parents=True)
+    season = world.old / "MONTY PYTHONS-FLYING CIRCUS-Saison 2-VOSTFR-DVDRIP-x264-AAC"
+    season.mkdir()
+    (season / "MONTY PYTHONS-FLYING CIRCUS-S02E01.mp4").write_bytes(b"m" * 40)
+    (season / "~uTorrentPartFile_478DBAE3.dat").write_bytes(b"u")
+    (season / "Thumbs.db").write_bytes(b"t")
+    world.board.scan([str(world.old)])
+    item = next(i for i in world.board.items(str(world.old)) if "MONTY" in i.name)
+    row = {"top": item.path, "prov": str(world.old), "kind": "series"}
+    world.queue.enqueue("Ranger", "owner", [row])
+    assert sorted(p.name for p in world.series.iterdir()) == ["Monty Python's Flying Circus"]
+    landed = world.series / "Monty Python's Flying Circus" / "Saison 02"
+    assert [p.suffix for p in landed.iterdir()] == [".mp4"]
