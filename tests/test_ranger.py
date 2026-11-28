@@ -429,3 +429,16 @@ def test_a_title_to_check_is_suggested_from_the_indexes_and_keeps_its_year(world
     item = Item("/x", "x.mkv", "film", 1, title="Épisode 50 (2011)", recognised=True)
     body = world.board._body(item, "")
     assert body["title"] == "Épisode 50" and body["year"] == "2011"
+
+
+def test_the_board_s_counts_follow_a_batch_as_it_runs(world: World):
+    """Each ranged item leaves its provenance's count at once, and the library that takes it
+    counts it: the board never shows a full old folder and an empty library mid-batch."""
+    world.organise()
+    before = len(world.board.items(str(world.old)))
+    alien = next(i for i in world.board.items(str(world.old)) if i.name.startswith("Alien"))
+    world.queue.enqueue(
+        "Ranger", "owner", [{"top": alien.path, "prov": str(world.old), "kind": "film"}]
+    )
+    assert len(world.board.items(str(world.old))) == before - 1
+    assert len(world.board.items(str(world.films))) == 1

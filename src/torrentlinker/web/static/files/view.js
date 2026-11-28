@@ -514,6 +514,16 @@ load();
 window.addEventListener("files-environment", () => load());
 if (window.filesReady) window.filesReady();
 else bridge.then(() => window.filesReady?.());
-// Only Tâches follows running work by itself, and the Organisation board while it reads the folders.
+// Tâches follows running work by itself, and so does Organisation while a batch runs or a folder
+// is read: its counts, and the Corbeille's, move with it. Other tabs reload when opened or acted
+// on, and a page is redrawn only when what it shows changed.
 let ticks = 0;
-setInterval(() => { ticks++; if (!document.hidden && ((S.tab === "tasks" && ticks % 5 === 0) || (S.tab === "organisation" && S.org?.scanning))) load(); }, 3000);
+setInterval(async () => {
+  ticks++;
+  if (document.hidden) return;
+  if (S.tab === "tasks" && ticks % 5 === 0) load();
+  else if (S.tab === "organisation" && (S.org?.scanning || (S.org?.jobs?.length && ticks % 2 === 0))) {
+    await load();
+    if (S.org?.jobs?.length) { try { S.trash = await api("trash"); render(); } catch { /* the badge waits */ } }
+  }
+}, 3000);

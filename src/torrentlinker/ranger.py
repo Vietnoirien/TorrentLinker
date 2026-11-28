@@ -42,6 +42,7 @@ from torrentlinker.organisation import (
 logger = logging.getLogger(__name__)
 SPEED = 150e6  # bytes per second of a copy to another disk, for the estimate
 ROLES = ("lib", "prov", "none")
+LIBRARY_RECOUNT = 10.0  # seconds between two readings of a library a batch fills
 TITLES_FOR = 300.0  # seconds the suggestions keep the indexes' titles
 KINDS = {ContentKind.MOVIE: "films", ContentKind.SERIES: "series"}
 CONTENT = {"films": ContentKind.MOVIE, "series": ContentKind.SERIES, "other": ContentKind.OTHER}
@@ -276,6 +277,20 @@ class Board:
         for item in items:
             item.torrents = index.under(item.path)
         return items
+
+    def moved(self, prov: str, top: str, library: str) -> None:
+        """One item was ranged: it leaves its provenance's count now; the library that took it
+        is read again at most every LIBRARY_RECOUNT seconds."""
+        with self._lock:
+            scan = self._scans.get(prov)
+            if scan:
+                scan["items"] = [i for i in scan["items"] if i.path != top]
+            last = self.__dict__.setdefault("_recounted", {})
+            due = library and time.monotonic() - last.get(library, 0.0) >= LIBRARY_RECOUNT
+            if due:
+                last[library] = time.monotonic()
+        if due:
+            self.scan([library])
 
     def items(self, path: str) -> list[Item]:
         """The items the Owner has not chosen to keep as they are."""
@@ -852,6 +867,14 @@ class RangerQueue:
                 "UPDATE items SET state=?, reason=?, note=? WHERE job=? AND seq=?",
                 (item["state"], item["reason"], item["note"], meta["job"], meta["seq"]),
             )
+            row = self._db.execute(
+                "SELECT prov, top, dest FROM items WHERE job=? AND seq=?",
+                (meta["job"], meta["seq"]),
+            ).fetchone()
+        if row is not None and item["state"] == "done":
+            # The board's counts follow the batch: the item leaves its provenance at once, and
+            # its library is read again now and then.
+            self.board.moved(row["prov"], row["top"], row["dest"])
 
     def _job_done(self, identifier: str, task: dict[str, Any]) -> None:
         with self._lock, self._db:
@@ -868,6 +891,7 @@ class RangerQueue:
             ).fetchall()
         provs = list(dict.fromkeys(r["prov"] for r in self._db.execute(
             "SELECT prov FROM items WHERE job=?", (identifier,)).fetchall()))  # fmt: skip
+        self.board.scan(list(dict.fromkeys(r["dest"] for r in rows if r["dest"])))
         for prov in provs:
             libraries = [r["dest"] for r in rows if r["prov"] == prov and r["dest"]]
             try:
