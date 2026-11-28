@@ -500,3 +500,61 @@ def test_a_new_season_joins_its_series_already_in_the_library(world: World):
     )
     assert (show / "Saison 02" / "Black Mirror S02E01.mkv").exists()
     assert (show / "Saison 01").is_dir() and not season2.exists()
+
+
+def test_to_another_disk_the_item_moves_first_and_is_renamed_there(world: World, monkeypatch):
+    """Across disks nothing is made on the source disk, which may be full: the item moves as
+    it is named, then is renamed in the library; a second part of a season joins the first,
+    and a Thumbs.db is never taken for a season."""
+    from torrentlinker import file_tasks
+
+    monkeypatch.setattr(file_tasks, "same_device", lambda a, b: False)
+    world.organise()
+    made: list[Path] = []
+    real_mkdir = Path.mkdir
+
+    def watched(self, *args, **kwargs):
+        made.append(self)
+        return real_mkdir(self, *args, **kwargs)
+
+    for part in (
+        "Shingeki.No.Kyojin.Saison.03.PART1.1080p",
+        "Shingeki.No.Kyojin.Saison.03.PART2.1080p",
+    ):
+        folder = world.old / part
+        folder.mkdir()
+        number = 1 if "PART1" in part else 13
+        (folder / f"Shingeki.No.Kyojin.S03E{number:02d}.1080p.mkv").write_bytes(b"s" * 40)
+        (folder / "Thumbs.db").write_bytes(b"t")
+    world.board.scan([str(world.old)])
+    monkeypatch.setattr(Path, "mkdir", watched)
+    for item in [i for i in world.board.items(str(world.old)) if "Shingeki" in i.name]:
+        world.queue.enqueue(
+            "Ranger", "owner", [{"top": item.path, "prov": str(world.old), "kind": "series"}]
+        )
+    season = world.series / "Shingeki No Kyojin" / "Saison 03"
+    assert sorted(p.name for p in season.iterdir()) == [
+        "Shingeki No Kyojin S03E01.mkv", "Shingeki No Kyojin S03E13.mkv",
+    ]  # fmt: skip
+    assert not any(p.is_relative_to(world.old) for p in made)  # nothing made at the source
+
+
+def test_a_verified_copy_keeps_its_original_when_the_disk_cannot_take_a_trash(
+    world: World, monkeypatch
+):
+    from torrentlinker import file_tasks
+    from torrentlinker.file_storage import StorageError
+
+    monkeypatch.setattr(file_tasks, "same_device", lambda a, b: False)
+
+    def full(*args, **kwargs):
+        raise StorageError("Could not trash: No space left on device")
+
+    monkeypatch.setattr(world.storage, "trash", full)
+    world.organise()
+    alien = next(i for i in world.board.items(str(world.old)) if i.name.startswith("Alien"))
+    world.queue.enqueue(
+        "Ranger", "owner", [{"top": alien.path, "prov": str(world.old), "kind": "film"}]
+    )
+    assert (world.films / "Alien (1979)" / "Alien (1979).mkv").exists()
+    assert Path(alien.path).exists()  # kept, not deleted, not failed

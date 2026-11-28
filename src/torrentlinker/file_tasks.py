@@ -266,6 +266,8 @@ class Tasks:
             raise StorageError(plan["error"])
         destination, new_top = Path(plan["dest"]), Path(plan["new_top"])
         landed = destination / new_top.name
+        if plan.get("merge") or not same_device(Path(item["from"]).parent, destination):
+            return self._ranger_across(task, item, plan, cancelled, allowed)
         steps = [
             r for r in plan["renames"]
             if os.path.lexists(r["from"]) or not os.path.lexists(r["to"])
@@ -328,6 +330,69 @@ class Tasks:
         if clients:
             self.refresh(clients)
 
+    def _ranger_across(self, task, item, plan, cancelled, allowed) -> None:
+        """To another disk: move the item as it is named first, then rename it there. Nothing
+        is made on the source disk, which may be full; a season or a part joins the folder the
+        library already has, file by file."""
+        top, destination = Path(item["from"]), Path(plan["dest"])
+        base, landed = top.parent, destination / Path(plan["new_top"]).name
+        moved = destination / top.name
+        loose = [
+            Path(r["from"]) for r in plan["renames"]
+            if Path(r["from"]) != top and not Path(r["from"]).is_relative_to(top)
+        ]  # fmt: skip
+        move = {"kind": "move", "actor": task["actor"], "conflict": "skip"}
+        if os.path.lexists(top):
+            if os.path.lexists(moved) and moved != landed:
+                if not plan.get("resumed"):
+                    raise StorageError(f"« {top.name} » existe déjà dans {destination.name}.")
+                self._discard(moved)  # the copy a stop interrupted: it is made again
+            part = _Mirror(item, {"from": str(top), "to": str(destination), "state": "running"})
+            self._item(move, part, cancelled, allowed)
+            if part["state"] == "skipped":
+                raise StorageError(f"« {top.name} » existe déjà dans {destination.name}.")
+        for side in loose:  # the subtitles beside a lone file follow it
+            if os.path.lexists(side):
+                aside = {"from": str(side), "to": str(destination), "state": "running", "note": ""}
+                self._item(move, aside, cancelled, allowed)
+        clients = sorted({info["client_id"] for _, info in self.seeds(moved)})
+        if clients:
+            self.refresh(clients)
+        rename = {"kind": "rename", "actor": task["actor"], "conflict": "skip"}
+        done: list[tuple[Path, Path]] = []
+        try:
+            for step in plan["renames"]:
+                old = destination / Path(step["from"]).relative_to(base)
+                new = destination / Path(step["to"]).relative_to(base)
+                if cancelled():
+                    raise InterruptedError("cancelled")
+                if not os.path.lexists(old) and os.path.lexists(new):
+                    continue  # renamed before a stop
+                renamed = {"from": str(old), "to": str(new), "state": "running", "note": ""}
+                self._item(rename, renamed, cancelled, allowed)
+                if renamed["state"] == "skipped":
+                    raise StorageError(f"« {new.relative_to(destination)} » existe déjà.")
+                done.append((old, new))
+        except BaseException:
+            # The item stays in the library under its old names: nothing is lost or half named.
+            for old, new in reversed(done):
+                back = {"from": str(new), "to": str(old), "state": "running", "note": ""}
+                try:
+                    self._item(rename, back, cancelled, allowed)
+                except Exception:  # noqa: BLE001 - put every other name back too
+                    logger.warning("Could not put %s back.", old, exc_info=True)
+            raise
+        if moved != landed and moved.is_dir():
+            for folder in sorted((p for p in moved.rglob("*") if p.is_dir()), reverse=True):
+                with contextlib.suppress(OSError):
+                    folder.rmdir()
+            with contextlib.suppress(OSError):
+                moved.rmdir()
+        item.update(verified=True, final=str(landed), progress=1.0, undo=None,
+                    note=item.get("note") or "Rangé")  # fmt: skip
+        if clients:
+            self.refresh(clients)
+
     def _conflict(self, task, item, source: Path, target: Path) -> Path | None:
         choice = task["conflict"]
         if choice == "keep-one":
@@ -366,7 +431,13 @@ class Tasks:
         if kind == "move":  # copied and verified: only now does the source go to its trash
             if target.is_dir():
                 self.followed(source, target)
-            stored = self.storage.trash(source, "system", "Déplacé vers un autre disque")
+            try:
+                stored = self.storage.trash(source, "system", "Déplacé vers un autre disque")
+            except StorageError as error:
+                # A full disk cannot even take a trash folder: the copy is done and verified,
+                # the original stays where it was until there is room.
+                item.update(note=f"Copié ; l'original reste en place ({error})", undo=None)
+                return
             item["undo"] = {"restore": stored["id"], "remove": str(target)}
 
     # -- Files a torrent seeds: through its client (ADR-0029) -----------------------------

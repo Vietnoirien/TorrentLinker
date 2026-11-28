@@ -42,6 +42,8 @@ from torrentlinker.organisation import (
 logger = logging.getLogger(__name__)
 SPEED = 150e6  # bytes per second of a copy to another disk, for the estimate
 ROLES = ("lib", "prov", "none")
+# What Windows and macOS leave in folders: never moved with an item, never a season.
+JUNK = {"thumbs.db", "desktop.ini", ".ds_store"}
 LIBRARY_RECOUNT = 10.0  # seconds between two readings of a library a batch fills
 TITLES_FOR = 300.0  # seconds the suggestions keep the indexes' titles
 KINDS = {ContentKind.MOVIE: "films", ContentKind.SERIES: "series"}
@@ -664,7 +666,10 @@ class Board:
             return {"error": why}
         base = top.parent
         if top.is_dir():
-            files = sorted(p for p in top.rglob("*") if p.is_file() and not p.is_symlink())
+            files = sorted(
+                p for p in top.rglob("*")
+                if p.is_file() and not p.is_symlink() and p.name.lower() not in JUNK
+            )  # fmt: skip
         else:
             files = [top]
         videos = [p for p in files if p.suffix.lower() in VIDEO]
@@ -716,22 +721,22 @@ class Board:
                 return {
                     "error": "This template has no folder: the torrent's other files cannot follow."
                 }
-        if new_top != top and os.path.lexists(new_top):
+        across = os.stat(base).st_dev != os.stat(lib).st_dev
+        if not across and new_top != top and os.path.lexists(new_top):
             return {"error": f"« {new_top.name} » existe déjà dans {base.name}."}
         landed = lib / new_top.name
         merge = False
         if os.path.lexists(landed) and new_top != landed:
-            # Another season of a series already in the library joins it, season by season.
-            seasons = {
-                t.relative_to(new_top).parts[0]
-                for t in targets.values()
-                if t.is_relative_to(new_top)
-            }
-            if item.kind != "series" or not landed.is_dir() or not seasons:
+            # Another season, or another part of a season, of a series already in the library
+            # joins its folder: only a file already there stops it.
+            if item.kind != "series" or not landed.is_dir():
                 return {"error": f"« {new_top.name} » existe déjà dans {lib.name}."}
-            taken = sorted(n for n in seasons if os.path.lexists(landed / n))
+            taken = sorted(
+                t.relative_to(base) for t in targets.values()
+                if os.path.lexists(lib / t.relative_to(base))
+            )  # fmt: skip
             if taken:
-                return {"error": f"« {new_top.name} / {taken[0]} » existe déjà dans {lib.name}."}
+                return {"error": f"« {taken[0]} » existe déjà dans {lib.name}."}
             merge = True
         return {
             "renames": renames, "new_top": str(new_top), "dest": str(lib), "merge": merge,
