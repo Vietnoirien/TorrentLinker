@@ -926,3 +926,18 @@ def test_a_torrent_read_without_its_file_list_still_holds_its_content(tmp_path: 
     assert [info["hash"] for _, info in seeds_under(films / "Gourou.2026.mkv", seeds)] == ["a" * 40]
     inside = tmp_path / "Séries" / "Black.Mirror.S03" / "E01.mkv"
     assert [info["hash"] for _, info in seeds_under(inside, seeds)] == ["b" * 40]
+
+
+def test_an_unfinished_download_is_never_ranged(tmp_path: Path):
+    torrent = Torrent(
+        "a" * 40, DUNE, tmp_path / "disk" / "Old", state="downloading", progress=0.15,
+        files={f"{DUNE}/{DUNE}.mkv": 100, f"{DUNE}/{DUNE}.fr.srt": 1, f"{DUNE}/info.nfo": 1},
+    )  # fmt: skip
+    world = World(tmp_path, torrent)
+    world.organise()
+    item = next(i for i in world.board.items(str(world.old)) if i.name == DUNE)
+    row = {"top": item.path, "prov": str(world.old), "kind": "film"}
+    world.queue.enqueue("Ranger", "owner", [row])
+    [task] = world.tasks.snapshot()
+    assert "Téléchargement en cours" in task["items"][0]["reason"]
+    assert (world.old / DUNE).is_dir() and world.client.calls == []

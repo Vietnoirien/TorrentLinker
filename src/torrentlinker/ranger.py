@@ -773,6 +773,8 @@ class Board:
         """Why a torrent's files cannot follow, found before anything moves."""
         if item.torrents and any(i.get("verifying") for i in item.torrents):
             return "This torrent is being checked."
+        if any(i.get("complete") is False for i in item.torrents):
+            return "Téléchargement en cours : il sera rangé une fois terminé."
         for info in item.torrents:
             client = self.client_of(info["client_id"])
             if client is not None and getattr(client, "repoint", None) is not None:

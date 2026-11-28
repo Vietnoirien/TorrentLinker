@@ -47,7 +47,7 @@ function provCard(p) {
   const sub = p.subs.length ? `<small class="muted og-subs">${say("including", "dont")} ${p.subs.map(([a, c]) => `${esc(a)} (${c})`).join(" · ")}</small>` : "";
   const count = scanning ? say("Reading…", "Analyse…") : !n ? (p.swapped.length ? say("All tidied", "Tout est rangé") : say("Nothing to tidy", "Rien à ranger"))
     : `${[p.films ? oplural(p.films, say("film", "film"), say("films", "films")) : "", p.series ? oplural(p.series, say("series", "série"), say("series", "séries")) : ""].filter(Boolean).join(" · ")} · ${size(obytes(p))}`;
-  const note = p.swapped.length ? `<div class="og-note">✓ ${say("Empty.", "Vide.")} <span>${say("Replaced by", "Remplacé par")} ${p.swapped.map(esc).join(", ")} ${say("in Settings.", "dans Paramètres.")}</span><button type="button" class="small quiet" data-o="settingsgo">${say("Open Settings", "Ouvrir Paramètres")}</button></div>` : "";
+  const note = p.swapped.length && !n && !scanning ? `<div class="og-note">✓ ${say("Empty.", "Vide.")} <span>${say("Replaced by", "Remplacé par")} ${p.swapped.map(esc).join(", ")} ${say("in Settings.", "dans Paramètres.")}</span><button type="button" class="small quiet" data-o="settingsgo">${say("Open Settings", "Ouvrir Paramètres")}</button></div>` : "";
   return `<article class="og-card og-prov ${O.linking === p.path ? "picking" : ""} ${p.to ? "" : "unlinked"}" data-card="${esc(p.path)}" draggable="true" data-drag="${esc(p.path)}">
     <div class="og-top"><span class="og-grip" aria-hidden="true">⠿</span><div class="og-title"><b>${esc(oshort(p))}</b><small class="muted">${esc(p.path)}</small></div><span class="badge">${roleName(p)}</span></div>
     <div class="og-meta">${odisk(p.disk)}</div><div class="og-count ${n ? "" : "muted"}">${count}</div>${sub}

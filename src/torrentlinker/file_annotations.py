@@ -29,6 +29,7 @@ def seeds_of(torrents: list[tuple[str, str, Any]]) -> list[tuple[Path, dict[str,
                         "hash": torrent.hash.lower(), "ratio": round(torrent.ratio, 2),
                         "name": torrent.name, "save_path": str(torrent.save_path),
                         "seeding": torrent.is_seeding,
+                        "complete": torrent.progress >= 1.0,
                         "verifying": "check" in torrent.state.lower(),
                     },
                 )
