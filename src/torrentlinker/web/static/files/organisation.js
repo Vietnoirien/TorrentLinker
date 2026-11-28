@@ -67,6 +67,7 @@ function orgHTML() {
   const o = S.org;
   if (!o) return `<div class="empty">…</div>`;
   const head = `<div class="og-head"><div class="row"><h2>Organisation</h2>${tip("Here you choose the folders the app organises (your libraries) and where the films and series to tidy come from. Nothing moves without your say; everything keeps sharing.", "Ici, vous choisissez les dossiers que l'application organise (vos bibliothèques) et d'où viennent les films et séries à y ranger. Rien ne bouge sans votre accord ; tout continue de partager.", say("Help on Organisation", "Aide sur Organisation"))}</div><span class="grow"></span>
+    ${(() => { const ready = o.provenances.filter((p) => p.ready).map((p) => p.path); return ready.length ? `<button type="button" class="primary" data-o="rangerall" data-ps="${esc(JSON.stringify(ready))}">${say("Tidy everything", "Tout ranger")}</button>` : ""; })()}
     <button type="button" data-o="folders">${say("Choose folders", "Choisir les dossiers")}</button><button type="button" data-o="settings" aria-label="${say("Tidy settings", "Réglages du rangement")}" title="${say("Settings", "Réglages")}">⚙</button></div>`;
   const bar = O.linking ? `<div class="og-linking" role="status"><span>${say("Pin", "Fixer")} <b>${esc(oshort(o.provenances.find((p) => p.path === O.linking) || { path: "", name: "" }))}</b></span><button type="button" class="small" data-o="cancellink">${say("Cancel", "Annuler")}</button></div>` : "";
   const jobs = o.jobs?.length ? `<div class="og-note"><span>${o.jobs.map((j) => `${esc(j.label)} · ${j.ended}/${j.total}`).join(" · ")}</span><button type="button" class="small quiet" data-o="totasks">${say("Follow in Tasks", "Suivre dans Tâches")}</button></div>` : "";
@@ -182,8 +183,8 @@ document.addEventListener("click", async (e) => {
   else if (k === "pick") { const from = O.linking; O.linking = null; link(from, el.dataset.l); }
   else if (k === "unlink") link(p, "");
   else if (k === "dolink") { $("dialog").close(); link(p, el.dataset.l); }
-  else if (k === "ranger") {
-    O.paths = [p];
+  else if (k === "ranger" || k === "rangerall") {
+    O.paths = k === "rangerall" ? JSON.parse(el.dataset.ps) : [p];
     try { O.summary = await api("organisation/summary", { paths: O.paths }); openSheet(summarySheet); } catch (x) { ofail(x); }
   } else if (k === "launch") {
     try { const r = await api("organisation/ranger", { paths: O.paths }); $("dialog").close(); TLToast.show(say(`${r.queued} item(s) queued: follow them in Tasks.`, `${r.queued} élément(s) lancé(s) : suivez-les dans Tâches.`)); S.tab = "tasks"; render(); load(); } catch (x) { ofail(x); }
