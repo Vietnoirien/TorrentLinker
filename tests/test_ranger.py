@@ -786,3 +786,29 @@ def test_episodes_filed_as_films_go_back_to_their_series(world: World, monkeypat
     ]  # fmt: skip
     assert len(list((world.series / "tenjo tenge" / "Saison 01").iterdir())) == 2
     assert not bebop.exists()
+
+
+def test_films_with_episode_in_their_title_stay_films(tmp_path: Path, monkeypatch):
+    """ "Episode 50 (2011)" is a film, and so are Star Wars' episodes, whose videos carry
+    "Star.Wars.Episode.6.Return.of.the.Jedi"; "1 – La Grande Aventure de Bender" is titled
+    without its number in the list."""
+    from torrentlinker import library_items
+
+    films = tmp_path / "Films"
+    (films / "Episode 50 (2011)").mkdir(parents=True)
+    (films / "Episode 50 (2011)" / "Episode 50 (2011).mkv").write_bytes(b"e" * 30)
+    saga = films / "Star Wars"
+    saga.mkdir()
+    says = {}
+    for part, episode in ((1, 6), (2, 3)):
+        video = saga / f"Star Wars - part{part}.mkv"
+        video.write_bytes(bytes([part]) * 30)
+        says[str(video)] = f"Star.Wars.Episode.{episode}.Title.1080p.multi.x265"
+    (films / "1 – La Grande Aventure de Bender").mkdir()
+    (
+        films / "1 – La Grande Aventure de Bender" / "1 – La Grande Aventure de Bender.avi"
+    ).write_bytes(b"b" * 30)
+    monkeypatch.setattr(library_items, "embedded_title", lambda path: says.get(path, ""))
+    found = {i.name: i for i in discover(films)}
+    assert {i.kind for i in found.values()} == {"film"}
+    assert found["1 – La Grande Aventure de Bender"].title == "La Grande Aventure de Bender"

@@ -102,8 +102,9 @@ SERIES_MARK = re.compile(
     re.I,
 )
 # An episode's number in a name guessit misses: "tenjo.tenge.e01m", "oav02", "Session 05".
+# Never the word "Episode" alone: films carry it ("Episode 50", "Star Wars Episode 6").
 EPISODE = re.compile(
-    r"(?:^|[ ._-])(?:s\d{1,2})?(?:e|ep|episode|oav|ova|session)[ ._-]?#?(\d{1,3})"
+    r"(?:^|[ ._-])(?:s\d{1,2})?(?:e|ep|oav|ova|session)[ ._-]?#?(\d{1,3})"
     r"(?=[a-z]?(?:$|[ ._-]))",
     re.I,
 )
@@ -218,8 +219,10 @@ def _item(path: str, base: str, videos, bodies, titles, series_folder: bool = Fa
         guessit(Path(path).name).get("title") if kind == "series" and Path(path).is_dir() else ""
     )
     guessed_title = str(guessed.get("title") or "")
-    if guessed_title.isdigit():  # "1 - La Grande Aventure de Bender": a number, then the title
-        stem = re.sub(r"^\s*\d{1,3}\s*[-–.]\s*", "", files[0].stem)
+    # "1 - La Grande Aventure de Bender", "1 – …": a number in a list, then the title.
+    numbered = re.match(r"^\s*\d{1,3}\s*[-–]\s+(\S.*)$", files[0].stem)
+    if guessed_title.isdigit() or (numbered and guessed_title.startswith(files[0].stem[:2])):
+        stem = numbered.group(1) if numbered else files[0].stem
         guessed_title = str(guessit(stem).get("title") or stem)
     title = fixed or str(known or "") or str(named or guessed_title)
     if kind == "series" and not (fixed or known):
