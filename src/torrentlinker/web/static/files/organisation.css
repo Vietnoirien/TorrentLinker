@@ -118,3 +118,6 @@ dialog.sheet { width: min(680px, calc(100vw - 24px)); }
 .og-act select { padding: 5px 8px; font-size: 13px; max-width: 150px; }
 @media (max-width: 800px) { .og-head button { white-space: nowrap; }
 @media (max-width: 800px) { .og-head > .row { flex: 1 1 100%; } .og-head > .grow { display: none; } .og-head button[data-o=folders] { flex: 1; } }
+.og-picks { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+.og-picks:empty { display: none; }
+.og-pick { border-radius: 999px; }

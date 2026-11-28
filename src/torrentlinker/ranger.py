@@ -42,6 +42,7 @@ from torrentlinker.organisation import (
 logger = logging.getLogger(__name__)
 SPEED = 150e6  # bytes per second of a copy to another disk, for the estimate
 ROLES = ("lib", "prov", "none")
+TITLES_FOR = 300.0  # seconds the suggestions keep the indexes' titles
 KINDS = {ContentKind.MOVIE: "films", ContentKind.SERIES: "series"}
 CONTENT = {"films": ContentKind.MOVIE, "series": ContentKind.SERIES, "other": ContentKind.OTHER}
 ACTOR = "Rangement"
@@ -395,31 +396,73 @@ class Board:
         return body
 
     def suggest(self, query: str, limit: int = 8) -> list[dict[str, str]]:
-        """Titles the film and series indexes know, for the title a Review fixes."""
-        query = query.strip()
-        if len(query) < 2:
+        """Titles the film and series indexes know, for the title a Review fixes: compared
+        without case, accents or punctuation ("episode" finds "Épisode 50")."""
+        from torrentlinker.media_tracker import plain
+
+        wanted = plain(query)
+        if len(wanted) < 2:
             return []
-        like, start = f"%{query}%", f"{query}%"
-        found: list[dict[str, str]] = []
+        starts, contains = [], []
+        for row in self._known_titles():
+            names = row["keys"]
+            if any(n.startswith(wanted) for n in names):
+                starts.append(row)
+            elif any(wanted in n for n in names):
+                contains.append(row)
+        seen, out = set(), []
+        for row in [*starts, *contains]:
+            key = (row["keys"][0], row["year"])
+            if key not in seen:
+                seen.add(key)
+                out.append({"title": row["title"], "year": row["year"], "kind": row["kind"]})
+            if len(out) >= limit:
+                break
+        return out
+
+    def _known_titles(self) -> list[dict[str, Any]]:
+        """Every title of the indexes, read once every few minutes for the suggestions."""
+        from torrentlinker.media_tracker import plain
+
+        cached = self.__dict__.get("_titles")
+        if cached and time.monotonic() - cached[0] < TITLES_FOR:
+            return cached[1]
+        rows: list[dict[str, Any]] = []
         with self.media.lock:
             for table, kind in (("film_meta", "film"), ("film_c411", "film"),
                                 ("series_c411", "series")):  # fmt: skip
                 try:
-                    rows = self.media.db.execute(
-                        f"SELECT title, year FROM {table} WHERE title LIKE ? OR original_title"
-                        " LIKE ? ORDER BY title LIKE ? DESC, year DESC LIMIT ?",
-                        (like, like, start, limit),
+                    found = self.media.db.execute(
+                        f"SELECT title, original_title, year FROM {table} WHERE title <> ''"
                     ).fetchall()
                 except sqlite3.OperationalError:
                     continue
-                found += [{"title": r[0], "year": str(r[1] or ""), "kind": kind} for r in rows]
-        seen, out = set(), []
-        for row in sorted(found, key=lambda r: not r["title"].lower().startswith(query.lower())):
-            key = (row["title"].lower(), row["year"])
-            if key not in seen and row["title"]:
-                seen.add(key)
-                out.append(row)
-        return out[:limit]
+                for title, original, year in found:
+                    keys = [plain(title)] + ([plain(original)] if original else [])
+                    rows.append(
+                        {"title": title, "year": str(year or ""), "kind": kind, "keys": keys}
+                    )
+        rows.sort(key=lambda r: r["year"], reverse=True)
+        self._titles = (time.monotonic(), rows)
+        return rows
+
+    def proposals(self, item: Item, limit: int = 4) -> list[dict[str, str]]:
+        """What an unrecognised item might be, guessed from its file name."""
+        from guessit import guessit
+
+        name = Path(item.name).name
+        try:
+            guessed = str(guessit(name).get("title") or "")
+        except Exception:  # noqa: BLE001  (a name guessit cannot read proposes nothing)
+            guessed = ""
+        # guessit reads "Episode.50.2011…" as an episode number: the words before the year
+        # or the quality are the title then.
+        leading = re.split(r"[ ._-](?:19|20)\d{2}(?:[ ._-]|$)|[ ._-]\d{3,4}p", Path(name).stem)[0]
+        leading = re.sub(r"[._]+", " ", leading).strip()
+        for wanted in dict.fromkeys(w for w in (guessed, leading) if w):
+            if found := self.suggest(wanted, limit):
+                return found
+        return []
 
     # -- The board ----------------------------------------------------------------------------
 
@@ -491,7 +534,10 @@ class Board:
             "films": len(films), "series": len(series),
             "bytesFilms": sum(i.size for i in films), "bytesSeries": sum(i.size for i in series),
             "subs": sorted(groups.items(), key=lambda kv: -kv[1])[:4],
-            "review": [{"path": i.path, "name": i.name, "size": i.size} for i in review],
+            "review": [
+                {"path": i.path, "name": i.name, "size": i.size, "proposals": self.proposals(i)}
+                for i in review
+            ],
             "torrents": len(torrents),
             "cross": sum(1 for i in ready if len(i.torrents) > 1),
             "liens": sum(max(0, len(i.torrents) - 1) for i in ready),

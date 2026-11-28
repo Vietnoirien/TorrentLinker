@@ -421,9 +421,11 @@ def test_a_title_to_check_is_suggested_from_the_indexes_and_keeps_its_year(world
             [("Épisode 50", "Episode 50", "2011"), ("La Septième Compagnie", "", "1973")],
         )
     assert world.board.suggest("é") == []  # one letter is not a search
-    found = world.board.suggest("pisode")
+    found = world.board.suggest("episode")  # without its accent, still found
     assert found == [{"title": "Épisode 50", "year": "2011", "kind": "film"}]
-    assert world.board.suggest("Episode")[0]["year"] == "2011"  # the original title counts
+    assert world.board.suggest("Septieme")[0]["year"] == "1973"
+    named = Item("/y", "Episode.50.2011.French.720P.WebRip.X264.mkv", "film", 1)
+    assert world.board.proposals(named)[0]["title"] == "Épisode 50"
     item = Item("/x", "x.mkv", "film", 1, title="Épisode 50 (2011)", recognised=True)
     body = world.board._body(item, "")
     assert body["title"] == "Épisode 50" and body["year"] == "2011"
