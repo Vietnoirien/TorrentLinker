@@ -58,3 +58,7 @@ Le bouton **Documentation**, au-dessus des Paramètres, ouvre les guides illustr
 ## Interface web et Docker
 
 Une interface web avec assistant de configuration est publiée en image Docker pour les NAS et seedboxes : `ghcr.io/vietnoirien/torrentlinker`. Partez de l’[exemple Compose](deploy/compose.example.yaml) et consultez le [guide Docker](docs/guide/fr/web-docker.md) pour l’accès aux dossiers.
+
+## Licence
+
+TorrentLinker est un logiciel libre distribué sous la [licence publique générale GNU](LICENSE), version 3 ou (à votre choix) toute version ultérieure (GPL-3.0-or-later). La formule [ReleaseScore](https://github.com/Pilaleur/releasescore) incluse reste sous sa propre licence MIT.
