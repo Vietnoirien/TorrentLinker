@@ -234,6 +234,15 @@ def _item(path: str, base: str, videos, bodies, titles, series_folder: bool = Fa
         guessit(Path(path).name).get("title") if kind == "series" and Path(path).is_dir() else ""
     )
     guessed_title = str(guessed.get("title") or "")
+    if guessed.get("alternative_title") and kind == "film":
+        # "28 Ans plus tard - Le Temple des morts": a subtitle the name sets apart with " - " is
+        # part of the film's name; guessit's other "alternative titles" are release words.
+        subtitle = guessed["alternative_title"]
+        subtitle = str(subtitle[0] if isinstance(subtitle, list) else subtitle)
+        spelled = Path(path).name if Path(path).is_dir() else files[0].stem
+        after = re.split(r"\s[-–]\s", spelled, maxsplit=1)[1:]
+        if after and after[0].casefold().startswith(subtitle.casefold()):
+            guessed_title = f"{guessed_title} - {subtitle}"
     # "1 - La Grande Aventure de Bender", "1 – …": a number in a list, then the title.
     numbered = re.match(r"^\s*\d{1,3}\s*[-–]\s+(\S.*)$", files[0].stem)
     if guessed_title.isdigit() or (numbered and guessed_title.startswith(files[0].stem[:2])):

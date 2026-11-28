@@ -822,3 +822,22 @@ def test_films_with_episode_in_their_title_stay_films(tmp_path: Path, monkeypatc
         ]
         or len([n for n in found if n.startswith("Star Wars/")]) == 2
     )
+
+
+def test_a_films_subtitle_is_kept_and_release_words_are_not(tmp_path: Path):
+    films = tmp_path / "Films"
+    sequel = films / "28 Ans plus tard - Le Temple des morts (2026)"
+    sequel.mkdir(parents=True)
+    (sequel / "28 Ans plus tard - Le Temple des morts (2026).mkv").write_bytes(b"t" * 30)
+    (
+        films / "Alien.Romulus.2024.Multi.VF2.2160p.Webrip.HDR10PLUS.EAC3.5.1.x265-Neostark.mkv"
+    ).write_bytes(b"a" * 30)
+    found = {i.name: i.title for i in discover(films)}
+    assert (
+        found["28 Ans plus tard - Le Temple des morts (2026)"]
+        == "28 Ans plus tard - Le Temple des morts"
+    )
+    assert (
+        found["Alien.Romulus.2024.Multi.VF2.2160p.Webrip.HDR10PLUS.EAC3.5.1.x265-Neostark.mkv"]
+        == "Alien Romulus"
+    )
