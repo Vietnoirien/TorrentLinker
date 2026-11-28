@@ -36,7 +36,7 @@ function reviewHTML() {
   return `<section class="og-review card" id="og-review"><div class="row"><h3>${say("To check", "À vérifier")}</h3><span class="badge ${rows.length ? "warn" : "ok"}">${rows.length}</span>${tip("These items have no recognisable title (for example IMG_3310.mov). They stay where they are until you fix them. Give them a title so they are tidied, or keep them as they are.", "Ces éléments n'ont pas de titre reconnaissable (par exemple IMG_3310.mov). Ils restent où ils sont tant que vous ne les avez pas corrigés. Donnez-leur un titre pour qu'ils soient rangés, ou gardez-les tel quel.", say("Help on To check", "Aide sur À vérifier"))}<span class="grow"></span>
     ${rows.length ? `<button type="button" class="small quiet" data-o="revtoggle">${O.reviewOpen ? say("Collapse", "Replier") : say("Show", "Afficher")}</button>` : ""}</div>
     ${rows.length ? (O.reviewOpen ? `<div class="og-rv">${rows.map(({ p, r }) => `<div class="og-rrow"><div class="nm"><b title="${esc(r.name)}">${esc(r.name)}</b><small>${esc(oshort(p))} · ${size(r.size)}</small></div>
-      <input data-o="title" data-i="${esc(r.path)}" placeholder="${say("Title of the film or series", "Titre du film ou de la série")}" aria-label="${say("Title of", "Titre de")} ${esc(r.name)}" />
+      <input data-o="title" data-i="${esc(r.path)}" list="og-titles" autocomplete="off" placeholder="${say("Title of the film or series", "Titre du film ou de la série")}" aria-label="${say("Title of", "Titre de")} ${esc(r.name)}" />
       <span class="btns"><button type="button" class="small primary" data-o="fix" data-i="${esc(r.path)}">${say("Fix", "Corriger")}</button><button type="button" class="small" data-o="keep" data-i="${esc(r.path)}">${say("Keep as is", "Garder tel quel")}</button></span></div>`).join("")}</div>` : "") : `<p class="muted">${say("Nothing to check.", "Rien à vérifier.")}</p>`}</section>`;
 }
 function provCard(p) {
@@ -207,6 +207,23 @@ document.addEventListener("change", async (e) => {
   if (k === "dest") link(el.dataset.p, el.value);
   else if (k === "kind") { try { await api("organisation/role", { path: el.dataset.f, role: "lib", kind: el.value }); } catch (x) { ofail(x); } await Promise.all([loadFolders(), reload()]); }
   else if (k === "tpl") { try { await api("organisation/template", { folder: el.dataset.f, kind: el.dataset.kind, template: el.value }); TLToast.show(say("Template saved.", "Modèle enregistré.")); } catch (x) { ofail(x); } reload(); }
+});
+// Titles the film and series indexes know, under the field as it is typed. The list lives
+// outside the page's render, so redrawing never drops it.
+let titleAsk = 0;
+document.addEventListener("input", (e) => {
+  if (e.target.dataset?.o !== "title") return;
+  const value = e.target.value.trim(), asked = ++titleAsk;
+  clearTimeout(e.target.titleTimer);
+  e.target.titleTimer = setTimeout(async () => {
+    let list = document.getElementById("og-titles");
+    if (!list) { list = document.createElement("datalist"); list.id = "og-titles"; document.body.append(list); }
+    if (value.length < 2) { list.replaceChildren(); return; }
+    let found = [];
+    try { found = (await api(`organisation/suggest?q=${encodeURIComponent(value)}`)).titles; } catch { return; }
+    if (asked !== titleAsk) return;
+    list.replaceChildren(...found.map((t) => { const o = document.createElement("option"); o.value = t.year ? `${t.title} (${t.year})` : t.title; o.label = t.kind === "series" ? say("Series", "Série") : "Film"; return o; }));
+  }, 200);
 });
 document.addEventListener("input", (e) => {
   if (e.target.dataset?.o !== "tpl") return;

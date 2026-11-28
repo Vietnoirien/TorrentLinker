@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import sqlite3
 import threading
 import time
@@ -385,8 +386,40 @@ class Board:
     def _body(self, item: Item, video: str) -> dict[str, Any]:
         body: dict[str, Any] = next((b[video] for b in self._bodies.values() if video in b), {})
         if item.title:
-            return {**body, "series" if item.kind == "series" else "title": item.title}
+            # A title picked from the suggestions carries its year: "Titre (2011)".
+            dated = re.fullmatch(r"(.+?)\s*\((\d{4})\)", item.title)
+            title, year = (dated.group(1), dated.group(2)) if dated else (item.title, "")
+            body = {**body, "series" if item.kind == "series" else "title": title}
+            if year:
+                body["year"] = year
         return body
+
+    def suggest(self, query: str, limit: int = 8) -> list[dict[str, str]]:
+        """Titles the film and series indexes know, for the title a Review fixes."""
+        query = query.strip()
+        if len(query) < 2:
+            return []
+        like, start = f"%{query}%", f"{query}%"
+        found: list[dict[str, str]] = []
+        with self.media.lock:
+            for table, kind in (("film_meta", "film"), ("film_c411", "film"),
+                                ("series_c411", "series")):  # fmt: skip
+                try:
+                    rows = self.media.db.execute(
+                        f"SELECT title, year FROM {table} WHERE title LIKE ? OR original_title"
+                        " LIKE ? ORDER BY title LIKE ? DESC, year DESC LIMIT ?",
+                        (like, like, start, limit),
+                    ).fetchall()
+                except sqlite3.OperationalError:
+                    continue
+                found += [{"title": r[0], "year": str(r[1] or ""), "kind": kind} for r in rows]
+        seen, out = set(), []
+        for row in sorted(found, key=lambda r: not r["title"].lower().startswith(query.lower())):
+            key = (row["title"].lower(), row["year"])
+            if key not in seen and row["title"]:
+                seen.add(key)
+                out.append(row)
+        return out[:limit]
 
     # -- The board ----------------------------------------------------------------------------
 

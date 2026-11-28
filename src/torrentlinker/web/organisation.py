@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from torrentlinker.file_storage import FileStorage, StorageError
@@ -98,6 +98,10 @@ def organisation_routes(
             raise HTTPException(404, "This is not an organised library.")
         storage.set_template(body.folder, body.kind, body.template)
         return {"ok": True}
+
+    @app.get("/api/files/organisation/suggest")
+    def suggest(q: str = Query("", max_length=200)) -> dict[str, Any]:
+        return {"titles": board.suggest(q)}
 
     @app.post("/api/files/organisation/review")
     def review(body: Review) -> dict[str, Any]:

@@ -18,7 +18,7 @@ from torrentlinker.domain import ContentKind, LibraryFolder, Torrent
 from torrentlinker.file_annotations import seeds_of
 from torrentlinker.file_storage import FileStorage
 from torrentlinker.file_tasks import Tasks
-from torrentlinker.library_items import discover, readable
+from torrentlinker.library_items import Item, discover, readable
 from torrentlinker.organisation import Organisation
 from torrentlinker.path_follow import replace_library
 from torrentlinker.ranger import Board, RangerQueue
@@ -409,3 +409,21 @@ def test_the_old_per_folder_switches_become_the_provenance_auto(world: World):
     assert world.board.auto_of(str(world.old))
     world.board.set_auto(str(world.old), False)
     assert not world.board.auto_of(str(world.old))
+
+
+def test_a_title_to_check_is_suggested_from_the_indexes_and_keeps_its_year(world: World):
+    with world.media.lock:
+        world.media.db.execute(
+            "CREATE TABLE film_c411 (tkey TEXT, title TEXT, original_title TEXT, year TEXT)"
+        )
+        world.media.db.executemany(
+            "INSERT INTO film_c411 VALUES ('', ?, ?, ?)",
+            [("Épisode 50", "Episode 50", "2011"), ("La Septième Compagnie", "", "1973")],
+        )
+    assert world.board.suggest("é") == []  # one letter is not a search
+    found = world.board.suggest("pisode")
+    assert found == [{"title": "Épisode 50", "year": "2011", "kind": "film"}]
+    assert world.board.suggest("Episode")[0]["year"] == "2011"  # the original title counts
+    item = Item("/x", "x.mkv", "film", 1, title="Épisode 50 (2011)", recognised=True)
+    body = world.board._body(item, "")
+    assert body["title"] == "Épisode 50" and body["year"] == "2011"
