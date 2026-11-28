@@ -524,7 +524,9 @@ def test_to_another_disk_the_item_moves_first_and_is_renamed_there(world: World,
         folder = world.old / part
         folder.mkdir()
         number = 1 if "PART1" in part else 13
-        (folder / f"Shingeki.No.Kyojin.S03E{number:02d}.1080p.mkv").write_bytes(bytes([number]) * 40)
+        (folder / f"Shingeki.No.Kyojin.S03E{number:02d}.1080p.mkv").write_bytes(
+            bytes([number]) * 40
+        )
         (folder / "Thumbs.db").write_bytes(b"t")
     world.board.scan([str(world.old)])
     monkeypatch.setattr(Path, "mkdir", watched)
