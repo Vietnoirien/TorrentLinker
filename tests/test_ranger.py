@@ -841,3 +841,16 @@ def test_a_films_subtitle_is_kept_and_release_words_are_not(tmp_path: Path):
         found["Alien.Romulus.2024.Multi.VF2.2160p.Webrip.HDR10PLUS.EAC3.5.1.x265-Neostark.mkv"]
         == "Alien Romulus"
     )
+
+
+def test_an_empty_folder_a_stopped_attempt_left_does_not_block_the_move(world: World, monkeypatch):
+    from torrentlinker import file_tasks
+
+    monkeypatch.setattr(file_tasks, "same_device", lambda a, b: False)
+    world.organise()
+    pack = next(i for i in world.board.items(str(world.old)) if "Black.Mirror" in i.name)
+    (world.series / Path(pack.path).name / "Saison 01").mkdir(parents=True)  # left empty
+    row = {"top": pack.path, "prov": str(world.old), "kind": "series"}
+    world.queue.enqueue("Ranger", "owner", [row])
+    assert (world.series / "Black Mirror").is_dir()
+    assert not (world.series / Path(pack.path).name).exists()

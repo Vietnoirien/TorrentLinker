@@ -74,6 +74,11 @@ def _identical(a: Path, b: Path) -> bool:
     return digest(a) == digest(b)
 
 
+def _empty(folder: Path) -> bool:
+    """A folder holding no file at all, however deep (folders only)."""
+    return not any(p.is_file() or p.is_symlink() for p in folder.rglob("*"))
+
+
 class _Mirror(dict):  # type: ignore[type-arg]
     """A step of an item: its progress and time left show on the item itself."""
 
@@ -365,6 +370,9 @@ class Tasks:
         ]  # fmt: skip
         move = {"kind": "move", "actor": task["actor"], "conflict": "skip"}
         if os.path.lexists(top) and top.parent != destination:  # already in its library
+            if moved.is_dir() and not moved.is_symlink() and moved != landed and _empty(moved):
+                # An attempt that stopped left an empty folder here: nothing to keep in it.
+                shutil.rmtree(moved)
             if os.path.lexists(moved) and moved != landed:
                 if not plan.get("resumed"):
                     raise StorageError(f"« {top.name} » existe déjà dans {destination.name}.")
