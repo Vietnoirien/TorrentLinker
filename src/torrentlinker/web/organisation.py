@@ -123,7 +123,7 @@ def organisation_routes(
         """Queue every ready item of the chosen provenances: nothing moves in this request,
         the batch is kept and runs as one Tâche that survives a restart."""
         actor = request.state.actor
-        known = set(board.provenances())
+        known = set(board.provenances()) | {lib["path"] for lib in board.libraries()}
         rows = []
         for prov in body.paths:
             if prov not in known:
@@ -132,7 +132,7 @@ def organisation_routes(
                 raise HTTPException(409, "The folder is still being read: try again in a moment.")
             rows += [
                 {"top": i.path, "prov": prov, "kind": i.kind, "title": i.title}
-                for i in board.items(prov)
+                for i in board.todo(prov)
                 if i.recognised
             ]
         if not rows:

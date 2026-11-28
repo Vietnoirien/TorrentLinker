@@ -678,3 +678,35 @@ def test_two_episodes_given_one_name_wait_before_anything_moves(world: World):
     assert season.is_dir() and len(list(season.iterdir())) == 2  # nothing moved
     [task] = world.tasks.snapshot()
     assert "même nom" in task["items"][0]["reason"]
+
+
+def test_an_organised_library_ranges_what_it_holds_unorganised_in_place(world: World):
+    """A release left under its own name in the library, or a season beside its series, is
+    listed on the library and ranged where it is, without leaving the disk."""
+    world.organise()
+    loose = world.films / "Moon.2009.FRENCH.720p.BluRay.x264.mkv"
+    loose.write_bytes(b"m" * 30)
+    (world.series / "Monty Python's Flying Circus" / "Saison 01").mkdir(parents=True)
+    (
+        world.series
+        / "Monty Python's Flying Circus"
+        / "Saison 01"
+        / "Monty Python's Flying Circus S01E01.mp4"
+    ).write_bytes(b"a" * 20)
+    beside = world.series / "MONTY PYTHONS-FLYING CIRCUS-Saison 3-VOSTFR-DVDRIP"
+    beside.mkdir()
+    (beside / "MONTY_PYTHONS_FLYING_CIRCUS_S3.EP 27-whickers world.mp4").write_bytes(b"w" * 20)
+    world.board.scan([str(world.films), str(world.series)])
+    assert [i.path for i in world.board.unorganised(str(world.films))] == [str(loose)]
+    assert [i.path for i in world.board.unorganised(str(world.series))] == [str(beside)]
+    for lib in (world.films, world.series):
+        rows = [
+            {"top": i.path, "prov": str(lib), "kind": i.kind} for i in world.board.todo(str(lib))
+        ]
+        world.queue.enqueue("Ranger", "owner", rows)
+    assert (world.films / "Moon (2009)" / "Moon (2009).mp4").exists() or (
+        world.films / "Moon (2009)" / "Moon (2009).mkv"
+    ).exists()
+    show = world.series / "Monty Python's Flying Circus"
+    assert (show / "Saison 03" / "Monty Python's Flying Circus S03E27.mp4").exists()
+    assert sorted(p.name for p in world.series.iterdir()) == ["Monty Python's Flying Circus"]

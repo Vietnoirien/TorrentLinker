@@ -305,6 +305,8 @@ class Tasks:
                         raise StorageError(f"« {season.name} » existe déjà dans {landed.name}.")
                 with contextlib.suppress(OSError):
                     new_top.rmdir()
+            elif new_top.parent == destination:  # ranged inside its own library: no move
+                part = _Mirror(item, {"from": str(new_top), "to": str(destination)})
             else:
                 part = _Mirror(
                     item, {"from": str(new_top), "to": str(destination), "state": "running"}
@@ -362,7 +364,7 @@ class Tasks:
             if Path(r["from"]) != top and not Path(r["from"]).is_relative_to(top)
         ]  # fmt: skip
         move = {"kind": "move", "actor": task["actor"], "conflict": "skip"}
-        if os.path.lexists(top):
+        if os.path.lexists(top) and top.parent != destination:  # already in its library
             if os.path.lexists(moved) and moved != landed:
                 if not plan.get("resumed"):
                     raise StorageError(f"« {top.name} » existe déjà dans {destination.name}.")

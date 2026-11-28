@@ -305,6 +305,11 @@ class Board:
                 items = []
             with self._lock:
                 self._scans[path] = {"state": "ready", "items": items, "at": time.time()}
+            if path in {lib["path"] for lib in self.libraries()}:
+                try:  # worked out here, in the background, never in a page's request
+                    self.unorganised(path, compute=True)
+                except Exception:  # noqa: BLE001 - the board still shows the library
+                    logger.warning("Could not check %s against its template.", path, exc_info=True)
 
     def _discover(self, path: str) -> list[Item]:
         client = self.default_client()
@@ -333,6 +338,36 @@ class Board:
             item.torrents = index.under(item.path)
         return items
 
+    def todo(self, path: str) -> list[Item]:
+        """What ranging a folder takes: a provenance's items, or what an organised library
+        holds that its template does not name yet."""
+        if path in {lib["path"] for lib in self.libraries()}:
+            return self.unorganised(path)
+        return self.items(path)
+
+    def unorganised(self, library: str, compute: bool = False) -> list[Item]:
+        """The items of an organised library that its template would rename or move: a
+        release left under its own name, a season beside its series. Worked out once per
+        reading of the library."""
+        scan = self._scans.get(library)
+        if not scan or scan.get("state") != "ready":
+            return []
+        cached = scan.get("todo")
+        if cached is not None:
+            return cached
+        if not compute:
+            return []  # the background reading works it out
+        found = []
+        for item in self.items(library):
+            if not item.recognised:
+                found.append(item)
+                continue
+            plan = self.plan_item(item, library)
+            if plan.get("error") or plan["renames"] or Path(plan["new_top"]) != Path(item.path):
+                found.append(item)
+        scan["todo"] = found
+        return found
+
     def moved(self, prov: str, top: str, library: str) -> None:
         """One item was ranged: it leaves its provenance's count now; the library that took it
         is read again at most every LIBRARY_RECOUNT seconds."""
@@ -340,6 +375,7 @@ class Board:
             scan = self._scans.get(prov)
             if scan:
                 scan["items"] = [i for i in scan["items"] if i.path != top]
+                scan.pop("todo", None)
             last = self.__dict__.setdefault("_recounted", {})
             due = library and time.monotonic() - last.get(library, 0.0) >= LIBRARY_RECOUNT
             if due:
@@ -396,6 +432,9 @@ class Board:
     ) -> dict[str, Any]:
         """The organised library an item goes to, and why not when none."""
         libs = self.libraries()
+        own = next((lib for lib in libs if lib["path"] == prov), None)
+        if own is not None:  # what an organised library holds is ranged where it is
+            return {"lib": own, "why": "", "routed": False}
         want = _wanted(item.kind)
         fitting = [lib for lib in libs if lib["kind"] == want] or [
             lib for lib in libs if lib["kind"] == "other"
@@ -559,6 +598,8 @@ class Board:
                 **lib, "name": Path(lib["path"]).name, "n": len(items),
                 "bytes": sum(i.size for i in items),
                 "pinned": sum(1 for p in self.provenances() if self.pinned(p) == lib["path"]),
+                "todo": len(self.unorganised(lib["path"])),
+                "ready": self.ready(lib["path"]),
                 "templates": self._templates(lib),
             })  # fmt: skip
         library_set = {str(f.path) for f in self.library_folders()}
@@ -641,14 +682,14 @@ class Board:
         blocked: list[dict[str, str]] = []
         examples: dict[str, list[dict[str, str]]] = {"film": [], "series": []}
         review = 0
-        known = set(self.provenances())
+        known = set(self.provenances()) | {lib["path"] for lib in self.libraries()}
         for prov in paths:
             if prov not in known:
                 raise StorageError("This folder is not a provenance.")
             if self._scans.get(prov, {}).get("state") != "ready":
                 raise StorageError("The folder is still being read: try again in a moment.")
-            review += sum(1 for i in self.items(prov) if not i.recognised)
-            for item in (i for i in self.items(prov) if i.recognised):
+            review += sum(1 for i in self.todo(prov) if not i.recognised)
+            for item in (i for i in self.todo(prov) if i.recognised):
                 found = self.route(prov, item, cards)
                 lib = found["lib"]
                 if lib is None:
@@ -785,11 +826,18 @@ class Board:
             names = self.series_names(new_top.name)
             twin = next((d for d in lib.iterdir() if d.is_dir() and folded(d.name) in names), None)
             if twin is not None:
-                renamed = base / twin.name
-                targets = {
-                    a: renamed / b.relative_to(new_top) if b.is_relative_to(new_top) else b
-                    for a, b in targets.items()
-                }
+                # Its episodes take the series' name too: "Monty Python's Flying Circus S03E27".
+                renamed, old_name = base / twin.name, new_top.name
+
+                def joined(b: Path) -> Path:
+                    if not b.is_relative_to(new_top):
+                        return b
+                    moved = renamed / b.relative_to(new_top)
+                    if moved.name.startswith(old_name):
+                        moved = moved.with_name(twin.name + moved.name[len(old_name) :])
+                    return moved
+
+                targets = {a: joined(b) for a, b in targets.items()}
                 new_top = renamed
         renames = [{"from": str(a), "to": str(b)} for a, b in targets.items() if a != b]
         if top.is_dir() and not layered and any(p not in targets for p in files):
@@ -798,7 +846,7 @@ class Board:
                     "error": "This template has no folder: the torrent's other files cannot follow."
                 }
         across = os.stat(base).st_dev != os.stat(lib).st_dev
-        if not across and new_top != top and os.path.lexists(new_top):
+        if not across and base != lib and new_top != top and os.path.lexists(new_top):
             return {"error": f"« {new_top.name} » existe déjà dans {base.name}."}
         # Two files given one name (a release numbering two episodes 31) is checked before
         # anything moves: the item waits in À vérifier instead of half moving.
