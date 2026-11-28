@@ -23,7 +23,11 @@ def server(tmp_path):
     config = tmp_path / "config"
     config.mkdir()
     settings = Settings()
-    settings.library_folders = [LibraryFolder(old, None, ContentKind.OTHER)]
+    settings.library_folders = [
+        LibraryFolder(old, None, ContentKind.OTHER),
+        LibraryFolder(films, None, ContentKind.OTHER),
+        LibraryFolder(series, None, ContentKind.OTHER),
+    ]
     settings.save(config / "settings.json")
     app = create_app(
         config, members_enabled=True, password="test-password-long", roots=(root,),

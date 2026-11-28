@@ -169,14 +169,14 @@ def test_discovery_finds_films_series_and_what_a_grouping_folder_holds(world: Wo
 
 
 def test_the_default_roles_and_the_owner_s_choice(world: World):
-    roles = world.board.roles()
-    assert roles[str(world.films)] == "lib"  # a Library Folder is organised until said otherwise
+    assert world.board.roles() == {}  # nothing has a role until the Owner gives it one
+    assert {r["role"] for r in world.board.folders()} == {""}
     world.organise()
     assert world.board.roles()[str(world.old)] == "prov"
     assert [lib["kind"] for lib in world.board.libraries()] == ["films", "series"]
     (world.films / "x").mkdir()
-    with pytest.raises(Exception, match="inside another"):
-        world.board.set_role(str(world.films / "x"), "lib")
+    with pytest.raises(Exception, match="Library and Download Folders"):
+        world.board.set_role(str(world.films / "x"), "lib")  # not a folder of Paramètres
 
 
 def test_the_board_counts_each_provenance_and_lists_what_to_check(world: World):
@@ -382,6 +382,7 @@ def test_auto_ranges_only_what_finishes_after_it_was_seen_downloading(world: Wor
     (release / "Gourou.2026.FRENCH.720p.WEB.H265-TyHD.mkv").write_bytes(b"g" * 10)
     world.board.download_folders = lambda: [downloads]
     world.organise()
+    world.board.set_role(str(downloads), "prov")
     assert world.board.auto_of(str(downloads))  # on for a download folder
     assert not world.board.auto_of(str(world.old))
     queued: list = []

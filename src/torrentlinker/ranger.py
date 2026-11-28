@@ -45,7 +45,6 @@ KINDS = {ContentKind.MOVIE: "films", ContentKind.SERIES: "series"}
 CONTENT = {"films": ContentKind.MOVIE, "series": ContentKind.SERIES, "other": ContentKind.OTHER}
 ACTOR = "Rangement"
 HIDDEN = {TRASH_NAME, ".liens"}
-EXPAND_LIMIT = 25  # a folder with more subfolders than this is a collection, not a choice
 
 
 def _wanted(kind: str) -> str:
@@ -84,13 +83,9 @@ class Board:
     # -- Roles and links ----------------------------------------------------------------------
 
     def roles(self) -> dict[str, str]:
-        """The role of every folder the app knows: the Library Folders are organised and the
-        Download Folders provenances until the Owner says otherwise."""
-        found = {str(f.path): "lib" for f in self.library_folders()}
-        for path in self.download_folders():
-            found.setdefault(str(path), "prov")
-        found.update({k: v for k, v in self.storage.board()["roles"].items() if v in ROLES})
-        return found
+        """The roles the Owner chose. A folder has none until then: nothing is organised, and
+        nothing moved, on a guess."""
+        return {k: v for k, v in self.storage.board()["roles"].items() if v in ROLES}
 
     def libraries(self) -> list[dict[str, Any]]:
         roles, known = self.roles(), {str(f.path): f for f in self.library_folders()}
@@ -129,6 +124,8 @@ class Board:
             raise StorageError("Unknown role.")
         target = Path(path)
         self.storage.under_roots(target)
+        if path not in {row["path"] for row in self.folders()}:
+            raise StorageError("Roles go to the Library and Download Folders of Paramètres.")
         if not target.is_dir():
             raise StorageError(f"{path} is not a folder.")
         if role == "lib":
@@ -199,46 +196,21 @@ class Board:
         return found
 
     def folders(self) -> list[dict[str, Any]]:
-        """Every folder the Owner may give a role: the storage roots' folders (and what is in
-        the small ones), plus every folder that already has one."""
+        """The folders the Owner set up in Paramètres, and only those: their Library Folders and
+        Download Folders, one row each. A role is given to these, never to any folder on a disk."""
         roles = self.roles()
-        seen: dict[str, str | None] = {}
-        for root in self.storage.roots:
-            for first in self._dirs(root):
-                seen[str(first)] = None
-                if roles.get(str(first)) in {"lib", "prov"}:
-                    continue
-                children = self._dirs(first)
-                if len(children) <= EXPAND_LIMIT:
-                    for second in children:
-                        seen[str(second)] = str(first)
-        for path in roles:
-            seen.setdefault(path, None)
+        configured = {str(f.path) for f in self.library_folders()}
+        configured |= {str(p) for p in self.download_folders()}
         libs = {lib["path"]: lib for lib in self.libraries()}
         rows = []
-        for path, parent in sorted(seen.items()):
+        for path in sorted(configured, key=str.casefold):
             scan = self._scans.get(path)
             rows.append({
-                "path": path, "role": roles.get(path, "none"), "disk": self._root(path),
-                "kind": libs.get(path, {}).get("kind", ""), "parent": parent or "",
+                "path": path, "role": roles.get(path, ""), "disk": self._root(path),
+                "kind": libs.get(path, {}).get("kind", ""), "parent": "",
                 "videos": len(scan["items"]) if scan and scan["state"] == "ready" else None,
             })  # fmt: skip
         return rows
-
-    @staticmethod
-    def _dirs(folder: Path) -> list[Path]:
-        try:
-            with os.scandir(folder) as entries:
-                return sorted(
-                    (
-                        Path(e.path) for e in entries
-                        if e.is_dir(follow_symlinks=False) and e.name not in HIDDEN
-                        and not e.name.startswith(".")
-                    ),
-                    key=lambda p: p.name.casefold(),
-                )  # fmt: skip
-        except OSError:
-            return []
 
     # -- Scanning -----------------------------------------------------------------------------
 

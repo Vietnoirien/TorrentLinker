@@ -142,7 +142,7 @@ function foldersSheet() {
     }
   }
   return `${sheetHead(say("Choose folders", "Choisir les dossiers"), { en: "Organised: the app names and sorts everything in it. Provenance: a folder films and series come from, to tidy. Ignored: left alone. You can change your mind at any time.", fr: "Organisée : l'application nomme et classe tout ce qu'il y a dedans. Provenance : un dossier d'où viennent des films et séries à ranger. Ignorée : on n'y touche pas. Vous pourrez changer d'avis à tout moment." })}
-    <p class="muted">${say("All the folders of your disks.", "Tous les dossiers de vos disques.")}</p><div class="og-flist">${rows.join("")}</div><div class="dialog-foot"><button type="button" class="primary" data-o="close">${say("Done", "Terminé")}</button></div>`;
+    <p class="muted">${say("Your Library and Download Folders (Paramètres). None is set until you choose.", "Vos dossiers de bibliothèque et de téléchargement (Paramètres). Aucun n'est réglé tant que vous ne choisissez pas.")}</p><div class="og-flist">${rows.join("")}</div><div class="dialog-foot"><button type="button" class="primary" data-o="close">${say("Done", "Terminé")}</button></div>`;
 }
 const SAMPLE_T = { film: { titre: "Dune", année: "2021", tmdbid: "438631" }, series: { titre: "Severance", année: "2022", saison: "01", épisode: "03" } };
 const oexample = (tpl, kind) => `${tpl.replace(/\{([^}]*)\}/g, (_, t) => SAMPLE_T[kind][t] ?? "").split("/").join(" / ")}.mkv`;
