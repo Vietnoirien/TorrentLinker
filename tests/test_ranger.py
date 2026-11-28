@@ -464,3 +464,39 @@ def test_a_film_cut_in_parts_is_one_film_with_its_parts_in_order(tmp_path: Path)
         "part1.avi", "part2.avi", "part3.avi",
     ]  # fmt: skip
     assert not readable("CD1.avi", {"title": "CD1"})
+
+
+def test_a_film_whose_name_looks_like_an_episode_stays_a_film():
+    """guessit reads "1080" as S10E80 and "20 Years" as episode 20: without a season or an
+    episode spelled out, it is a film; in a folder of series guessit's word is enough."""
+    from torrentlinker.library_items import kind_of
+
+    for film in (
+        "The Revenant 2015 VOSTFR 1080 Bluray.mkv",
+        "Parrot.Sketch.Not.Included.20.Years.of.Monty.Python.PDTV.x264.AAC.mkv",
+    ):
+        assert kind_of(film, []) == "film"
+    for series in ("Dexter.S01E02.1080p.mkv", "Naruto 1x05.mkv", "Monty Python-Saison 2-DVDRIP"):
+        assert kind_of(series, []) == "series"
+    assert kind_of("One Piece - 1000.mkv", []) == "film"
+    assert kind_of("One Piece - 1000.mkv", [], series_folder=True) == "series"
+
+
+def test_a_new_season_joins_its_series_already_in_the_library(world: World):
+    world.organise()
+    ranged = [i for i in world.board.items(str(world.old)) if i.kind == "series"]
+    world.queue.enqueue(
+        "Ranger", "owner", [{"top": i.path, "prov": str(world.old), "kind": i.kind} for i in ranged]
+    )
+    show = world.series / "Black Mirror"
+    assert (show / "Saison 01").is_dir()
+    season2 = world.old / "Black.Mirror.S02.1080p"
+    season2.mkdir()
+    (season2 / "Black.Mirror.S02E01.1080p.mkv").write_bytes(b"e" * 30)
+    world.board.scan([str(world.old)])
+    item = next(i for i in world.board.items(str(world.old)) if "S02" in i.name)
+    world.queue.enqueue(
+        "Ranger", "owner", [{"top": item.path, "prov": str(world.old), "kind": "series"}]
+    )
+    assert (show / "Saison 02" / "Black Mirror S02E01.mkv").exists()
+    assert (show / "Saison 01").is_dir() and not season2.exists()

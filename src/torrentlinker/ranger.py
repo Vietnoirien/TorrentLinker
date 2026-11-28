@@ -272,7 +272,11 @@ class Board:
         bodies = {r["path"]: json.loads(r["body"]) for r in rows}
         self._bodies[path] = bodies
         board = self.storage.board()
-        items = discover(Path(path), bodies, board["titles"])
+        series = any(
+            str(f.path) == path and f.kind == ContentKind.SERIES
+            for f in self.library_folders()
+        )  # fmt: skip
+        items = discover(Path(path), bodies, board["titles"], series_folder=series)
         index = SeedIndex(self.seeds())
         for item in items:
             item.torrents = index.under(item.path)
@@ -714,9 +718,25 @@ class Board:
                 }
         if new_top != top and os.path.lexists(new_top):
             return {"error": f"« {new_top.name} » existe déjà dans {base.name}."}
-        if os.path.lexists(lib / new_top.name) and new_top != lib / new_top.name:
-            return {"error": f"« {new_top.name} » existe déjà dans {lib.name}."}
-        return {"renames": renames, "new_top": str(new_top), "dest": str(lib), "error": ""}
+        landed = lib / new_top.name
+        merge = False
+        if os.path.lexists(landed) and new_top != landed:
+            # Another season of a series already in the library joins it, season by season.
+            seasons = {
+                t.relative_to(new_top).parts[0]
+                for t in targets.values()
+                if t.is_relative_to(new_top)
+            }
+            if item.kind != "series" or not landed.is_dir() or not seasons:
+                return {"error": f"« {new_top.name} » existe déjà dans {lib.name}."}
+            taken = sorted(n for n in seasons if os.path.lexists(landed / n))
+            if taken:
+                return {"error": f"« {new_top.name} / {taken[0]} » existe déjà dans {lib.name}."}
+            merge = True
+        return {
+            "renames": renames, "new_top": str(new_top), "dest": str(lib), "merge": merge,
+            "error": "",
+        }  # fmt: skip
 
     def plan(self, entry: dict[str, Any]) -> dict[str, Any]:
         """What ranging one queued item does, worked out as it runs: where it goes (the

@@ -108,11 +108,24 @@ def _is_release(name: str, videos: list[tuple[str, int]]) -> bool:
     return False
 
 
-def kind_of(path: str, videos: list[tuple[str, int]]) -> str:
+# What only a series' release spells out: S01E02, S01, 1x02, "Saison 2", "Season 2", an
+# Intégrale. guessit alone reads "1080" as S10E80, "[40-45]" or "20 Years" as episodes.
+SERIES_MARK = re.compile(
+    r"(?:^|[ ._\[(-])(?:S\d{1,2}(?:[ ._-]?E\d{1,3})?|\d{1,2}x\d{2,3}|(?:saison|season|series)"
+    r"[ ._-]?\d{1,2}|int[ée]grale|complete[ ._-]series)(?=$|[ ._\])-])",
+    re.I,
+)
+
+
+def kind_of(path: str, videos: list[tuple[str, int]], series_folder: bool = False) -> str:
+    """A film, or a series: in a folder of series guessit's word is enough; elsewhere the
+    name must also spell out a season or an episode."""
     main = _main(videos) if videos else []
     first = Path(main[0][0]).name if main else Path(path).name
-    guessed = guessit(f"{Path(path).name}/{first}" if main and Path(path).is_dir() else first)
-    return "series" if guessed.get("type") == "episode" else "film"
+    named = f"{Path(path).name}/{first}" if main and Path(path).is_dir() else first
+    guessed = guessit(named)
+    marked = any(SERIES_MARK.search(Path(part).stem) for part in named.split("/"))
+    return "series" if guessed.get("type") == "episode" and (marked or series_folder) else "film"
 
 
 def readable(name: str, guessed: dict[str, Any]) -> bool:
@@ -139,8 +152,8 @@ def fixed_kind(name: str) -> str:
     return "series" if re.search(r"\bS\d{1,2}[ ._-]?E\d{1,3}\b", name, re.IGNORECASE) else "film"
 
 
-def _item(path: str, base: str, videos, bodies, titles) -> Item:
-    kind = fixed_kind(Path(path).name) if path in titles else kind_of(path, videos)
+def _item(path: str, base: str, videos, bodies, titles, series_folder: bool = False) -> Item:
+    kind = fixed_kind(Path(path).name) if path in titles else kind_of(path, videos, series_folder)
     main = _main(videos)
     files = [Path(p) for p, _ in main] or [Path(path)]
     guessed = guessit(
@@ -181,6 +194,7 @@ def discover(
     *,
     base: str = "",
     cancelled=lambda: False,
+    series_folder: bool = False,
 ) -> list[Item]:
     """The items under a folder: a video file, a folder holding one film (or one series), and
     what a grouping folder holds."""
@@ -196,16 +210,25 @@ def discover(
         if entry.is_file(follow_symlinks=False):
             if Path(entry.name).suffix.lower() in VIDEO:
                 size = entry.stat(follow_symlinks=False).st_size
-                items.append(_item(entry.path, base, [(entry.path, size)], bodies, titles))
+                items.append(
+                    _item(entry.path, base, [(entry.path, size)], bodies, titles, series_folder)
+                )
         elif entry.is_dir(follow_symlinks=False):
             videos = _videos(entry.path)
             if not videos:
                 continue
             if _is_release(entry.name, videos):
-                items.append(_item(entry.path, base, videos, bodies, titles))
+                items.append(_item(entry.path, base, videos, bodies, titles, series_folder))
             else:
                 items.extend(
-                    discover(Path(entry.path), bodies, titles, base=base, cancelled=cancelled)
+                    discover(
+                        Path(entry.path),
+                        bodies,
+                        titles,
+                        base=base,
+                        cancelled=cancelled,
+                        series_folder=series_folder,
+                    )  # fmt: skip
                 )
     return items
 

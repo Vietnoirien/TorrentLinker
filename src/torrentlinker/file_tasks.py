@@ -10,6 +10,7 @@ cancelled. A finished move or rename can be undone.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import logging
 import os
@@ -289,10 +290,24 @@ class Tasks:
             if done and clients:
                 self.refresh(clients)
             move = {"kind": "move", "actor": task["actor"], "conflict": "skip"}
-            part = _Mirror(item, {"from": str(new_top), "to": str(destination), "state": "running"})
-            self._item(move, part, cancelled, allowed)
-            if part["state"] == "skipped":
-                raise StorageError(f"« {new_top.name} » existe déjà dans {destination.name}.")
+            if plan.get("merge"):
+                # A series already in the library: its new seasons go into its folder.
+                for season in sorted(new_top.iterdir()):
+                    part = _Mirror(
+                        item, {"from": str(season), "to": str(landed), "state": "running"}
+                    )
+                    self._item(move, part, cancelled, allowed)
+                    if part["state"] == "skipped":
+                        raise StorageError(f"« {season.name} » existe déjà dans {landed.name}.")
+                with contextlib.suppress(OSError):
+                    new_top.rmdir()
+            else:
+                part = _Mirror(
+                    item, {"from": str(new_top), "to": str(destination), "state": "running"}
+                )
+                self._item(move, part, cancelled, allowed)
+                if part["state"] == "skipped":
+                    raise StorageError(f"« {new_top.name} » existe déjà dans {destination.name}.")
         except BaseException:
             for step in reversed(done):
                 back = {"from": step["to"], "to": step["from"], "state": "running", "note": ""}
