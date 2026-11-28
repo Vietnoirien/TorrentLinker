@@ -524,7 +524,7 @@ def test_to_another_disk_the_item_moves_first_and_is_renamed_there(world: World,
         folder = world.old / part
         folder.mkdir()
         number = 1 if "PART1" in part else 13
-        (folder / f"Shingeki.No.Kyojin.S03E{number:02d}.1080p.mkv").write_bytes(b"s" * 40)
+        (folder / f"Shingeki.No.Kyojin.S03E{number:02d}.1080p.mkv").write_bytes(bytes([number]) * 40)
         (folder / "Thumbs.db").write_bytes(b"t")
     world.board.scan([str(world.old)])
     monkeypatch.setattr(Path, "mkdir", watched)
@@ -642,3 +642,37 @@ def test_a_series_joins_its_folder_whatever_its_punctuation(world: World):
     assert sorted(p.name for p in world.series.iterdir()) == ["Monty Python's Flying Circus"]
     landed = world.series / "Monty Python's Flying Circus" / "Saison 02"
     assert [p.suffix for p in landed.iterdir()] == [".mp4"]
+
+
+def test_the_same_film_already_in_the_library_leaves_one_copy(world: World):
+    """A copy an earlier run left in the library is the same media: the original goes to its
+    trash and the item is done, instead of failing on the name."""
+    world.organise()
+    alien = next(i for i in world.board.items(str(world.old)) if i.name.startswith("Alien"))
+    kept = world.films / "Alien (1979)"
+    kept.mkdir()
+    (kept / "Alien (1979).mkv").write_bytes(Path(alien.path).read_bytes())
+    row = {"top": alien.path, "prov": str(world.old), "kind": "film"}
+    world.queue.enqueue("Ranger", "owner", [row])
+    assert not Path(alien.path).exists() and (kept / "Alien (1979).mkv").exists()
+    [task] = world.tasks.snapshot()
+    assert task["items"][0]["state"] == "done"
+    assert "Déjà dans la bibliothèque" in task["items"][0]["note"]
+
+
+def test_two_episodes_given_one_name_wait_before_anything_moves(world: World):
+    world.organise()
+    season = world.old / "MONTY_PYTHONS_FLYING_CIRCUS.Saison.3"
+    season.mkdir()
+    for name in (
+        "MONTY_PYTHONS_FLYING_CIRCUS_S3.EP 31-proust.mp4",
+        "MONTY_PYTHONS_FLYING_CIRCUS_S3.EP 31-pornography.mp4",
+    ):
+        (season / name).write_bytes(b"m" * 40)
+    world.board.scan([str(world.old)])
+    item = next(i for i in world.board.items(str(world.old)) if "MONTY" in i.name)
+    row = {"top": item.path, "prov": str(world.old), "kind": "series"}
+    world.queue.enqueue("Ranger", "owner", [row])
+    assert season.is_dir() and len(list(season.iterdir())) == 2  # nothing moved
+    [task] = world.tasks.snapshot()
+    assert "même nom" in task["items"][0]["reason"]

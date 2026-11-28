@@ -53,6 +53,32 @@ def junk(name: str) -> bool:
     return lowered in JUNK or lowered.startswith("~utorrentpartfile")
 
 
+def same_media(a: Path, b: Path) -> bool:
+    """Whether two items hold the same videos: the same sizes, and the same first and last
+    megabyte of the largest one (enough for copies, quick on 50 GB)."""
+
+    def videos(path: Path) -> list[Path]:
+        files = [path] if path.is_file() else [p for p in path.rglob("*") if p.is_file()]
+        return sorted(
+            (p for p in files if p.suffix.lower() in VIDEO), key=lambda p: p.stat().st_size
+        )
+
+    def ends(path: Path) -> bytes:
+        size = path.stat().st_size
+        with path.open("rb") as handle:
+            head = handle.read(1 << 20)
+            handle.seek(max(0, size - (1 << 20)))
+            return head + handle.read(1 << 20)
+
+    try:
+        left, right = videos(a), videos(b)
+        if not left or [p.stat().st_size for p in left] != [p.stat().st_size for p in right]:
+            return False
+        return ends(left[-1]) == ends(right[-1])
+    except OSError:
+        return False
+
+
 def folded(name: str) -> str:
     """A title compared as people read it: no case, accent, punctuation or spaces, so
     "MONTY PYTHONS-FLYING CIRCUS" is "Monty Python's Flying Circus"."""
@@ -774,7 +800,26 @@ class Board:
         across = os.stat(base).st_dev != os.stat(lib).st_dev
         if not across and new_top != top and os.path.lexists(new_top):
             return {"error": f"« {new_top.name} » existe déjà dans {base.name}."}
+        # Two files given one name (a release numbering two episodes 31) is checked before
+        # anything moves: the item waits in À vérifier instead of half moving.
+        seen: dict[Path, Path] = {}
+        for source, target in targets.items():
+            if target in seen:
+                return {
+                    "error": f"Deux fichiers recevraient le même nom « {target.name} » : "
+                    f"{seen[target].name} et {source.name}. Corrigez le nom de l'un d'eux.",
+                    "review": True,
+                }
+            seen[target] = source
         landed = lib / new_top.name
+        # The same media already in the library (a copy an earlier run could not finish):
+        # one of the two goes to the trash instead of failing on the name.
+        for other in dict.fromkeys((landed, lib / top.name)):
+            if other != top and os.path.lexists(other) and same_media(top, other):
+                return {
+                    "renames": renames, "new_top": str(new_top), "dest": str(lib),
+                    "duplicate": str(other), "error": "",
+                }  # fmt: skip
         merge = False
         if os.path.lexists(landed) and new_top != landed:
             # Another season, or another part of a season, of a series already in the library

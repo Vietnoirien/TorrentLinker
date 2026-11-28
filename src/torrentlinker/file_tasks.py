@@ -264,6 +264,8 @@ class Tasks:
         item["meta"]["plan"] = plan
         if plan.get("error"):
             raise StorageError(plan["error"])
+        if plan.get("duplicate"):
+            return self._duplicate(task, item, plan, cancelled, allowed)
         destination, new_top = Path(plan["dest"]), Path(plan["new_top"])
         landed = destination / new_top.name
         if plan.get("merge") or not same_device(Path(item["from"]).parent, destination):
@@ -329,6 +331,24 @@ class Tasks:
         )
         if clients:
             self.refresh(clients)
+
+    def _duplicate(self, task, item, plan, cancelled, allowed) -> None:
+        """The library holds the same media already: one copy stays. The one a torrent seeds
+        is kept, so the seed goes on; otherwise the library's, and the other goes to its
+        trash (where it lies when its disk is full)."""
+        top, other = Path(item["from"]), Path(plan["duplicate"])
+        if self.seeds(top) and self.seeds(other):
+            raise StorageError(
+                f"« {other.name} » est déjà dans la bibliothèque et les deux sont partagés : "
+                "rien n'est supprimé."
+            )
+        if self.seeds(top):
+            self.storage.trash(other, "system", "Copie en double : la version partagée la remplace")
+            item["meta"].pop("plan", None)
+            return self._ranger(task, item, cancelled, allowed)
+        self.storage.trash(top, "system", "Déjà dans la bibliothèque")
+        item.update(verified=True, final=str(other), progress=1.0, undo=None,
+                    note="Déjà dans la bibliothèque : l'original est à la corbeille")  # fmt: skip
 
     def _ranger_across(self, task, item, plan, cancelled, allowed) -> None:
         """To another disk: move the item as it is named first, then rename it there. Nothing
