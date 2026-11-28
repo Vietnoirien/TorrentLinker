@@ -549,3 +549,4 @@ dialog.ts-sheet { max-width: 560px; width: calc(100% - 24px); }
 .media-replace-toggle .info, .media-replace-step .info, .media-replace-dest .info { margin-left: 4px; }
 .media-replace-gear { text-decoration: none; font-size: 15px; margin-left: 4px; }
 .media-replace-dialog h2 { display: flex; gap: 8px; align-items: center; }
+.media-episode-arrows { margin-left: auto; display: inline-flex; gap: 6px; }

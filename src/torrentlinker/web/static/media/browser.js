@@ -145,6 +145,13 @@ async function mediaRenderEpisodes(row) {
     const tab = button(say(`Season ${season}`, `Saison ${season}`), () => show(season), "quiet");
     tab.dataset.season = season; header.append(tab);
   }
+  // The episodes scroll like the home rows: the wheel moves them sideways, and ‹ › step a screen.
+  list.addEventListener("wheel", event => mediaRowWheel(list, event), {passive: false});
+  const step = direction => list.scrollBy({left: direction * Math.max(180, list.clientWidth - 180), behavior: "smooth"});
+  const back = button("‹", () => step(-1), "icon-button"), forward = button("›", () => step(1), "icon-button");
+  back.setAttribute("aria-label", say("Scroll left", "Défiler à gauche")); forward.setAttribute("aria-label", say("Scroll right", "Défiler à droite"));
+  const arrows = element("span", undefined, "media-episode-arrows"); arrows.append(back, forward);
+  header.append(arrows);
   root.append(header, list);
   show(seasons.includes(previousSeason) ? previousSeason : seasons.includes(detail.season) ? detail.season : seasons[0]);
 }
